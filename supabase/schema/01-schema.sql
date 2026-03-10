@@ -44,6 +44,15 @@ CREATE TABLE election_option (
     metadata        JSONB -- Para datos no estructurados 
 );
 
+CREATE TABLE election_voter (
+    election_id     UUID NOT NULL REFERENCES elections(id) ON DELETE CASCADE,
+    carnet          TEXT NOT NULL REFERENCES students(carnet),
+    has_voted       BOOLEAN NOT NULL DEFAULT false,
+    voted_at        TIMESTAMPTZ,
+    auth_token_hash TEXT,                    -- Hash del token enviado por email (si aplica)
+    PRIMARY KEY (election_id, carnet)
+);
+
 CREATE TABLE student (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     carnet          TEXT NOT NULL UNIQUE,
