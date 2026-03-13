@@ -1,4 +1,5 @@
 import { pool } from '../../../config/database';
+import { PoolClient } from 'pg';
 import { Student } from '../models/userModel';
 import { CreateStudentDto, UpdateStudentDto, StudentFiltersDto } from '../dtos/studentDtos';
 
@@ -118,15 +119,19 @@ export async function deactivateStudent(id: string): Promise<Student | null> {
   return result.rows[0] || null;
 }
 
-// Importar padrón usando function (returns diff summary)
-export async function importPadron(data: Record<string, unknown>[]): Promise<{
+// Importar padrón usando function (accepts a client for audit context)
+export async function importPadron(
+  data: Record<string, unknown>[],
+  client?: PoolClient
+): Promise<{
   total: number;
   new: number;
   updated: number;
   reactivated: number;
   deactivated: number;
 }> {
-  const result = await pool.query(
+  const db = client || pool;
+  const result = await db.query(
     'SELECT fn_import_students($1::jsonb) as summary',
     [JSON.stringify(data)]
   );

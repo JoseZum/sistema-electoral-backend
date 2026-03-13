@@ -3,6 +3,7 @@ import * as studentRepo from '../repositories/studentRepository';
 import * as adminRepo from '../repositories/adminRepository';
 import { CreateStudentDto, UpdateStudentDto, StudentFiltersDto } from '../dtos/studentDtos';
 import { CreateAdminDto, UpdateAdminDto } from '../dtos/adminDtos';
+import { withAuditContext } from '../../../config/audit-context';
 
 function normalizeKey(value: string): string {
   return value
@@ -60,19 +61,22 @@ export async function deactivateStudent(id: string) {
 }
 
 // Importar padrón desde archivo XLSX
-export async function importPadron(fileBuffer: Buffer) {
+export async function importPadron(
+  fileBuffer: Buffer,
+  actor?: { carnet?: string; ip?: string }
+) {
   const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
 
   const data: Record<string, unknown>[] = [];
   for (const sheetName of workbook.SheetNames) {
     const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(
       workbook.Sheets[sheetName],
-      { 
+      {
         defval: null,
         range: 3 // asume que la cabecera real está en la fila 4 debido a títulos previos
       }
     );
-    
+
     const normalizedRows = rawRows.map(row => ({
       Carnet: String(getValueFromRow(row, ['carné', 'carnet', 'carne']) || '').trim(),
       Nombre: getValueFromRow(row, ['nombre completo', 'nombre', 'full name']),
@@ -87,7 +91,11 @@ export async function importPadron(fileBuffer: Buffer) {
 
   if (data.length === 0) throw new Error('El archivo no contiene datos válidos');
 
-  const summary = await studentRepo.importPadron(data);
+  // Run inside audit context so triggers capture WHO did this
+  const summary = await withAuditContext(
+    { carnet: actor?.carnet, ip: actor?.ip },
+    (client) => studentRepo.importPadron(data, client)
+  );
 
   return summary;
 }
