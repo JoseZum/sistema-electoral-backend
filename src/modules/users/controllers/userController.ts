@@ -8,7 +8,7 @@ export async function getStudents(req: Request, res: Response, next: NextFunctio
     const filters = {
       sede: req.query.sede as string | undefined,
       career: req.query.career as string | undefined,
-      is_active: req.query.is_active !== undefined ? req.query.is_active === 'true' : undefined,
+      is_active: req.query.is_active !== undefined ? req.query.is_active === 'true' : true,
       search: req.query.search as string | undefined,
       page: req.query.page ? parseInt(req.query.page as string, 10) : undefined,
       limit: req.query.limit ? parseInt(req.query.limit as string, 10) : undefined,

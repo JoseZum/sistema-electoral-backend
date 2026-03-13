@@ -1,7 +1,7 @@
 -- ============================================
 -- ENUMS
 -- ============================================
-CREATE TYPE election_status AS ENUM ('DRAFT', 'OPEN', 'CLOSED', 'SCRUTINIZED', 'ARCHIVED');
+CREATE TYPE election_status AS ENUM ('DRAFT', 'SCHEDULED', 'OPEN', 'CLOSED', 'SCRUTINIZED', 'ARCHIVED');
 CREATE TYPE auth_method_type AS ENUM ('MICROSOFT', 'EMAIL_TOKEN', 'BOTH');
 CREATE TYPE voter_source_type AS ENUM ('FULL_PADRON', 'FILTERED', 'MANUAL');
 CREATE TYPE election_type AS ENUM ('ELECTORAL_MASIVA', 'PLENARIO', 'INTERNA');
@@ -12,7 +12,7 @@ CREATE TYPE option_type AS ENUM ('CANDIDATE', 'IN_FAVOR', 'AGAINST', 'BLANK', 'N
 -- ============================================
 CREATE TABLE students (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    carnet          TEXT NOT NULL,
+    carnet          TEXT NOT NULL UNIQUE,
     full_name       TEXT NOT NULL,
     email           TEXT NOT NULL UNIQUE,
     sede            TEXT NOT NULL,

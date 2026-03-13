@@ -87,9 +87,9 @@ export async function importPadron(fileBuffer: Buffer) {
 
   if (data.length === 0) throw new Error('El archivo no contiene datos válidos');
 
-  await studentRepo.importPadron(data);
+  const summary = await studentRepo.importPadron(data);
 
-  return { total: data.length };
+  return summary;
 }
 
 // ── Admins ──

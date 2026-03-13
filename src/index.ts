@@ -5,6 +5,7 @@ import rateLimit from 'express-rate-limit';
 import { corsOptions } from './config/cors';
 import { authRoutes } from './modules/auth';
 import { userRoutes } from './modules/users';
+import { auditRoutes } from './modules/audit';
 import { errorHandler } from './middleware/errorHandler';
 
 const app = express();
@@ -27,6 +28,7 @@ app.use(express.json({ limit: '1mb' }));
 // Rutas
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/audit', auditRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
