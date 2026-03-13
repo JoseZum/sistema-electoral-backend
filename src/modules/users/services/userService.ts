@@ -4,6 +4,31 @@ import * as adminRepo from '../repositories/adminRepository';
 import { CreateStudentDto, UpdateStudentDto, StudentFiltersDto } from '../dtos/studentDtos';
 import { CreateAdminDto, UpdateAdminDto } from '../dtos/adminDtos';
 
+function normalizeKey(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // quita tildes
+    .trim()
+    .toLowerCase();
+}
+
+function getValueFromRow(row: Record<string, unknown>, possibleKeys: string[]) {
+  const normalizedRow: Record<string, unknown> = {};
+
+  for (const key of Object.keys(row)) {
+    normalizedRow[normalizeKey(key)] = row[key];
+  }
+
+  for (const key of possibleKeys) {
+    const value = normalizedRow[normalizeKey(key)];
+    if (value !== undefined && value !== null && value !== '') {
+      return value;
+    }
+  }
+
+  return null;
+}
+
 // ── Estudiantes ──
 
 export async function getAllStudents(filters: StudentFiltersDto) {
@@ -40,14 +65,27 @@ export async function importPadron(fileBuffer: Buffer) {
 
   const data: Record<string, unknown>[] = [];
   for (const sheetName of workbook.SheetNames) {
-    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(
+    const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(
       workbook.Sheets[sheetName],
-      { defval: null }
+      { 
+        defval: null,
+        range: 3 // asume que la cabecera real está en la fila 4 debido a títulos previos
+      }
     );
-    data.push(...rows);
+    
+    const normalizedRows = rawRows.map(row => ({
+      Carnet: String(getValueFromRow(row, ['carné', 'carnet', 'carne']) || '').trim(),
+      Nombre: getValueFromRow(row, ['nombre completo', 'nombre', 'full name']),
+      Correo: getValueFromRow(row, ['correo', 'email', 'correo electronico']),
+      Sede: getValueFromRow(row, ['sede', 'campus']),
+      Carrera: getValueFromRow(row, ['carrera', 'career', 'programa']),
+      Grado: getValueFromRow(row, ['grado', 'nivel', 'degree']) ?? 'NO_ESPECIFICADO'
+    }));
+
+    data.push(...normalizedRows.filter(r => r.Carnet && r.Nombre && r.Correo));
   }
 
-  if (data.length === 0) throw new Error('El archivo no contiene datos');
+  if (data.length === 0) throw new Error('El archivo no contiene datos válidos');
 
   await studentRepo.importPadron(data);
 

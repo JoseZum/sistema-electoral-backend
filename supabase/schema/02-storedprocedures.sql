@@ -25,14 +25,24 @@ INSERT INTO students (
     degree_level
 )
 SELECT
-    x->>'Carnet',
-    x->>'Nombre',
-    x->>'Correo',
-    x->>'Sede',
-    x->>'Carrera',
-    x->>'Grado'
+    NULLIF(trim(x->>'Carnet'), ''),
+    NULLIF(trim(x->>'Nombre'), ''),
+    NULLIF(trim(x->>'Correo'), ''),
+    NULLIF(trim(x->>'Sede'), ''),
+    NULLIF(trim(x->>'Carrera'), ''),
+    COALESCE(NULLIF(trim(x->>'Grado'), ''), 'NO_ESPECIFICADO')
 FROM jsonb_array_elements(p_data) x
-WHERE x->>'Carnet' IS NOT NULL;
+WHERE NULLIF(trim(x->>'Carnet'), '') IS NOT NULL
+  AND NULLIF(trim(x->>'Nombre'), '') IS NOT NULL
+  AND NULLIF(trim(x->>'Correo'), '') IS NOT NULL
+ON CONFLICT (carnet) DO UPDATE 
+SET 
+    full_name = EXCLUDED.full_name,
+    email = EXCLUDED.email,
+    sede = EXCLUDED.sede,
+    career = EXCLUDED.career,
+    degree_level = EXCLUDED.degree_level,
+    updated_at = NOW();
 
 END;
 $$;

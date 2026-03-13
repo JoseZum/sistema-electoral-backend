@@ -120,5 +120,5 @@ export async function deactivateStudent(id: string): Promise<Student | null> {
 
 // Importar padrón usando stored procedure
 export async function importPadron(data: Record<string, unknown>[]): Promise<void> {
-  await pool.query('CALL import_students($1)', [JSON.stringify(data)]);
+  await pool.query('CALL import_students($1::jsonb)', [JSON.stringify(data)]);
 }
