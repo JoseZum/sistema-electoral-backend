@@ -39,11 +39,11 @@ export async function findAllStudents(filters: StudentFiltersDto = {}): Promise<
   let paramIndex = 1;
 
   if (sede) {
-    conditions.push(`sede = $${paramIndex++}`);
+    conditions.push(`sede ILIKE $${paramIndex++}`);
     params.push(sede);
   }
   if (career) {
-    conditions.push(`career = $${paramIndex++}`);
+    conditions.push(`career ILIKE $${paramIndex++}`);
     params.push(career);
   }
   if (is_active !== undefined) {
