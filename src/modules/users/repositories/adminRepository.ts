@@ -20,10 +20,15 @@ export async function findAdminByStudentId(studentId: string): Promise<Admin | n
   return result.rows[0] || null;
 }
 
-// Listar todos los admins
-export async function findAllAdmins(): Promise<Admin[]> {
-  const result = await pool.query<Admin>(
-    'SELECT * FROM admins WHERE is_active = true ORDER BY created_at DESC'
+// Listar todos los admins con datos del estudiante
+export async function findAllAdmins() {
+  const result = await pool.query(
+    `SELECT a.id, a.students_id, a.position_title, a.role, a.permissions, a.is_active, a.created_at, a.updated_at,
+            s.carnet, s.full_name, s.email, s.sede, s.career
+     FROM admins a
+     JOIN students s ON a.students_id = s.id
+     WHERE a.is_active = true
+     ORDER BY a.created_at DESC`
   );
   return result.rows;
 }
