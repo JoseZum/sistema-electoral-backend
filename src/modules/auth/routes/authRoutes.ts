@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { microsoftAuthHandler } from './authController';
+import { microsoftAuthHandler } from '../controllers/authController';
 
 const router = Router();
 

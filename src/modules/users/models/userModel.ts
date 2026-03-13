@@ -1,4 +1,5 @@
 export interface Student {
+  id: string;
   carnet: string;
   full_name: string;
   email: string;
@@ -10,9 +11,9 @@ export interface Student {
   updated_at: Date;
 }
 
-export interface TeeMember {
+export interface Admin {
   id: string;
-  carnet: string;
+  students_id: string;
   position_title: string;
   role: string;
   permissions: Record<string, boolean>;

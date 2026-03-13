@@ -11,7 +11,8 @@ CREATE TYPE option_type AS ENUM ('CANDIDATE', 'IN_FAVOR', 'AGAINST', 'BLANK', 'N
 -- PADRON ESTUDIANTIL
 -- ============================================
 CREATE TABLE students (
-    carnet          TEXT PRIMARY KEY,
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    carnet          TEXT NOT NULL,
     full_name       TEXT NOT NULL,
     email           TEXT NOT NULL UNIQUE,
     sede            TEXT NOT NULL,
@@ -30,9 +31,9 @@ CREATE INDEX idx_students_active ON students(is_active);
 -- ============================================
 -- USUARIOS ADMINISTRATIVOS (TEE)
 -- ============================================
-CREATE TABLE tee_members (
+CREATE TABLE admins (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    carnet          TEXT NOT NULL REFERENCES students(carnet),
+    students_id     UUID NOT NULL REFERENCES students(id),
     position_title  TEXT NOT NULL,
     role            TEXT NOT NULL DEFAULT 'member',
     permissions     JSONB NOT NULL DEFAULT '{}',
@@ -58,7 +59,7 @@ CREATE TABLE elections (
     min_keys        INT DEFAULT 3,
     start_time      TIMESTAMPTZ,
     end_time        TIMESTAMPTZ,
-    created_by      UUID REFERENCES tee_members(id),
+    created_by      UUID REFERENCES admins(id),
     created_at      TIMESTAMPTZ DEFAULT now(),
     updated_at      TIMESTAMPTZ DEFAULT now()
 );
@@ -80,15 +81,15 @@ CREATE TABLE election_options (
 -- ============================================
 CREATE TABLE election_voters (
     election_id     UUID NOT NULL REFERENCES elections(id) ON DELETE CASCADE,
-    carnet          TEXT NOT NULL REFERENCES students(carnet),
+    student_id      UUID NOT NULL REFERENCES students(id),
     has_voted       BOOLEAN NOT NULL DEFAULT false,
     voted_at        TIMESTAMPTZ,
     auth_token_hash TEXT,
-    PRIMARY KEY (election_id, carnet)
+    PRIMARY KEY (election_id, student_id)
 );
 
 CREATE INDEX idx_election_voters_election ON election_voters(election_id);
-CREATE INDEX idx_election_voters_carnet ON election_voters(carnet);
+CREATE INDEX idx_election_voters_student ON election_voters(student_id);
 
 -- ============================================
 -- VOTOS EMITIDOS (SEPARADOS DE IDENTIDAD)
@@ -97,9 +98,7 @@ CREATE TABLE votes (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     election_id     UUID NOT NULL REFERENCES elections(id),
     option_id       UUID NOT NULL REFERENCES election_options(id),
-    vote_hash       TEXT NOT NULL,
-    voter_carnet    TEXT,
-    created_at      TIMESTAMPTZ DEFAULT now()
+    voter_id        UUID NULL REFERENCES students(id)
 );
 
 CREATE INDEX idx_votes_election ON votes(election_id);
@@ -110,7 +109,7 @@ CREATE INDEX idx_votes_election ON votes(election_id);
 CREATE TABLE scrutiny_keys (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     election_id     UUID NOT NULL REFERENCES elections(id),
-    member_id       UUID NOT NULL REFERENCES tee_members(id),
+    member_id       UUID NOT NULL REFERENCES admins(id),
     key_shard       TEXT NOT NULL,
     has_submitted   BOOLEAN DEFAULT false,
     submitted_at    TIMESTAMPTZ
@@ -140,7 +139,7 @@ CREATE INDEX idx_audit_logs_created ON audit_logs(created_at DESC);
 -- ============================================
 CREATE TABLE padron_uploads (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    uploaded_by     UUID REFERENCES tee_members(id),
+    uploaded_by     UUID REFERENCES admins(id),
     file_name       TEXT,
     total_records   INT,
     new_students    INT,

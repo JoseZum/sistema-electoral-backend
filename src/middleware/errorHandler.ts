@@ -6,25 +6,25 @@ export function errorHandler(
   res: Response,
   _next: NextFunction
 ): void {
-  console.error('Unhandled error:', err.message);
+  console.error('Error no manejado:', err.message);
 
-  if (err.message.includes('Only @estudiantec.cr')) {
+  if (err.message.includes('Solo se permiten cuentas @estudiantec.cr') || err.message.includes('@estudiantec.cr')) {
     res.status(403).json({ error: err.message });
     return;
   }
 
-  if (err.message.includes('not found') || err.message.includes('No email')) {
+  if (err.message.includes('no encontrado') || err.message.includes('No se encontró')) {
     res.status(404).json({ error: err.message });
     return;
   }
 
-  if (err.message.includes('Invalid token') || err.message.includes('unable to decode')) {
-    res.status(401).json({ error: 'Authentication failed: ' + err.message });
+  if (err.message.includes('inválido') || err.message.includes('no se pudo decodificar')) {
+    res.status(401).json({ error: 'Autenticación fallida: ' + err.message });
     return;
   }
 
   res.status(500).json({
-    error: 'Internal server error',
+    error: 'Error interno del servidor',
     ...(process.env.NODE_ENV === 'development' && { details: err.message }),
   });
 }

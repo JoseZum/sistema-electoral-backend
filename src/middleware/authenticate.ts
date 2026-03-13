@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-import { verifySessionJWT } from '../auth/jwtUtils';
-import { SessionJWTPayload } from '../auth/authModel';
+import { verifySessionJWT } from '../modules/auth/services/jwtUtils';
+import { SessionJWTPayload } from '../modules/auth/models/authModel';
 
 declare global {
   namespace Express {
@@ -14,7 +14,7 @@ export function authenticate(req: Request, res: Response, next: NextFunction): v
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    res.status(401).json({ error: 'Missing or invalid Authorization header' });
+    res.status(401).json({ error: 'Falta el header de autorización o es inválido' });
     return;
   }
 
@@ -25,6 +25,6 @@ export function authenticate(req: Request, res: Response, next: NextFunction): v
     req.user = payload;
     next();
   } catch {
-    res.status(401).json({ error: 'Invalid or expired token' });
+    res.status(401).json({ error: 'Token inválido o expirado' });
   }
 }

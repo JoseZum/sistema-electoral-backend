@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
-import { env } from '../config/env';
-import { SessionJWTPayload } from './authModel';
+import { env } from '../../../config/env';
+import { SessionJWTPayload } from '../models/authModel';
 
 export function createSessionJWT(payload: SessionJWTPayload): string {
   return jwt.sign(payload, env.jwtSecret, {

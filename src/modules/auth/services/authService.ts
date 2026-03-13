@@ -1,8 +1,8 @@
 import { verifyMicrosoftIdToken } from './microsoftTokenService';
-import { findStudentByEmail } from '../user/studentRepository';
-import { findTeeMemberByCarnet } from '../user/teeMemberRepository';
+import { findStudentByEmail } from '../../users/repositories/studentRepository';
+import { findAdminByStudentId } from '../../users/repositories/adminRepository';
 import { createSessionJWT } from './jwtUtils';
-import { AuthResponse, SessionJWTPayload } from './authModel';
+import { AuthResponse, SessionJWTPayload } from '../models/authModel';
 
 const ALLOWED_DOMAIN = '@estudiantec.cr';
 
@@ -12,28 +12,28 @@ export async function authenticateWithMicrosoft(idToken: string): Promise<AuthRe
 
   const email = claims.email || claims.preferred_username;
   if (!email) {
-    throw new Error('No email found in token claims');
+    throw new Error('No se encontró correo electrónico en los claims del token');
   }
 
   // 2. Validar dominio @estudiantec.cr
   if (!email.toLowerCase().endsWith(ALLOWED_DOMAIN)) {
-    throw new Error('Only @estudiantec.cr accounts are allowed');
+    throw new Error('Solo se permiten cuentas @estudiantec.cr');
   }
 
   // 3. Buscar estudiante en el padrón
   const student = await findStudentByEmail(email.toLowerCase());
   if (!student) {
-    throw new Error('Student not found in the electoral registry. Please contact TEE.');
+    throw new Error('Estudiante no encontrado en el padrón electoral. Contacte al TEE.');
   }
 
-  // 4. Chequear si es miembro del TEE
+  // 4. Verificar si es admin del TEE
   let role: SessionJWTPayload['role'] = 'voter';
   let teeMemberId: string | undefined;
 
-  const teeMember = await findTeeMemberByCarnet(student.carnet);
-  if (teeMember) {
-    role = teeMember.role as SessionJWTPayload['role'];
-    teeMemberId = teeMember.id;
+  const admin = await findAdminByStudentId(student.id);
+  if (admin) {
+    role = admin.role as SessionJWTPayload['role'];
+    teeMemberId = admin.id;
   }
 
   // 5. Crear JWT de sesión
