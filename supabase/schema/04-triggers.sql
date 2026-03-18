@@ -28,6 +28,7 @@ RETURNS TRIGGER AS $$
 DECLARE
   v_action      TEXT;
   v_resource_id TEXT;
+  v_resource    JSONB;
   v_details     JSONB;
   v_old         JSONB;
   v_new         JSONB;
@@ -42,10 +43,21 @@ BEGIN
 
   -- Resource ID
   IF TG_OP = 'DELETE' THEN
-    v_resource_id := OLD.id::TEXT;
+    v_resource := to_jsonb(OLD);
   ELSE
-    v_resource_id := NEW.id::TEXT;
+    v_resource := to_jsonb(NEW);
   END IF;
+
+  v_resource_id := COALESCE(
+    v_resource ->> 'id',
+    CASE
+      WHEN v_resource ? 'election_id' AND v_resource ? 'student_id' THEN
+        concat(v_resource ->> 'election_id', ':', v_resource ->> 'student_id')
+      WHEN v_resource ? 'election_id' AND v_resource ? 'member_id' THEN
+        concat(v_resource ->> 'election_id', ':', v_resource ->> 'member_id')
+      ELSE NULL
+    END
+  );
 
   -- Detalle: old/new segun operacion
   IF TG_OP = 'INSERT' THEN

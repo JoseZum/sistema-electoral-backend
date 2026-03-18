@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import * as votingRepo from '../repositories/votingRepository';
 import { VoterElectionDetail, VoteTokenResponse, PublicResults } from '../models/votingModel';
+import { syncAutomaticStatuses } from '../../elections/repositories/electionRepository';
 
 function generateVoteToken(): string {
   return crypto.randomBytes(32).toString('hex');
@@ -11,12 +12,14 @@ function hashVoteToken(token: string): string {
 }
 
 export async function getMyElections(email: string) {
+  await syncAutomaticStatuses();
   const studentId = await votingRepo.findStudentIdByEmail(email);
   if (!studentId) throw new Error('Estudiante no encontrado en el padrón');
   return votingRepo.findElectionsForVoter(studentId);
 }
 
 export async function getElectionForVoting(electionId: string, email: string): Promise<VoterElectionDetail> {
+  await syncAutomaticStatuses();
   const studentId = await votingRepo.findStudentIdByEmail(email);
   if (!studentId) throw new Error('Estudiante no encontrado en el padrón');
 
@@ -29,6 +32,7 @@ export async function getElectionForVoting(electionId: string, email: string): P
 }
 
 export async function requestVoteToken(electionId: string, email: string): Promise<VoteTokenResponse> {
+  await syncAutomaticStatuses();
   const studentId = await votingRepo.findStudentIdByEmail(email);
   if (!studentId) throw new Error('Estudiante no encontrado en el padrón');
 
@@ -56,6 +60,7 @@ export async function requestVoteToken(electionId: string, email: string): Promi
 }
 
 export async function castVote(data: { electionId: string; optionId: string; token?: string }, email: string) {
+  await syncAutomaticStatuses();
   const studentId = await votingRepo.findStudentIdByEmail(email);
   if (!studentId) throw new Error('Estudiante no encontrado en el padrón');
 
@@ -94,6 +99,7 @@ export async function castVote(data: { electionId: string; optionId: string; tok
 }
 
 export async function getResults(electionId: string, email: string): Promise<PublicResults> {
+  await syncAutomaticStatuses();
   const studentId = await votingRepo.findStudentIdByEmail(email);
   if (!studentId) throw new Error('Estudiante no encontrado en el padrón');
 

@@ -23,6 +23,19 @@ export function errorHandler(
     return;
   }
 
+  if (
+    err.message.includes('Solo se puede') ||
+    err.message.includes('Solo se pueden') ||
+    err.message.includes('No se puede cambiar') ||
+    err.message.includes('Se necesitan al menos') ||
+    err.message.includes('Se necesita al menos') ||
+    err.message.includes('no son v') ||
+    err.message.includes('La fecha de cierre')
+  ) {
+    res.status(400).json({ error: err.message });
+    return;
+  }
+
   res.status(500).json({
     error: 'Error interno del servidor',
     ...(process.env.NODE_ENV === 'development' && { details: err.message }),
