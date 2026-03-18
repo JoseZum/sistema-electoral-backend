@@ -12,22 +12,22 @@ export interface MicrosoftIdTokenClaims {
 }
 
 export interface SessionJWTPayload {
+  studentId: string;
   carnet: string;
   email: string;
   fullName: string;
-  role: 'voter' | 'tee_member' | 'president' | 'dev_admin';
-  teeMemberId?: string;
+  role: 'voter' | 'admin';
 }
 
 export interface AuthResponse {
   token: string;
   user: {
+    studentId: string;
     carnet: string;
     fullName: string;
     email: string;
     role: string;
     sede: string;
     career: string;
-    teeMemberId?: string;
   };
 }

@@ -17,7 +17,6 @@ export interface Admin {
   position_title: string;
   role: string;
   permissions: Record<string, boolean>;
-  is_active: boolean;
   created_at: Date;
   updated_at: Date;
 }

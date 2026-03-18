@@ -24,7 +24,7 @@ export async function getElectionById(req: Request<IdParam>, res: Response, next
 
 export async function createElection(req: Request, res: Response, next: NextFunction) {
   try {
-    const election = await electionService.createElection(req.body, req.admin?.id);
+    const election = await electionService.createElection(req.body, req.user?.studentId);
     res.status(201).json(election);
   } catch (error) {
     next(error);
@@ -34,7 +34,7 @@ export async function createElection(req: Request, res: Response, next: NextFunc
 export async function updateElection(req: Request<IdParam>, res: Response, next: NextFunction) {
   try {
     const election = await electionService.updateElection(req.params.id, req.body, {
-      id: req.admin?.id,
+      id: req.user?.studentId,
       carnet: req.user?.carnet,
       ip: req.ip || req.headers['x-forwarded-for'] as string || req.socket.remoteAddress,
     });
@@ -56,7 +56,7 @@ export async function deleteElection(req: Request<IdParam>, res: Response, next:
 export async function changeStatus(req: Request<IdParam>, res: Response, next: NextFunction) {
   try {
     const election = await electionService.changeStatus(req.params.id, req.body.status, {
-      id: req.admin?.id,
+      id: req.user?.studentId,
       carnet: req.user?.carnet,
       ip: req.ip || req.headers['x-forwarded-for'] as string || req.socket.remoteAddress,
     });
@@ -79,7 +79,7 @@ export async function addOption(req: Request<IdParam>, res: Response, next: Next
 export async function updateOption(req: Request<IdOptionParam>, res: Response, next: NextFunction) {
   try {
     const option = await electionService.updateOption(req.params.id, req.params.optionId, req.body, {
-      id: req.admin?.id,
+      id: req.user?.studentId,
       carnet: req.user?.carnet,
       ip: req.ip || req.headers['x-forwarded-for'] as string || req.socket.remoteAddress,
     });

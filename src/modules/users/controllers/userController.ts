@@ -72,6 +72,7 @@ export async function importPadron(req: Request, res: Response, next: NextFuncti
       return;
     }
     const result = await userService.importPadron(req.file.buffer, {
+      id: req.user?.studentId,
       carnet: req.user?.carnet,
       ip: req.ip || req.headers['x-forwarded-for'] as string || req.socket.remoteAddress,
     });
@@ -121,7 +122,7 @@ export async function updateAdmin(req: Request, res: Response, next: NextFunctio
 
 export async function deleteAdmin(req: Request, res: Response, next: NextFunction) {
   try {
-    const admin = await userService.deactivateAdmin(req.params.id as string);
+    const admin = await userService.deleteAdmin(req.params.id as string);
     res.json(admin);
   } catch (error) {
     next(error);

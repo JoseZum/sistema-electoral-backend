@@ -67,7 +67,7 @@ export async function deactivateStudent(id: string) {
 // Importar padrón desde archivo XLSX
 export async function importPadron(
   fileBuffer: Buffer,
-  actor?: { carnet?: string; ip?: string }
+  actor?: { id?: string; carnet?: string; ip?: string }
 ) {
   const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
 
@@ -97,7 +97,7 @@ export async function importPadron(
 
   // Run inside audit context so triggers capture WHO did this
   const summary = await withAuditContext(
-    { carnet: actor?.carnet, ip: actor?.ip },
+    { id: actor?.id, carnet: actor?.carnet, ip: actor?.ip },
     (client) => studentRepo.importPadron(data, client)
   );
 
@@ -128,8 +128,8 @@ export async function updateAdmin(id: string, data: UpdateAdminDto) {
   return admin;
 }
 
-export async function deactivateAdmin(id: string) {
-  const admin = await adminRepo.deactivateAdmin(id);
+export async function deleteAdmin(id: string) {
+  const admin = await adminRepo.deleteAdmin(id);
   if (!admin) throw new Error('Admin no encontrado');
   return admin;
 }

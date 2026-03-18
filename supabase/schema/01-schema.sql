@@ -31,11 +31,10 @@ CREATE INDEX idx_students_active ON students(is_active);
 -- ============================================
 CREATE TABLE admins (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    students_id     UUID NOT NULL REFERENCES students(id),
+    students_id     UUID NOT NULL UNIQUE REFERENCES students(id) ON DELETE CASCADE,
     position_title  TEXT NOT NULL,
-    role            TEXT NOT NULL DEFAULT 'member',
+    role            TEXT NOT NULL DEFAULT 'admin',
     permissions     JSONB NOT NULL DEFAULT '{}',
-    is_active       BOOLEAN DEFAULT true,
     created_at      TIMESTAMPTZ DEFAULT now(),
     updated_at      TIMESTAMPTZ DEFAULT now()
 );
@@ -56,7 +55,7 @@ CREATE TABLE elections (
     min_keys        INT DEFAULT 3,
     start_time      TIMESTAMPTZ,
     end_time        TIMESTAMPTZ,
-    created_by      UUID REFERENCES admins(id),
+    created_by      UUID REFERENCES students(id),
     created_at      TIMESTAMPTZ DEFAULT now(),
     updated_at      TIMESTAMPTZ DEFAULT now()
 );
@@ -115,7 +114,7 @@ CREATE UNIQUE INDEX uniq_votes_student ON votes(election_id, student_id) WHERE s
 CREATE TABLE scrutiny_keys (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     election_id     UUID NOT NULL REFERENCES elections(id),
-    member_id       UUID NOT NULL REFERENCES admins(id),
+    member_id       UUID NOT NULL REFERENCES students(id),
     key_shard       TEXT NOT NULL,
     has_submitted   BOOLEAN DEFAULT false,
     submitted_at    TIMESTAMPTZ
@@ -145,7 +144,7 @@ CREATE INDEX idx_audit_logs_created ON audit_logs(created_at DESC);
 -- ============================================
 CREATE TABLE padron_uploads (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    uploaded_by     UUID REFERENCES admins(id),
+    uploaded_by     UUID REFERENCES students(id),
     file_name       TEXT,
     total_records   INT,
     new_students    INT,

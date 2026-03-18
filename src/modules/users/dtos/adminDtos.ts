@@ -9,5 +9,4 @@ export interface UpdateAdminDto {
   position_title?: string;
   role?: string;
   permissions?: Record<string, boolean>;
-  is_active?: boolean;
 }

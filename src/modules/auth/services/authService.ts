@@ -28,21 +28,19 @@ export async function authenticateWithMicrosoft(idToken: string): Promise<AuthRe
 
   // 4. Verificar si es admin del TEE
   let role: SessionJWTPayload['role'] = 'voter';
-  let teeMemberId: string | undefined;
 
   const admin = await findAdminByStudentId(student.id);
   if (admin) {
-    role = admin.role as SessionJWTPayload['role'];
-    teeMemberId = admin.id;
+    role = 'admin';
   }
 
   // 5. Crear JWT de sesión
   const sessionPayload: SessionJWTPayload = {
+    studentId: student.id,
     carnet: student.carnet,
     email: student.email,
     fullName: student.full_name,
     role,
-    teeMemberId,
   };
 
   const token = createSessionJWT(sessionPayload);
@@ -50,13 +48,13 @@ export async function authenticateWithMicrosoft(idToken: string): Promise<AuthRe
   return {
     token,
     user: {
+      studentId: student.id,
       carnet: student.carnet,
       fullName: student.full_name,
       email: student.email,
       role,
       sede: student.sede,
       career: student.career,
-      teeMemberId,
     },
   };
 }

@@ -1,13 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
-import { findAdminById, findAdminByStudentId } from '../modules/users/repositories/adminRepository';
+import { findAdminByStudentId } from '../modules/users/repositories/adminRepository';
 import { findStudentByCarnet, findStudentByEmail } from '../modules/users/repositories/studentRepository';
 
-async function resolveActiveAdmin(req: Request) {
-  if (req.user?.teeMemberId) {
-    const adminByToken = await findAdminById(req.user.teeMemberId);
-    if (adminByToken?.is_active) {
-      return adminByToken;
-    }
+async function resolveCurrentStudentId(req: Request) {
+  if (req.user?.studentId) {
+    return req.user.studentId;
   }
 
   const email = req.user?.email?.toLowerCase();
@@ -17,11 +14,7 @@ async function resolveActiveAdmin(req: Request) {
     student = await findStudentByCarnet(req.user.carnet);
   }
 
-  if (!student) {
-    return null;
-  }
-
-  return findAdminByStudentId(student.id);
+  return student?.id ?? null;
 }
 
 export async function requireAdmin(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -31,18 +24,22 @@ export async function requireAdmin(req: Request, res: Response, next: NextFuncti
   }
 
   try {
-    const admin = await resolveActiveAdmin(req);
+    const studentId = await resolveCurrentStudentId(req);
 
-    if (!admin) {
-      const message = req.user.teeMemberId
-        ? 'Su sesi\u00f3n administrativa ya no es v\u00e1lida. Inicie sesi\u00f3n nuevamente.'
-        : 'Se requieren permisos administrativos para gestionar elecciones.';
-      res.status(403).json({ error: message });
+    if (!studentId) {
+      res.status(403).json({ error: 'No se pudo resolver su identidad dentro del padron.' });
       return;
     }
 
+    const admin = await findAdminByStudentId(studentId);
+
+    if (!admin) {
+      res.status(403).json({ error: 'Se requieren permisos administrativos para esta accion.' });
+      return;
+    }
+
+    req.user.studentId = studentId;
     req.admin = admin;
-    req.user.teeMemberId = admin.id;
     next();
   } catch (error) {
     next(error);
