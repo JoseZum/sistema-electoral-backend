@@ -4,8 +4,6 @@
 CREATE TYPE election_status AS ENUM ('DRAFT', 'SCHEDULED', 'OPEN', 'CLOSED', 'SCRUTINIZED', 'ARCHIVED');
 CREATE TYPE auth_method_type AS ENUM ('MICROSOFT', 'EMAIL_TOKEN', 'BOTH');
 CREATE TYPE voter_source_type AS ENUM ('FULL_PADRON', 'FILTERED', 'MANUAL');
-CREATE TYPE election_type AS ENUM ('ELECTORAL_MASIVA', 'PLENARIO', 'INTERNA');
-CREATE TYPE option_type AS ENUM ('CANDIDATE', 'IN_FAVOR', 'AGAINST', 'BLANK', 'NULL_VOTE', 'ABSTENTION', 'CUSTOM');
 
 -- ============================================
 -- PADRON ESTUDIANTIL
@@ -49,7 +47,6 @@ CREATE TABLE elections (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     title           TEXT NOT NULL,
     description     TEXT,
-    type            election_type NOT NULL,
     status          election_status NOT NULL DEFAULT 'DRAFT',
     is_anonymous    BOOLEAN NOT NULL DEFAULT true,
     auth_method     auth_method_type NOT NULL DEFAULT 'MICROSOFT',
@@ -71,7 +68,7 @@ CREATE TABLE election_options (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     election_id     UUID NOT NULL REFERENCES elections(id) ON DELETE CASCADE,
     label           TEXT NOT NULL,
-    option_type     option_type NOT NULL,
+    option_type     TEXT NOT NULL,
     display_order   INT NOT NULL DEFAULT 0,
     metadata        JSONB
 );
@@ -82,9 +79,9 @@ CREATE TABLE election_options (
 CREATE TABLE election_voters (
     election_id     UUID NOT NULL REFERENCES elections(id) ON DELETE CASCADE,
     student_id      UUID NOT NULL REFERENCES students(id),
-    has_voted       BOOLEAN NOT NULL DEFAULT false,
-    voted_at        TIMESTAMPTZ,
-    auth_token_hash TEXT,
+    vote_token_hash TEXT,
+    token_used      BOOLEAN DEFAULT false,
+    token_used_at   TIMESTAMPTZ,
     PRIMARY KEY (election_id, student_id)
 );
 
@@ -98,10 +95,19 @@ CREATE TABLE votes (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     election_id     UUID NOT NULL REFERENCES elections(id),
     option_id       UUID NOT NULL REFERENCES election_options(id),
-    voter_id        UUID NULL REFERENCES students(id)
+    token_hash      TEXT,
+    student_id      UUID REFERENCES students(id),
+    created_at      TIMESTAMPTZ DEFAULT now(),
+    CONSTRAINT chk_vote_identity CHECK (
+        (token_hash IS NOT NULL AND student_id IS NULL)
+        OR (token_hash IS NULL AND student_id IS NOT NULL)
+    )
 );
 
 CREATE INDEX idx_votes_election ON votes(election_id);
+CREATE INDEX idx_votes_election_option ON votes(election_id, option_id);
+CREATE UNIQUE INDEX uniq_votes_token ON votes(token_hash) WHERE token_hash IS NOT NULL;
+CREATE UNIQUE INDEX uniq_votes_student ON votes(election_id, student_id) WHERE student_id IS NOT NULL;
 
 -- ============================================
 -- LLAVES DE ESCRUTINIO

@@ -5,6 +5,8 @@ import rateLimit from 'express-rate-limit';
 import { corsOptions } from './config/cors';
 import { authRoutes } from './modules/auth';
 import { userRoutes } from './modules/users';
+import { electionRoutes } from './modules/elections';
+import { votingRoutes } from './modules/voting';
 import { auditRoutes } from './modules/audit';
 import { errorHandler } from './middleware/errorHandler';
 
@@ -28,6 +30,8 @@ app.use(express.json({ limit: '1mb' }));
 // Rutas
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/elections', electionRoutes);
+app.use('/api/voting', votingRoutes);
 app.use('/api/audit', auditRoutes);
 
 app.get('/api/health', (_req, res) => {

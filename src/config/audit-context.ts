@@ -2,6 +2,7 @@ import { pool } from './database';
 import { PoolClient } from 'pg';
 
 interface AuditActor {
+  id?: string;
   carnet?: string;
   ip?: string;
 }
@@ -18,6 +19,9 @@ export async function withAuditContext<T>(
   try {
     await client.query('BEGIN');
 
+    if (actor.id) {
+      await client.query(`SET LOCAL app.actor_id = '${actor.id.replace(/'/g, "''")}'`);
+    }
     if (actor.carnet) {
       await client.query(`SET LOCAL app.actor_carnet = '${actor.carnet.replace(/'/g, "''")}'`);
     }

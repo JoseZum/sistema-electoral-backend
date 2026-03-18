@@ -20,6 +20,15 @@ export async function getStudents(req: Request, res: Response, next: NextFunctio
   }
 }
 
+export async function getStudentCatalog(_req: Request, res: Response, next: NextFunction) {
+  try {
+    const catalog = await userService.getStudentCatalog();
+    res.json(catalog);
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function getStudentById(req: Request, res: Response, next: NextFunction) {
   try {
     const student = await userService.getStudentById(req.params.id as string);
@@ -62,7 +71,10 @@ export async function importPadron(req: Request, res: Response, next: NextFuncti
       res.status(400).json({ error: 'Se requiere un archivo XLSX' });
       return;
     }
-    const result = await userService.importPadron(req.file.buffer);
+    const result = await userService.importPadron(req.file.buffer, {
+      carnet: req.user?.carnet,
+      ip: req.ip || req.headers['x-forwarded-for'] as string || req.socket.remoteAddress,
+    });
     res.json(result);
   } catch (error) {
     next(error);

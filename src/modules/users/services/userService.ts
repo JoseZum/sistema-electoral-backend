@@ -36,6 +36,10 @@ export async function getAllStudents(filters: StudentFiltersDto) {
   return studentRepo.findAllStudents(filters);
 }
 
+export async function getStudentCatalog() {
+  return studentRepo.findStudentCatalog();
+}
+
 export async function getStudentById(id: string) {
   const student = await studentRepo.findStudentById(id);
   if (!student) throw new Error('Estudiante no encontrado');

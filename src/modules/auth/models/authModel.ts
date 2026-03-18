@@ -28,5 +28,6 @@ export interface AuthResponse {
     role: string;
     sede: string;
     career: string;
+    teeMemberId?: string;
   };
 }

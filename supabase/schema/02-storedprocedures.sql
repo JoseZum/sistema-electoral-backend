@@ -1,13 +1,90 @@
-CREATE OR REPLACE PROCEDURE cast_vote (
+-- Cast anonymous vote using token
+CREATE OR REPLACE FUNCTION fn_cast_vote_anonymous(
     p_election_id UUID,
     p_option_id UUID,
-    p_voter_id UUID DEFAULT NULL
+    p_token_hash TEXT
 )
+RETURNS VOID
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_voter_record RECORD;
+BEGIN
+    -- Verify token exists and hasn't been used
+    SELECT * INTO v_voter_record
+    FROM election_voters
+    WHERE election_id = p_election_id
+      AND vote_token_hash = p_token_hash
+      AND token_used = false
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Token inválido o ya utilizado';
+    END IF;
+
+    -- Verify option belongs to election
+    IF NOT EXISTS (
+        SELECT 1 FROM election_options
+        WHERE id = p_option_id AND election_id = p_election_id
+    ) THEN
+        RAISE EXCEPTION 'Opción no pertenece a esta elección';
+    END IF;
+
+    -- Insert vote
+    INSERT INTO votes(election_id, option_id, token_hash)
+    VALUES (p_election_id, p_option_id, p_token_hash);
+
+    -- Mark token as used
+    UPDATE election_voters
+    SET token_used = true, token_used_at = now()
+    WHERE election_id = p_election_id
+      AND vote_token_hash = p_token_hash;
+
+    -- Destroy traceability: remove token hash from election_voters
+    UPDATE election_voters
+    SET vote_token_hash = NULL
+    WHERE election_id = p_election_id
+      AND token_used = true
+      AND token_used_at = now();
+END;
+$$;
+
+-- Cast non-anonymous vote directly with student identity
+CREATE OR REPLACE FUNCTION fn_cast_vote_named(
+    p_election_id UUID,
+    p_option_id UUID,
+    p_student_id UUID
+)
+RETURNS VOID
 LANGUAGE plpgsql
 AS $$
 BEGIN
-    INSERT INTO votes(election_id, option_id, voter_id)
-    VALUES (p_election_id, p_option_id, p_voter_id);
+    -- Verify voter is eligible
+    IF NOT EXISTS (
+        SELECT 1 FROM election_voters
+        WHERE election_id = p_election_id
+          AND student_id = p_student_id
+    ) THEN
+        RAISE EXCEPTION 'Votante no es elegible para esta elección';
+    END IF;
+
+    -- Verify option belongs to election
+    IF NOT EXISTS (
+        SELECT 1 FROM election_options
+        WHERE id = p_option_id AND election_id = p_election_id
+    ) THEN
+        RAISE EXCEPTION 'Opción no pertenece a esta elección';
+    END IF;
+
+    -- Insert vote (UNIQUE constraint prevents double voting)
+    INSERT INTO votes(election_id, option_id, student_id)
+    VALUES (p_election_id, p_option_id, p_student_id);
+
+    -- Mark voter as having voted
+    UPDATE election_voters
+    SET token_used = true, token_used_at = now()
+    WHERE election_id = p_election_id
+      AND student_id = p_student_id;
 END;
 $$;
 
@@ -23,7 +100,14 @@ DECLARE
     v_deactivated INT := 0;
     v_total INT := 0;
     v_incoming_carnets TEXT[];
+    v_actor_carnet TEXT;
 BEGIN
+    -- Get actor info from session
+    v_actor_carnet := current_setting('app.actor_carnet', true);
+
+    -- Set bulk import flag so student triggers skip individual logging
+    PERFORM set_config('app.bulk_import', 'true', true);
+
     -- Collect all valid carnets from the incoming data
     SELECT array_agg(NULLIF(trim(x->>'Carnet'), ''))
     INTO v_incoming_carnets
@@ -88,6 +172,22 @@ BEGIN
         RETURNING id
     )
     SELECT count(*) INTO v_deactivated FROM deactivated;
+
+    -- Log ONE summary entry for the entire import
+    INSERT INTO audit_logs (actor_carnet, action, resource_type, details, ip_address)
+    VALUES (
+        v_actor_carnet,
+        'padron.import',
+        'padron',
+        jsonb_build_object(
+            'total', v_total,
+            'new', v_new,
+            'updated', v_updated,
+            'reactivated', v_reactivated,
+            'deactivated', v_deactivated
+        ),
+        current_setting('app.client_ip', true)
+    );
 
     RETURN jsonb_build_object(
         'total', v_total,

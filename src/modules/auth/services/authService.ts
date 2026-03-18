@@ -56,6 +56,7 @@ export async function authenticateWithMicrosoft(idToken: string): Promise<AuthRe
       role,
       sede: student.sede,
       career: student.career,
+      teeMemberId,
     },
   };
 }

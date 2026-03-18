@@ -32,6 +32,11 @@ DECLARE
   v_old         JSONB;
   v_new         JSONB;
 BEGIN
+  -- Skip individual student logs during bulk import
+  IF TG_ARGV[0] = 'student' AND _audit_get('app.bulk_import') = 'true' THEN
+    IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
+  END IF;
+
   -- Accion
   v_action := TG_ARGV[0] || '.' || lower(TG_OP);
 
@@ -144,7 +149,7 @@ CREATE TRIGGER trg_election_options_delete
 CREATE TRIGGER trg_election_voters_update
   AFTER UPDATE ON election_voters
   FOR EACH ROW
-  WHEN (OLD.has_voted IS DISTINCT FROM NEW.has_voted)
+  WHEN (OLD.token_used IS DISTINCT FROM NEW.token_used)
   EXECUTE FUNCTION fn_audit_log('election_voter');
 
 -- ============================================

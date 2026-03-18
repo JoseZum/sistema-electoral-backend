@@ -1,1 +1,1 @@
-// Voting module - to be implemented
+export { default as votingRoutes } from './routes/votingRoutes';

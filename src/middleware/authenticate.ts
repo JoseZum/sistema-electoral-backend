@@ -1,11 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifySessionJWT } from '../modules/auth/services/jwtUtils';
 import { SessionJWTPayload } from '../modules/auth/models/authModel';
+import { Admin } from '../modules/users/models/userModel';
 
 declare global {
   namespace Express {
     interface Request {
       user?: SessionJWTPayload;
+      admin?: Admin;
     }
   }
 }

@@ -30,6 +30,32 @@ export async function findStudentById(id: string): Promise<Student | null> {
   return result.rows[0] || null;
 }
 
+export async function findStudentCatalog(): Promise<{ sedes: string[]; careers: string[] }> {
+  const [sedesResult, careersResult] = await Promise.all([
+    pool.query<{ sede: string }>(
+      `SELECT DISTINCT sede
+       FROM students
+       WHERE is_active = true
+         AND sede IS NOT NULL
+         AND sede <> ''
+       ORDER BY sede ASC`
+    ),
+    pool.query<{ career: string }>(
+      `SELECT DISTINCT career
+       FROM students
+       WHERE is_active = true
+         AND career IS NOT NULL
+         AND career <> ''
+       ORDER BY career ASC`
+    ),
+  ]);
+
+  return {
+    sedes: sedesResult.rows.map((row) => row.sede),
+    careers: careersResult.rows.map((row) => row.career),
+  };
+}
+
 // Listar estudiantes con filtros y paginación
 export async function findAllStudents(filters: StudentFiltersDto = {}): Promise<{ students: Student[]; total: number }> {
   const { sede, career, is_active, search, page = 1, limit = 50 } = filters;
