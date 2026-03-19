@@ -28,7 +28,6 @@ export interface ElectionOption {
 export interface ElectionVoter {
   election_id: string;
   student_id: string;
-  vote_token_hash: string | null;
   token_used: boolean;
   token_used_at: Date | null;
 }

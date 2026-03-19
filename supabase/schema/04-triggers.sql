@@ -86,13 +86,13 @@ BEGIN
 
   INSERT INTO audit_logs (actor_id, actor_carnet, action, resource_type, resource_id, details, ip_address)
   VALUES (
-    _audit_get('app.actor_id')::UUID,
-    _audit_get('app.actor_carnet'),
+    NULLIF(_audit_get('app.actor_id'), '')::UUID,
+    NULLIF(_audit_get('app.actor_carnet'), ''),
     v_action,
     TG_ARGV[0],
     v_resource_id,
     v_details,
-    _audit_get('app.client_ip')
+    NULLIF(_audit_get('app.client_ip'), '')
   );
 
   IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;

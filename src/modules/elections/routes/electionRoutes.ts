@@ -27,6 +27,7 @@ router.delete('/:id/options/:optionId', electionController.deleteOption);
 // Voters
 router.post('/:id/voters/populate', electionController.populateVoters);
 router.delete('/:id/voters', electionController.clearVoters);
+router.post('/:id/tokens/generate', electionController.generateVotingCodes);
 
 // Results
 router.get('/:id/results', electionController.getResults);

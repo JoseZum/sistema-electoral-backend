@@ -8,14 +8,15 @@ RETURNS VOID
 LANGUAGE plpgsql
 AS $$
 DECLARE
-    v_voter_record RECORD;
+    v_token_record RECORD;
+    v_now TIMESTAMPTZ := now();
 BEGIN
     -- Verify token exists and hasn't been used
-    SELECT * INTO v_voter_record
-    FROM election_voters
+    SELECT * INTO v_token_record
+    FROM voting_tokens
     WHERE election_id = p_election_id
-      AND vote_token_hash = p_token_hash
-      AND token_used = false
+      AND token_hash = p_token_hash
+      AND used = false
     FOR UPDATE;
 
     IF NOT FOUND THEN
@@ -35,17 +36,26 @@ BEGIN
     VALUES (p_election_id, p_option_id, p_token_hash);
 
     -- Mark token as used
-    UPDATE election_voters
-    SET token_used = true, token_used_at = now()
+    UPDATE voting_tokens
+    SET used = true,
+        used_at = v_now
     WHERE election_id = p_election_id
-      AND vote_token_hash = p_token_hash;
+      AND student_id = v_token_record.student_id;
 
-    -- Destroy traceability: remove token hash from election_voters
+    -- Mark voter as having voted
     UPDATE election_voters
-    SET vote_token_hash = NULL
+    SET token_used = true,
+        token_used_at = v_now
     WHERE election_id = p_election_id
-      AND token_used = true
-      AND token_used_at = now();
+      AND student_id = v_token_record.student_id;
+
+    -- Destroy traceability: remove short/long token material from the access table
+    UPDATE voting_tokens
+    SET code_hash = NULL,
+        token_hash = NULL,
+        token_encrypted = NULL
+    WHERE election_id = p_election_id
+      AND student_id = v_token_record.student_id;
 END;
 $$;
 

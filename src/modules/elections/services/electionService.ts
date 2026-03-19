@@ -8,6 +8,7 @@ import {
 } from '../models/electionModel';
 import { withAuditContext } from '../../../config/audit-context';
 import { PoolClient } from 'pg';
+import { generateVotingCodesForElection } from '../../voting/services/votingService';
 
 type AuditActor = {
   id?: string;
@@ -167,7 +168,15 @@ export async function changeStatus(id: string, newStatus: Election['status'] | '
     if (voterStats.total === 0) throw new Error('Se necesita al menos 1 votante elegible');
   }
 
-  return withOptionalAudit(actor, (client) => electionRepo.updateElectionStatus(id, targetStatus, client));
+  const updatedElection = await withOptionalAudit(actor, (client) =>
+    electionRepo.updateElectionStatus(id, targetStatus, client)
+  );
+
+  if (updatedElection?.status === 'OPEN' && updatedElection.is_anonymous) {
+    await generateVotingCodesForElection(id);
+  }
+
+  return updatedElection;
 }
 
 export async function addOption(electionId: string, data: CreateOptionDto) {
@@ -249,4 +258,11 @@ export async function getResults(electionId: string) {
   const results = await electionRepo.getElectionResults(electionId);
   if (!results) throw new Error('No se pudieron obtener los resultados');
   return results;
+}
+
+export async function generateVotingCodes(electionId: string) {
+  await electionRepo.syncAutomaticStatuses();
+  const election = await electionRepo.findElectionById(electionId);
+  if (!election) throw new Error('Elección no encontrada');
+  return generateVotingCodesForElection(electionId);
 }

@@ -27,7 +27,12 @@ export async function requestToken(req: Request, res: Response, next: NextFuncti
   try {
     const email = req.user?.email;
     if (!email) { res.status(401).json({ error: 'No autenticado' }); return; }
-    const tokenResponse = await votingService.requestVoteToken(req.params.id as string, email);
+    const tokenResponse = await votingService.requestVoteToken(
+      req.params.id as string,
+      email,
+      req.body.code,
+      req.body.carnet
+    );
     res.json(tokenResponse);
   } catch (error) {
     next(error);

@@ -10,6 +10,7 @@ export const env = {
     tenantId: process.env.AZURE_TENANT_ID || '',
   },
   jwtSecret: process.env.JWT_SECRET || 'dev-secret-change-me',
+  voteTokenSecret: process.env.VOTE_TOKEN_SECRET || process.env.JWT_SECRET || 'dev-secret-change-me',
   databaseUrl: process.env.DATABASE_URL || 'postgresql://tee_admin:tee_local_password@localhost:5432/tee_voting',
   corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:3000',
 };
