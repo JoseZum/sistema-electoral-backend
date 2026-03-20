@@ -55,6 +55,7 @@ CREATE TABLE elections (
     min_keys        INT DEFAULT 3,
     start_time      TIMESTAMPTZ,
     end_time        TIMESTAMPTZ,
+    scrutinized_at  TIMESTAMPTZ,
     created_by      UUID REFERENCES students(id),
     created_at      TIMESTAMPTZ DEFAULT now(),
     updated_at      TIMESTAMPTZ DEFAULT now()
@@ -139,7 +140,9 @@ CREATE TABLE scrutiny_keys (
     member_id       UUID NOT NULL REFERENCES students(id),
     key_shard       TEXT NOT NULL,
     has_submitted   BOOLEAN DEFAULT false,
-    submitted_at    TIMESTAMPTZ
+    submitted_at    TIMESTAMPTZ,
+    created_at      TIMESTAMPTZ DEFAULT now(),
+    CONSTRAINT uniq_scrutiny_member UNIQUE (election_id, member_id)
 );
 
 -- ============================================
