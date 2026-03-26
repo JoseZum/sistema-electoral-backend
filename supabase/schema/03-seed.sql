@@ -85,3 +85,30 @@ SELECT
 FROM students
 WHERE email = 'fpicado@estudiantec.cr'
 ON CONFLICT DO NOTHING;
+
+-- ============================================
+-- SEED: VOTANTES POR ELECCION
+-- ============================================
+
+-- Agregar estudiantes a "Elección Representantes Estudiantiles 2026"
+INSERT INTO election_voters (election_id, student_id)
+SELECT e.id, s.id
+FROM elections e
+JOIN students s ON s.email IN (
+    'j.zumbado.1@estudiantec.cr',
+    'fpicado@estudiantec.cr'
+)
+WHERE e.title = 'Elección Representantes Estudiantiles 2026'
+ON CONFLICT DO NOTHING;
+
+
+-- Agregar estudiantes a "Referéndum Estudiantil 2026"
+INSERT INTO election_voters (election_id, student_id)
+SELECT e.id, s.id
+FROM elections e
+JOIN students s ON s.email IN (
+    'j.zumbado.1@estudiantec.cr',
+    'fpicado@estudiantec.cr'
+)
+WHERE e.title = 'Referéndum Estudiantil 2026'
+ON CONFLICT DO NOTHING;

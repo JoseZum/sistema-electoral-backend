@@ -9,6 +9,7 @@ import { electionRoutes } from './modules/elections';
 import { votingRoutes } from './modules/voting';
 import { auditRoutes } from './modules/audit';
 import { errorHandler } from './middleware/errorHandler';
+import { notificationRoutes } from './modules/notifications';
 
 const app = express();
 
@@ -33,6 +34,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/elections', electionRoutes);
 app.use('/api/voting', votingRoutes);
 app.use('/api/audit', auditRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

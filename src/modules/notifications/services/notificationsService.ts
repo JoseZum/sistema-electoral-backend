@@ -1,57 +1,51 @@
-import * as electionRepo from '../../elections/repositories/electionRepository';
-import * as votingRepo from '../../voting/repositories/votingRepository'; // para los tokens (por implementar)
-import { withAuditContext } from '../../../config/audit-context';
-import { PoolClient } from 'pg';
+import { notificationRepository } from '../repositories/notificationRepository';
+import { SendNotificationDTO } from '../models/notificationModel';
+import nodemailer from 'nodemailer';
 
-type AuditActor = {
-    id?: string;
-    carnet?: string;
-    ip?: string;
-};
+export const notificationsService = {
+    async sendNotifications(data: SendNotificationDTO) {
+        const { electionId, emailType, message } = data;
 
-type SendEmailDto = {
-    electionId: string;
-    type: 'token' | 'reminder' | 'opening' | 'custom';
-    message?: string;
-};
+        // 1. Obtener correos
+        const voters = await notificationRepository.getVoterEmailsByElection(electionId);
 
-async function withOptionalAudit<T>(
-    actor: AuditActor | undefined,
-    fn: (client?: PoolClient) => Promise<T>
-): Promise<T> {
-    if (actor?.id || actor?.carnet || actor?.ip) {
-        return withAuditContext(actor, (client) => fn(client));
+        if (!voters || voters.length === 0) {
+            throw new Error('No hay votantes para esta elección');
+        }
+
+        // 2. Configurar transporter
+        const transporter = nodemailer.createTransport({
+            host: 'smtp.ethereal.email',
+            port: 587,
+            auth: {
+                user: 'wilton.emmerich78@ethereal.email',
+                pass: 'TeuYBeHqXPGgTVAVYd'
+            }
+        });
+
+        // 3. Definir asunto según tipo
+        const subjectMap: Record<string, string> = {
+            reminder: 'Recordatorio de votación',
+            open: 'La votación ha iniciado',
+            custom: 'Mensaje personalizado'
+        };
+
+        // 4. Enviar correos uno por uno
+        for (const voter of voters) {
+            const info = await transporter.sendMail({
+                from: '"TEE Votaciones" <no-reply@tee.com>',
+                to: voter.email,
+                subject: subjectMap[emailType] || 'Notificación',
+                text: message || 'Mensaje de prueba'
+            });
+
+            console.log('Correo enviado a:', voter.email);
+            console.log('Preview URL:', nodemailer.getTestMessageUrl(info));
+        }
+
+        return {
+            message: 'Correos enviados',
+            total: voters.length,
+        };
     }
-
-    return fn();
-}
-
-async function getValidElection(electionId: string) {
-    const election = await electionRepo.findElectionById(electionId);
-    if (!election) throw new Error('Elección no encontrada');
-    return election;
-}
-
-async function getElectionVoters(electionId: string) {
-    //return electionRepo.getVotersWithEmails(electionId);
-}
-
-async function getVotingTokens(electionId: string) {
-    // return votingRepo.getTokensByElection(electionId);
-}
-
-// ============================================
-// MAIN SERVICE
-// ============================================
-
-export async function sendEmails(
-    data: SendEmailDto,
-    actor?: AuditActor
-) {
-    const { electionId, type, message } = data;
-
-    const election = await getValidElection(electionId);
-
-    // Aquí se implementaría la lógica para obtener los votantes y tokens según el tipo de email
-    
-}
+};
