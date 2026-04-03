@@ -32,4 +32,7 @@ router.post('/:id/tokens/generate', electionController.generateVotingCodes);
 // Results
 router.get('/:id/results', electionController.getResults);
 
+// Monitoring
+router.get('/:id/monitoring', electionController.getMonitoringData);
+
 export default router;

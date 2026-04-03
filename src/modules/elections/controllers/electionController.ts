@@ -135,3 +135,13 @@ export async function getResults(req: Request<IdParam>, res: Response, next: Nex
     next(error);
   }
 }
+
+// Monitoring
+export async function getMonitoringData(req: Request<IdParam>, res: Response, next: NextFunction) {
+  try {
+    const data = await electionService.getMonitoringData(req.params.id);
+    res.json(data);
+  } catch (error) {
+    next(error);
+  }
+}
