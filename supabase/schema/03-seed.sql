@@ -1,20 +1,21 @@
 -- ============================================
--- LIMPIAR TODO (IMPORTANTE)
+-- STUDENTS
 -- ============================================
-
-TRUNCATE votes, election_voters, election_options, elections RESTART IDENTITY CASCADE;
-
--- ============================================
--- USUARIOS BASE
--- ============================================
-
 INSERT INTO students (carnet, full_name, email, sede, career, degree_level)
 VALUES 
 ('2024080534', 'Jose Fabian Zumbado Ruiz', 'j.zumbado.1@estudiantec.cr', 'Cartago', 'Ingenieria en Computacion', 'Bachillerato'),
-('2022104933', 'Fabricio Picado Alvarado', 'fpicado@estudiantec.cr', 'Cartago', 'Ingenieria en Computacion', 'Bachillerato'),
-('9999999999', 'Fabricio Test Gmail', 'fabripicado@gmail.com', 'Cartago', 'Ingenieria en Computacion', 'Bachillerato')
+('2022104933', 'Fabricio Picado Alvarado', 'fpicado@estudiantec.cr', 'San Jose', 'Ingenieria en Computacion', 'Bachillerato'),
+('2023101111', 'Maria Gonzalez Lopez', 'm.gonzalez@estudiantec.cr', 'San Jose', 'Ingenieria en Computacion', 'Bachillerato'),
+('2023102222', 'Carlos Ramirez Mora', 'c.ramirez@estudiantec.cr', 'Limon', 'Ingenieria en Computacion', 'Bachillerato'),
+('2023103333', 'Andrea Vargas Soto', 'a.vargas@estudiantec.cr', 'Cartago', 'Ingenieria en Computacion', 'Bachillerato'),
+('2023104444', 'Luis Hernandez Rojas', 'l.hernandez@estudiantec.cr', 'San Carlos', 'Ingenieria en Computacion', 'Bachillerato'),
+('2023105555', 'Sofia Castillo Perez', 's.castillo@estudiantec.cr', 'Alajuela', 'Ingenieria en Computacion', 'Bachillerato'),
+('2023106666', 'Daniel Torres Quesada', 'd.torres@estudiantec.cr', 'Cartago', 'Ingenieria en Computacion', 'Bachillerato')
 ON CONFLICT (email) DO NOTHING;
 
+-- ============================================
+-- ADMINS
+-- ============================================
 INSERT INTO admins (students_id, position_title, role, permissions)
 SELECT id, 'Administrador', 'admin', '{"all": true}'::jsonb
 FROM students 
@@ -22,164 +23,93 @@ WHERE email IN ('j.zumbado.1@estudiantec.cr', 'fpicado@estudiantec.cr')
 ON CONFLICT DO NOTHING;
 
 -- ============================================
--- MÁS ESTUDIANTES
+-- ELECCIONES
 -- ============================================
-
-INSERT INTO students (carnet, full_name, email, sede, career, degree_level)
+INSERT INTO elections (title, description, status, is_anonymous, auth_method, voter_source, start_time, end_time, created_by)
 VALUES
-('2023000001', 'Ana Perez', 'ana1@estudiantec.cr', 'San Jose', 'Ingenieria en Computacion', 'Bachillerato'),
-('2023000002', 'Luis Gomez', 'luis2@estudiantec.cr', 'Cartago', 'Ingenieria en Computacion', 'Bachillerato'),
-('2023000003', 'Maria Lopez', 'maria3@estudiantec.cr', 'Cartago', 'Ingenieria en Computacion', 'Bachillerato'),
-('2023000004', 'Carlos Ruiz', 'carlos4@estudiantec.cr', 'Limon', 'Ingenieria en Computacion', 'Bachillerato'),
-('2023000005', 'Sofia Vargas', 'sofia5@estudiantec.cr', 'San Jose', 'Ingenieria en Computacion', 'Bachillerato'),
-('2023000006', 'Diego Castro', 'diego6@estudiantec.cr', 'Cartago', 'Ingenieria en Computacion', 'Bachillerato'),
-('2023000007', 'Elena Mora', 'elena7@estudiantec.cr', 'Cartago', 'Ingenieria en Computacion', 'Bachillerato'),
-('2023000008', 'Jorge Salas', 'jorge8@estudiantec.cr', 'Limon', 'Ingenieria en Computacion', 'Bachillerato')
-ON CONFLICT (email) DO NOTHING;
-
--- ============================================
--- ELECCIÓN 1 (NO ANÓNIMA)
--- ============================================
-
-INSERT INTO elections (
-    title, description, status, is_anonymous,
-    auth_method, voter_source, voter_filter,
-    requires_keys, min_keys, start_time, end_time, created_by
-)
-SELECT
-    'Elección Representantes Estudiantiles 2026',
-    'Elección de representantes estudiantiles',
+(
+    'Eleccion 2026',
+    'Eleccion general',
     'OPEN',
-    false, -- 👈 NO ANÓNIMA
-    'MICROSOFT',
-    'FILTERED',
-    '{"career": "Ingenieria en Computacion"}'::jsonb,
     false,
-    3,
-    now() - interval '1 day',
+    'MICROSOFT',
+    'FULL_PADRON',
+    now() - interval '3 days',
     now() + interval '1 day',
-    id
-FROM students
-WHERE email = 'j.zumbado.1@estudiantec.cr';
+    (SELECT id FROM students WHERE email = 'j.zumbado.1@estudiantec.cr')
+),
+(
+    'Encuesta Cafeteria',
+    'Encuesta general',
+    'OPEN',
+    true,
+    'MICROSOFT',
+    'FULL_PADRON',
+    now() - interval '4 days',
+    now() + interval '12 hours',
+    (SELECT id FROM students WHERE email = 'fpicado@estudiantec.cr')
+);
 
--- Opciones
+-- ============================================
+-- OPCIONES
+-- ============================================
 INSERT INTO election_options (election_id, label, option_type, display_order)
-SELECT id, 'Candidato A', 'candidate', 1
-FROM elections WHERE title = 'Elección Representantes Estudiantiles 2026';
+SELECT e.id, opt.label, 'candidate', opt.ord
+FROM elections e
+CROSS JOIN (
+    VALUES 
+        ('Opcion 1', 1),
+        ('Opcion 2', 2),
+        ('Opcion 3', 3)
+) AS opt(label, ord);
 
-INSERT INTO election_options (election_id, label, option_type, display_order)
-SELECT id, 'Candidato B', 'candidate', 2
-FROM elections WHERE title = 'Elección Representantes Estudiantiles 2026';
-
--- Votantes
+-- ============================================
+-- VOTANTES
+-- ============================================
 INSERT INTO election_voters (election_id, student_id)
 SELECT e.id, s.id
 FROM elections e
-JOIN students s ON s.career = 'Ingenieria en Computacion'
-WHERE e.title = 'Elección Representantes Estudiantiles 2026';
+CROSS JOIN students s
+ON CONFLICT DO NOTHING;
 
--- Marcar votos (85%) con horas distribuidas
+-- ============================================
+-- MARCAR QUIENES VOTARON (~70%)
+-- ============================================
+-- ============================================
+-- MARCAR QUIENES VOTARON (~70%) - MAS IRREGULAR
+-- ============================================
 UPDATE election_voters ev
 SET 
     token_used = true,
-    token_used_at = now()
-        - (floor(random() * 24) * interval '1 hour')
-        - (floor(random() * 60) * interval '1 minute')
+    token_used_at = (
+        e.start_time 
+        + (
+            -- distribución no uniforme (más irregular)
+            (random() ^ 3) * (e.end_time - e.start_time)
+        )
+        -- ruido extra en minutos y segundos
+        + (random() * interval '59 minutes')
+        + (random() * interval '59 seconds')
+    )
 FROM elections e
 WHERE ev.election_id = e.id
-AND e.title = 'Elección Representantes Estudiantiles 2026'
-AND random() > 0.15;
-
--- Insertar votos (NO ANÓNIMA → usa student_id)
+AND random() < 0.7;
+-- ============================================
+-- CREAR VOTOS
+-- ============================================
 INSERT INTO votes (election_id, option_id, student_id, created_at)
-SELECT 
+SELECT
     ev.election_id,
     o.id,
     ev.student_id,
     ev.token_used_at
 FROM election_voters ev
-JOIN students s ON s.id = ev.student_id
-JOIN election_options o ON o.election_id = ev.election_id
+JOIN LATERAL (
+    SELECT id 
+    FROM election_options 
+    WHERE election_id = ev.election_id
+    ORDER BY random()
+    LIMIT 1
+) o ON true
 WHERE ev.token_used = true
-AND ev.token_used_at IS NOT NULL
-AND ev.election_id = (
-    SELECT id FROM elections 
-    WHERE title = 'Elección Representantes Estudiantiles 2026'
-)
-AND (
-    (s.carnet::int % 2 = 0 AND o.label = 'Candidato A') OR
-    (s.carnet::int % 2 != 0 AND o.label = 'Candidato B')
-);
-
--- ============================================
--- ELECCIÓN 2 (ANÓNIMA)
--- ============================================
-
-INSERT INTO elections (
-    title, description, status, is_anonymous,
-    auth_method, voter_source, voter_filter,
-    requires_keys, min_keys, start_time, end_time, created_by
-)
-SELECT
-    'Referéndum Estudiantil 2026',
-    'Consulta sobre cambios en reglamento estudiantil',
-    'OPEN',
-    true, -- 👈 ANÓNIMA
-    'EMAIL_TOKEN',
-    'FULL_PADRON',
-    NULL,
-    true,
-    5,
-    now() - interval '2 days',
-    now() + interval '2 days',
-    id
-FROM students
-WHERE email = 'fpicado@estudiantec.cr';
-
--- Opciones
-INSERT INTO election_options (election_id, label, option_type, display_order)
-SELECT id, 'Sí', 'option', 1
-FROM elections WHERE title = 'Referéndum Estudiantil 2026';
-
-INSERT INTO election_options (election_id, label, option_type, display_order)
-SELECT id, 'No', 'option', 2
-FROM elections WHERE title = 'Referéndum Estudiantil 2026';
-
--- Votantes
-INSERT INTO election_voters (election_id, student_id)
-SELECT e.id, s.id
-FROM elections e
-JOIN students s ON true
-WHERE e.title = 'Referéndum Estudiantil 2026';
-
--- Marcar votos (60%)
-UPDATE election_voters ev
-SET 
-    token_used = true,
-    token_used_at = now()
-        - (floor(random() * 48) * interval '1 hour')
-        - (floor(random() * 60) * interval '1 minute')
-FROM elections e
-WHERE ev.election_id = e.id
-AND e.title = 'Referéndum Estudiantil 2026'
-AND random() > 0.4;
-
--- Insertar votos (ANÓNIMA → usa token_hash)
-INSERT INTO votes (election_id, option_id, token_hash, created_at)
-SELECT 
-    ev.election_id,
-    o.id,
-    md5(random()::text || clock_timestamp()::text), -- 👈 genera token único
-    ev.token_used_at
-FROM election_voters ev
-JOIN election_options o ON o.election_id = ev.election_id
-WHERE ev.token_used = true
-AND ev.token_used_at IS NOT NULL
-AND ev.election_id = (
-    SELECT id FROM elections 
-    WHERE title = 'Referéndum Estudiantil 2026'
-)
-AND (
-    (random() > 0.5 AND o.label = 'Sí') OR
-    (random() <= 0.5 AND o.label = 'No')
-);
+ON CONFLICT DO NOTHING;

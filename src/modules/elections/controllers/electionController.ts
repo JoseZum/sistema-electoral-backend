@@ -145,3 +145,12 @@ export async function getMonitoringData(req: Request<IdParam>, res: Response, ne
     next(error);
   }
 }
+
+export async function getVotersBySede(req: Request<IdParam>, res: Response, next: NextFunction) {
+  try {
+    const data = await electionService.getVotersBySede(req.params.id);
+    res.json(data);
+  } catch (error) {
+    next(error);
+  }
+}

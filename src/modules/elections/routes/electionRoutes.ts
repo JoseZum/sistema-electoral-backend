@@ -34,5 +34,6 @@ router.get('/:id/results', electionController.getResults);
 
 // Monitoring
 router.get('/:id/monitoring', electionController.getMonitoringData);
+router.get('/:id/voters-by-sede', electionController.getVotersBySede);
 
 export default router;
