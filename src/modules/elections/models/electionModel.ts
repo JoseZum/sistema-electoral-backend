@@ -107,4 +107,17 @@ export interface VotesByHour {
 
 export interface MonitoringData {
   votesByHour: VotesByHour[];
+  votersBySede: VotersBySede[];
+}
+
+
+export interface VotersBySede {
+  sede: string;
+  total_voters: number;
+  votes_cast: number;
+}
+
+export interface VotersBySedeResponse {
+  election_id: string;
+  data: VotersBySede[];
 }

@@ -5,7 +5,7 @@ import {
   CreateOptionDto,
   UpdateOptionDto,
   Election,
-  VotesByHour,       // Necesario para procesar la estadística de monitoreo
+  VotersBySedeResponse,       // Necesario para procesar la estadística de monitoreo
   MonitoringData     // El "wrapper" que devuelve el servicio al controlador
 } from '../models/electionModel';
 import { withAuditContext } from '../../../config/audit-context';
@@ -286,8 +286,28 @@ export async function getMonitoringData(electionId: string): Promise<MonitoringD
 
   // 4. Obtener datos
   const votesByHour = await electionRepo.getVotesByHour(electionId);
+  const votersBySede = await electionRepo.getVotersBySede(electionId);
 
   return {
-    votesByHour
+    votesByHour,
+    votersBySede,
+  };
+}
+
+// ── VOTANTES POR SEDE ──
+export async function getVotersBySede(electionId: string): Promise<VotersBySedeResponse> {
+  // 1. Sincronizar estados
+  await electionRepo.syncAutomaticStatuses();
+
+  // 2. Validar existencia
+  const election = await electionRepo.findElectionById(electionId);
+  if (!election) throw new Error('Elección no encontrada');
+
+  // 3. Obtener datos
+  const data = await electionRepo.getVotersBySede(electionId);
+
+  return {
+    election_id: electionId,
+    data
   };
 }

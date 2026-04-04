@@ -10,7 +10,7 @@ import {
   UpdateOptionDto,
   ElectionResults,
   VotesByHour,
-  MonitoringData
+  VotersBySede
 } from '../models/electionModel';
 
 type Queryable = Pool | PoolClient;
@@ -344,5 +344,26 @@ export async function getVotesByHour(electionId: string): Promise<VotesByHour[]>
   return result.rows.map(r => ({
     hour: r.hour.toISOString(), // importante para el FE
     count: r.count
+  }));
+}
+
+export async function getVotersBySede(electionId: string): Promise<VotersBySede[]> {
+  const result = await pool.query<{ sede: string; total_voters: number; votes_cast: number }>(
+    `SELECT 
+        s.sede,
+        COUNT(*)::int AS total_voters,
+        COUNT(*) FILTER (WHERE ev.token_used = true)::int AS votes_cast
+     FROM election_voters ev
+     JOIN students s ON s.id = ev.student_id
+     WHERE ev.election_id = $1
+     GROUP BY s.sede
+     ORDER BY s.sede ASC`,
+    [electionId]
+  );
+
+  return result.rows.map(r => ({
+    sede: r.sede,
+    total_voters: r.total_voters,
+    votes_cast: r.votes_cast
   }));
 }
