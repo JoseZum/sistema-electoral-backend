@@ -112,4 +112,85 @@ JOIN LATERAL (
     LIMIT 1
 ) o ON true
 WHERE ev.token_used = true
-ON CONFLICT DO NOTHING;
+AND ev.token_used_at IS NOT NULL
+AND ev.election_id = (
+    SELECT id FROM elections 
+    WHERE title = 'Elección Representantes Estudiantiles 2026'
+)
+AND (
+    (s.carnet::int % 2 = 0 AND o.label = 'Candidato A') OR
+    (s.carnet::int % 2 != 0 AND o.label = 'Candidato B')
+);
+
+-- ============================================
+-- ELECCIÓN 2 (ANÓNIMA)
+-- ============================================
+
+INSERT INTO elections (
+    title, description, status, is_anonymous,
+    auth_method, voter_source, voter_filter,
+    requires_keys, min_keys, start_time, end_time, created_by
+)
+SELECT
+    'Referéndum Estudiantil 2026',
+    'Consulta sobre cambios en reglamento estudiantil',
+    'OPEN',
+    true, -- 👈 ANÓNIMA
+    'EMAIL_TOKEN',
+    'FULL_PADRON',
+    NULL,
+    true,
+    5,
+    now() - interval '2 days',
+    now() + interval '2 days',
+    id
+FROM students
+WHERE email = 'fpicado@estudiantec.cr';
+
+-- Opciones
+INSERT INTO election_options (election_id, label, option_type, display_order)
+SELECT id, 'Sí', 'option', 1
+FROM elections WHERE title = 'Referéndum Estudiantil 2026';
+
+INSERT INTO election_options (election_id, label, option_type, display_order)
+SELECT id, 'No', 'option', 2
+FROM elections WHERE title = 'Referéndum Estudiantil 2026';
+
+-- Votantes
+INSERT INTO election_voters (election_id, student_id)
+SELECT e.id, s.id
+FROM elections e
+JOIN students s ON true
+WHERE e.title = 'Referéndum Estudiantil 2026';
+
+-- Marcar votos (60%)
+UPDATE election_voters ev
+SET 
+    token_used = true,
+    token_used_at = now()
+        - (floor(random() * 48) * interval '1 hour')
+        - (floor(random() * 60) * interval '1 minute')
+FROM elections e
+WHERE ev.election_id = e.id
+AND e.title = 'Referéndum Estudiantil 2026'
+AND random() > 0.4;
+
+-- Insertar votos (ANÓNIMA → usa token_hash)
+INSERT INTO votes (election_id, option_id, token_hash, created_at)
+SELECT 
+    ev.election_id,
+    o.id,
+    md5(random()::text || clock_timestamp()::text), -- 👈 genera token único
+    ev.token_used_at
+FROM election_voters ev
+JOIN election_options o ON o.election_id = ev.election_id
+WHERE ev.token_used = true
+AND ev.token_used_at IS NOT NULL
+AND ev.election_id = (
+    SELECT id FROM elections 
+    WHERE title = 'Referéndum Estudiantil 2026'
+)
+AND (
+    (random() > 0.5 AND o.label = 'Sí') OR
+    (random() <= 0.5 AND o.label = 'No')
+);
