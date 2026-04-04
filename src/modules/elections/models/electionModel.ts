@@ -97,3 +97,14 @@ export interface ElectionResults {
   total_eligible: number;
   participation_rate: number;
 }
+
+// Para monitoreo
+
+export interface VotesByHour {
+  hour: string;
+  count: number;
+}
+
+export interface MonitoringData {
+  votesByHour: VotesByHour[];
+}

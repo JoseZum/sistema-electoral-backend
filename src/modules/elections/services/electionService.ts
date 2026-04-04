@@ -5,6 +5,8 @@ import {
   CreateOptionDto,
   UpdateOptionDto,
   Election,
+  VotesByHour,       // Necesario para procesar la estadística de monitoreo
+  MonitoringData     // El "wrapper" que devuelve el servicio al controlador
 } from '../models/electionModel';
 import { withAuditContext } from '../../../config/audit-context';
 import { PoolClient } from 'pg';
@@ -265,4 +267,27 @@ export async function generateVotingCodes(electionId: string) {
   const election = await electionRepo.findElectionById(electionId);
   if (!election) throw new Error('Elección no encontrada');
   return generateVotingCodesForElection(electionId);
+}
+
+// Estadísticas para monitoreo
+
+export async function getMonitoringData(electionId: string): Promise<MonitoringData> {
+  // 1. Sincronizar estados
+  await electionRepo.syncAutomaticStatuses();
+
+  // 2. Validar existencia
+  const election = await electionRepo.findElectionById(electionId);
+  if (!election) throw new Error('Elección no encontrada');
+
+  // 3. Validar estado
+  if (!['OPEN', 'CLOSED', 'SCRUTINIZED', 'ARCHIVED'].includes(election.status)) {
+    throw new Error('El monitoreo solo está disponible para elecciones activas o finalizadas');
+  }
+
+  // 4. Obtener datos
+  const votesByHour = await electionRepo.getVotesByHour(electionId);
+
+  return {
+    votesByHour
+  };
 }
