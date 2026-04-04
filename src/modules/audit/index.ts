@@ -4,6 +4,74 @@ import { Request, Response, NextFunction } from 'express';
 
 const router = Router();
 
+const actionLabels: Record<string, string> = {
+  'student.insert': 'Estudiante agregado',
+  'student.update': 'Estudiante actualizado',
+  'student.delete': 'Estudiante eliminado',
+  'admin.insert': 'Administrador agregado',
+  'admin.update': 'Administrador actualizado',
+  'admin.delete': 'Administrador eliminado',
+  'election.insert': 'Eleccion creada',
+  'election.update': 'Eleccion actualizada',
+  'election.delete': 'Eleccion eliminada',
+  'election.open': 'Eleccion abierta',
+  'election.close': 'Eleccion cerrada',
+  'vote.insert': 'Voto emitido',
+  'vote.delete': 'Voto eliminado',
+  'auth.login': 'Inicio de sesion',
+  'auth.logout': 'Cierre de sesion',
+};
+
+const resourceLabels: Record<string, string> = {
+  student: 'estudiante',
+  admin: 'administrador',
+  election: 'eleccion',
+  vote: 'voto',
+  auth: 'autenticacion',
+  padron: 'padron',
+};
+
+function toTitleCase(value: string): string {
+  if (!value) return value;
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function formatActionLabel(action: string | null): string {
+  if (!action) return 'Actividad registrada';
+  const mapped = actionLabels[action];
+  if (mapped) return mapped;
+  return toTitleCase(action.replace(/[._]+/g, ' ').toLowerCase());
+}
+
+function formatResourceLabel(resourceType: string | null): string {
+  if (!resourceType) return 'recurso';
+  return resourceLabels[resourceType] || resourceType.toLowerCase();
+}
+
+function buildActivityMessage(row: Record<string, unknown>): string {
+  const actionLabel = formatActionLabel((row.action as string | null) ?? null);
+  const resourceLabel = formatResourceLabel((row.resource_type as string | null) ?? null);
+  const resourceId = (row.resource_id as string | null) ?? null;
+
+  if (resourceId) {
+    return `${actionLabel} en ${resourceLabel} ${resourceId}`;
+  }
+
+  return `${actionLabel} en ${resourceLabel}`;
+}
+
+function withDisplayFields(row: Record<string, unknown>): Record<string, unknown> {
+  const action = (row.action as string | null) ?? null;
+  const resourceType = (row.resource_type as string | null) ?? null;
+
+  return {
+    ...row,
+    actionLabel: formatActionLabel(action),
+    resourceLabel: formatResourceLabel(resourceType),
+    activityMessage: buildActivityMessage(row),
+  };
+}
+
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const page = parseInt(req.query.page as string, 10) || 1;
@@ -51,8 +119,10 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
       [...params, limit, offset]
     );
 
+    const logs = dataResult.rows.map((row) => withDisplayFields(row));
+
     res.json({
-      logs: dataResult.rows,
+      logs,
       total,
       page,
       limit,
