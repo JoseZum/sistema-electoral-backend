@@ -14,8 +14,7 @@ export interface ScrutinyInfo{
 }
 
 export interface AssingMembersDTO{
-    option: number;
-    election_id: string;
+    option: string;
     students_id: string[];
 }
 

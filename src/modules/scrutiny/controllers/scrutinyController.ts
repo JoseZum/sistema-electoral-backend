@@ -2,11 +2,10 @@ import {Response, Request, NextFunction } from 'express';
 import { ScrutinyInfo } from '../models/scrutiny.types'
 import * as scrutinyService from '../services/scrutinyService'
 
-type IdParam = {id: string };
 
-export async function operativeStatusElection(req:Request<IdParam>, res: Response, next: NextFunction) {
+export async function operativeStatusElection(req:Request, res: Response, next: NextFunction) {
     try{
-        const infoElections = await scrutinyService.getOperativeStateElection(req.params.id); 
+        const infoElections = await scrutinyService.getOperativeStateElection(req.params.electionId as string); 
         res.json(infoElections);
     }catch(error){
         next(error);
@@ -18,7 +17,7 @@ export async function operativeStatusElection(req:Request<IdParam>, res: Respons
 
 export async function assingMembersElection(req:Request, res: Response, next: NextFunction) {
     try {
-        const result = await scrutinyService.addMembersElection(req.body, req.user?.studentId);
+        const result = await scrutinyService.addMembersElection(req.params.electionId as string, req.body, req.user?.studentId);
         res.status(201).json(result);
     } catch (error){
         next(error);

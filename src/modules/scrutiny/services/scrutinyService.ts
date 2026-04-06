@@ -31,20 +31,21 @@ function generateNums(): string{
 
 
 
-function generateKeys(listMembers: AssingMembersDTO, keys: string[], keysHash: string[]){
+function generateKeys(listMembers: AssingMembersDTO){
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
-    let keyraws;
-    keys = [];
-    keysHash = [];
+    let kType;
+    let keys: string[] = [];
+    let keysHash: string[] = [];
     listMembers.students_id.forEach(() => {
-        if (listMembers.option === 0) keyraws = generateNums();
-        else keyraws = generateAlfaNumkeys(); //listMembers.keys?.push(generateAlfaNumkeys());
-        keys.push(keyraws);
-        keysHash.push(hashkey(keyraws));
+        if (listMembers.option === "0") kType = generateNums();
+        else kType = generateAlfaNumkeys(); //listMembers.keys?.push(generateAlfaNumkeys());
+        keys.push(kType);
+        keysHash.push(hashkey(kType));
     });
+    return {keys, keysHash}
 }
 
-export async function getOperativeStateElection(electionId:string) {
+export async function getOperativeStateElection(electionId: string) {
     await syncAutomaticStatuses();
     const election = await findElectionById(electionId);
     if (!election) throw new Error('Elección no encontrada');
@@ -52,6 +53,8 @@ export async function getOperativeStateElection(electionId:string) {
     if(!resultsElection) throw new Error('No se pudieron obtener los resultados');
     const progresElection = await scrutinyRepository.getScrutinyProgress(electionId);
     if (!progresElection) throw new Error('No se pudiero obtener el progreso de la elección');
+    const pendingStudents = await scrutinyRepository.getStateKeys(electionId);
+    if (!progresElection) throw new Error('No se pudiero obtener las keys Faltantes');
     return {
         electionInfo: {
             id: election.id,
@@ -63,7 +66,7 @@ export async function getOperativeStateElection(electionId:string) {
         progressScrutiny: {
             total_Members: progresElection.total_Members,
             submittedKeys: progresElection.submittedKeys,
-            membersPending: progresElection.membersPending,
+            membersPending: pendingStudents,
             can_finalize: progresElection.submittedKeys >= election.min_keys
         },
         general_Metric: {
@@ -77,20 +80,22 @@ export async function getOperativeStateElection(electionId:string) {
 export async function submitKey(data: submitKeyDTO) {
     const keyhash = hashkey(data.key_shard);
     const result = await scrutinyRepository.checkKey(data, keyhash);
-    if (!result) throw new Error('Key invalidad');
+    if (!result) throw new Error('Key invalida');
     const submitResult = await scrutinyRepository.submitKeys(data);
-    if(!result) throw new Error('No se encontro la llave de escrutinio');
+    if(!submitResult) throw new Error('No se encontro la llave de escrutinio');
     return result;  
 };
 
-export async function addMembersElection(data: AssingMembersDTO, cretedBy?: string) {
+export async function addMembersElection(electionId: string, data: AssingMembersDTO, cretedBy?: string) {
     validateStudentID(data);
-    let keys: string[] = [];
-    let keysHash: string[] = [];
-    generateKeys(data, keys, keysHash);
+    const isDuplicated = await scrutinyRepository.checkDuplicate(data.students_id, electionId);
+    if (isDuplicated) throw new Error('Existen datos duplicados');
+    const {keys, keysHash} = generateKeys(data);
     //Falta la idea de enviar la llave por medio de correos a los diferentes miembros
-
-    return scrutinyRepository.addMembersElection(data, keysHash, cretedBy);
+    const result = await scrutinyRepository.addMembersElection(electionId, data, keysHash, cretedBy);
+    if (!result) throw new Error('Error al guardar las llaves');
+    
+    return {result: result, keys: keys }; 
 }
 
 export async function scrutinyResult(electionId: string) {

@@ -19,7 +19,7 @@ export async function getScrutinyProgress(election_id:string) {
             sk.election_id,
             COUNT(DISTINCT sk.member_id) AS total_members,
             SUM(CASE WHEN sk.has_submitted = true THEN 1 ELSE 0 END) AS submitted_key,
-            SUM(CASE WHEN sk.has_submitted = false THEN 1 ELSE 0 END) AS pending,
+            SUM(CASE WHEN sk.has_submitted = false THEN 1 ELSE 0 END) AS pending
         FROM scrutiny_keys sk 
         WHERE sk.election_id = $1
         GROUP BY sk.election_id;
@@ -27,44 +27,45 @@ export async function getScrutinyProgress(election_id:string) {
     const row = statsScrutinyResult.rows[0];
     if (!row) return null;
 
+    return {
+        total_Members: parseInt(row.total_members),
+        submittedKeys: parseInt(row.submitted_key),
+        pending: parseInt(row.pending)
+    };
+};
+
+export async function getStateKeys(election_id: string) {
     const listMemberPending = await pool.query<{
         id: string;
         full_name: string;
         carnet: string;
         email: string;
+        date: Date;
     }>(`
     SELECT 
-        s.id
+        s.id,
         s.full_name,
-        s.carnet,
-        s.email
+        s.carnet, 
+        sk.submitted_at as date,
+        sk.has_submitted
     FROM scrutiny_keys sk
     INNER JOIN students s ON sk.member_id = s.id
     WHERE sk.election_id = $1
-        AND sk.has_submitted = false
     ORDER BY s.full_name 
     `, [election_id]);
-
-    return {
-        total_Members: parseInt(row.total_members),
-        submittedKeys: parseInt(row.submitted_key),
-        pending: parseInt(row.pending),
-        membersPending: listMemberPending.rows.map(row =>({
-            id: row.id,
-            full_name: row.full_name,
-            carnet: row.carnet,      
-        }))
-    };
+    
+    return listMemberPending.rows;
 }
 
-export async function addMembersElection(data: AssingMembersDTO, keysHash?: string[], cretedBy?: string) {
+
+
+export async function addMembersElection(electionId: string, data: AssingMembersDTO, keysHash?: string[], cretedBy?: string) {
     const memberIds = data.students_id;
     const keyHashes = keysHash;
-
+    let result;
     if (!memberIds || memberIds.length === 0) {
         throw new Error('students_id es obligatorio y no puede estar vacío.');
     }
-
     if (!keyHashes || keyHashes.length !== memberIds.length) {
         throw new Error('keysHash es obligatorio y debe tener la misma cantidad de elementos que students_id.');
     }
@@ -74,7 +75,7 @@ export async function addMembersElection(data: AssingMembersDTO, keysHash?: stri
         await cliente.query('BEGIN');
 
         const values: string[] = [];
-        const params: any[] = [data.election_id];
+        const params: any[] = [electionId];
         let paramIndex = 2;
 
         memberIds.forEach((member_id, index) => {
@@ -90,17 +91,17 @@ export async function addMembersElection(data: AssingMembersDTO, keysHash?: stri
         const query = `
             INSERT INTO scrutiny_keys (election_id, member_id, key_shard, has_submitted)
             VALUES ${values.join(', ')}
-            ON CONFLICT (election_id, member_id) DO NOTHING
         `;
-         await cliente.query(query, params);
+        const results = await cliente.query(query, params);
          await cliente.query('COMMIT');
-
+         result = "result";
     } catch (error) {
         await cliente.query('ROLLBACK');
         throw new Error("Problemas al realizar bulk insert $1");
 
     } finally{
         cliente.release();
+        return true;
     }
     
 }
@@ -116,12 +117,35 @@ export async function checkKey(data:submitKeyDTO, keyHash: string ): Promise<boo
     return result.rows[0]?.exists ?? false;
 }
 
+export async function checkDuplicate(data: string[], electionId: string): Promise<boolean>{
+    const values: string[] = [];
+    const params: any[] = [electionId];
+    let paramIndex = 2;
+    
+    data.forEach((userId)=>{
+        values.push(`s.member_id = $${paramIndex} `)
+        params.push(userId);
+        paramIndex += 1;
+    });
+
+    const query = `SELECT EXISTS(SELECT 1 FROM scrutiny_keys s
+        WHERE s.election_id = $1
+        AND (${values.join(' OR ')})
+        ) AS exists`;
+    
+    const result = await pool.query<{exists: boolean}>(query, params);
+    
+    return result.rows[0].exists;
+
+}
+
 export async function submitKeys(data: submitKeyDTO): Promise<scrutinykeys | null>{
     const result = await pool.query<scrutinykeys>(`
         UPDATE scrutiny_Keys SET has_submitted = true, submitted_at = now() 
         WHERE election_id = $1 and member_id = $2 RETURNING *
         `, [data.election_id, data.member_id]);
-    return result.rows[0] || null;
+    
+        return result.rows[0] || null;
 }
 
 export async function finalizeScrutine(electionId:string, finalizedBy?:string): Promise<Election | null>{
