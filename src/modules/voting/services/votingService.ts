@@ -243,9 +243,12 @@ export async function castVote(data: { electionId: string; optionId: string; tok
   if (!election) throw new Error('No tiene acceso a esta elección');
   if (election.status !== 'OPEN') throw new Error('La votación no está abierta');
 
+  if (election.has_voted) throw new Error('Ya ha emitido su voto en esta elección');
+
   if (election.is_anonymous) {
-    if (!data.token) throw new Error('Se requiere un token para votación anónima');
-    const tokenHash = hashVoteToken(data.token);
+    const tokenRecord = await votingRepo.findVotingTokenByStudent(data.electionId, student.id);
+    if (!tokenRecord) throw new Error('No se encontró un token de votación para esta elección');
+    const tokenHash = hashVoteToken(decryptVoteToken(tokenRecord.token_encrypted));
     try {
       await votingRepo.castAnonymousVote(data.electionId, data.optionId, tokenHash);
     } catch (err: unknown) {
@@ -256,7 +259,6 @@ export async function castVote(data: { electionId: string; optionId: string; tok
       throw err;
     }
   } else {
-    if (election.has_voted) throw new Error('Ya ha emitido su voto en esta elección');
     try {
       await votingRepo.castNamedVote(data.electionId, data.optionId, student.id);
     } catch (err: unknown) {

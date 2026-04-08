@@ -228,6 +228,21 @@ export async function findVotingTokenByCode(
   return result.rows[0] || null;
 }
 
+export async function findVotingTokenByStudent(
+  electionId: string,
+  studentId: string
+): Promise<{ token_encrypted: string } | null> {
+  const result = await pool.query<{ token_encrypted: string }>(
+    `SELECT token_encrypted
+     FROM voting_tokens
+     WHERE election_id = $1
+       AND student_id = $2
+       AND used = false`,
+    [electionId, studentId]
+  );
+  return result.rows[0] || null;
+}
+
 // Cast anonymous vote using DB function
 export async function castAnonymousVote(electionId: string, optionId: string, tokenHash: string): Promise<void> {
   await pool.query(
