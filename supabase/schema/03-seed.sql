@@ -1,17 +1,38 @@
--- ============================================
--- LIMPIAR TODO (IMPORTANTE)
--- ============================================
+-- ============================================================
+-- 03-seed.sql
+-- Datos de prueba para desarrollo local
+--
+-- Objetivo:
+-- 1) Reiniciar datos transaccionales de votacion.
+-- 2) Insertar estudiantes y administradores base.
+-- 3) Crear dos elecciones de ejemplo:
+--    - Una no anonima (voto vinculado a student_id).
+--    - Una anonima (voto con token_hash, sin student_id).
+--
+-- Nota:
+-- Este script esta orientado a pruebas y demo; no usar como referencia
+-- de datos reales de produccion.
+-- ============================================================
+
+-- ============================================================
+-- LIMPIEZA DE DATOS TRANSACCIONALES
+-- ============================================================
+-- Reinicia tablas de votacion y sus secuencias para obtener un estado limpio
+-- en cada ejecucion del seed.
 
 TRUNCATE votes, election_voters, election_options, elections RESTART IDENTITY CASCADE;
 
--- ============================================
+-- ============================================================
 -- USUARIOS BASE
--- ============================================
+-- ============================================================
+-- Se insertan usuarios iniciales para pruebas de autenticacion y permisos.
+-- ON CONFLICT evita errores si el script se ejecuta varias veces.
 
 INSERT INTO students (carnet, full_name, email, sede, career, degree_level)
 VALUES 
 ('2024080534', 'Jose Fabian Zumbado Ruiz', 'j.zumbado.1@estudiantec.cr', 'Cartago', 'Ingenieria en Computacion', 'Bachillerato'),
 ('2022104933', 'Fabricio Picado Alvarado', 'fpicado@estudiantec.cr', 'Cartago', 'Ingenieria en Computacion', 'Bachillerato'),
+-- Caso de prueba intencional: correo fuera del dominio institucional.
 ('9999999999', 'Fabricio Test Gmail', 'fabripicado@gmail.com', 'Cartago', 'Ingenieria en Computacion', 'Bachillerato')
 ON CONFLICT (email) DO NOTHING;
 
@@ -21,9 +42,10 @@ FROM students
 WHERE email IN ('j.zumbado.1@estudiantec.cr', 'fpicado@estudiantec.cr')
 ON CONFLICT DO NOTHING;
 
--- ============================================
--- MÁS ESTUDIANTES
--- ============================================
+-- ============================================================
+-- PADRON DE PRUEBA ADICIONAL
+-- ============================================================
+-- Registros extra para simular participacion y permitir resultados visibles.
 
 INSERT INTO students (carnet, full_name, email, sede, career, degree_level)
 VALUES
@@ -37,9 +59,13 @@ VALUES
 ('2023000008', 'Jorge Salas', 'jorge8@estudiantec.cr', 'Limon', 'Ingenieria en Computacion', 'Bachillerato')
 ON CONFLICT (email) DO NOTHING;
 
--- ============================================
--- ELECCIÓN 1 (NO ANÓNIMA)
--- ============================================
+-- ============================================================
+-- ELECCION 1: NO ANONIMA
+-- ============================================================
+-- Caracteristicas:
+-- - Voto asociado a student_id.
+-- - Metodo de autenticacion MICROSOFT.
+-- - Fuente de votantes filtrada por carrera.
 
 INSERT INTO elections (
     title, description, status, is_anonymous,
@@ -50,7 +76,7 @@ SELECT
     'Elección Representantes Estudiantiles 2026',
     'Elección de representantes estudiantiles',
     'OPEN',
-    false, -- 👈 NO ANÓNIMA
+    false, 
     'MICROSOFT',
     'FILTERED',
     '{"career": "Ingenieria en Computacion"}'::jsonb,
@@ -62,7 +88,7 @@ SELECT
 FROM students
 WHERE email = 'j.zumbado.1@estudiantec.cr';
 
--- Opciones
+-- Opciones de votacion
 INSERT INTO election_options (election_id, label, option_type, display_order)
 SELECT id, 'Candidato A', 'candidate', 1
 FROM elections WHERE title = 'Elección Representantes Estudiantiles 2026';
@@ -71,14 +97,16 @@ INSERT INTO election_options (election_id, label, option_type, display_order)
 SELECT id, 'Candidato B', 'candidate', 2
 FROM elections WHERE title = 'Elección Representantes Estudiantiles 2026';
 
--- Votantes
+-- Padron de esta eleccion (solo Ingenieria en Computacion)
 INSERT INTO election_voters (election_id, student_id)
 SELECT e.id, s.id
 FROM elections e
 JOIN students s ON s.career = 'Ingenieria en Computacion'
 WHERE e.title = 'Elección Representantes Estudiantiles 2026';
 
--- Marcar votos (85%) con horas distribuidas
+-- Simular participacion: ~85% de votantes marcan token como usado.
+-- Se distribuye token_used_at en las ultimas 24 horas para pruebas de
+-- reportes temporales.
 UPDATE election_voters ev
 SET 
     token_used = true,
@@ -90,7 +118,8 @@ WHERE ev.election_id = e.id
 AND e.title = 'Elección Representantes Estudiantiles 2026'
 AND random() > 0.15;
 
--- Insertar votos (NO ANÓNIMA → usa student_id)
+-- Insertar votos (no anonima): se usa student_id en la tabla votes.
+-- Regla de simulacion: carnet par vota A, carnet impar vota B.
 INSERT INTO votes (election_id, option_id, student_id, created_at)
 SELECT 
     ev.election_id,
@@ -107,13 +136,17 @@ AND ev.election_id = (
     WHERE title = 'Elección Representantes Estudiantiles 2026'
 )
 AND (
-    (s.carnet::int % 2 = 0 AND o.label = 'Candidato A') OR
-    (s.carnet::int % 2 != 0 AND o.label = 'Candidato B')
+    (s.carnet::bigint % 2 = 0 AND o.label = 'Candidato A') OR
+    (s.carnet::bigint % 2 != 0 AND o.label = 'Candidato B')
 );
 
--- ============================================
--- ELECCIÓN 2 (ANÓNIMA)
--- ============================================
+-- ============================================================
+-- ELECCION 2: ANONIMA
+-- ============================================================
+-- Caracteristicas:
+-- - Voto anonimo (sin student_id).
+-- - Metodo de autenticacion EMAIL_TOKEN.
+-- - Fuente de votantes: padron completo.
 
 INSERT INTO elections (
     title, description, status, is_anonymous,
@@ -124,7 +157,7 @@ SELECT
     'Referéndum Estudiantil 2026',
     'Consulta sobre cambios en reglamento estudiantil',
     'OPEN',
-    true, -- 👈 ANÓNIMA
+    true,
     'EMAIL_TOKEN',
     'FULL_PADRON',
     NULL,
@@ -136,7 +169,7 @@ SELECT
 FROM students
 WHERE email = 'fpicado@estudiantec.cr';
 
--- Opciones
+-- Opciones de votacion
 INSERT INTO election_options (election_id, label, option_type, display_order)
 SELECT id, 'Sí', 'option', 1
 FROM elections WHERE title = 'Referéndum Estudiantil 2026';
@@ -145,14 +178,15 @@ INSERT INTO election_options (election_id, label, option_type, display_order)
 SELECT id, 'No', 'option', 2
 FROM elections WHERE title = 'Referéndum Estudiantil 2026';
 
--- Votantes
+-- Padron de esta eleccion (todos los estudiantes cargados)
 INSERT INTO election_voters (election_id, student_id)
 SELECT e.id, s.id
 FROM elections e
 JOIN students s ON true
 WHERE e.title = 'Referéndum Estudiantil 2026';
 
--- Marcar votos (60%)
+-- Simular participacion: ~60% de votantes.
+-- Se distribuye token_used_at en las ultimas 48 horas.
 UPDATE election_voters ev
 SET 
     token_used = true,
@@ -164,12 +198,13 @@ WHERE ev.election_id = e.id
 AND e.title = 'Referéndum Estudiantil 2026'
 AND random() > 0.4;
 
--- Insertar votos (ANÓNIMA → usa token_hash)
+-- Insertar votos (anonima): se usa token_hash pseudoaleatorio.
+-- No se registra student_id para preservar anonimato a nivel de dataset.
 INSERT INTO votes (election_id, option_id, token_hash, created_at)
 SELECT 
     ev.election_id,
     o.id,
-    md5(random()::text || clock_timestamp()::text), -- 👈 genera token único
+    md5(random()::text || clock_timestamp()::text), 
     ev.token_used_at
 FROM election_voters ev
 JOIN election_options o ON o.election_id = ev.election_id
@@ -183,7 +218,10 @@ AND (
     (random() > 0.5 AND o.label = 'Sí') OR
     (random() <= 0.5 AND o.label = 'No')
 );
--- Seed: admin user m.solano@estudiantec.cr
+-- ============================================================
+-- ADMIN ADICIONAL DE PRUEBA
+-- ============================================================
+-- Usuario de soporte para pruebas de login y permisos administrativos.
 INSERT INTO students (carnet, full_name, email, sede, career, degree_level)
 VALUES ('2022437963', 'Mariela Solano Gómez', 'm.solano@estudiantec.cr', 'Cartago', 'Ingenieria en Computacion', 'Bachillerato')
 ON CONFLICT (email) DO NOTHING;

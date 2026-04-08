@@ -79,6 +79,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     const offset = (page - 1) * limit;
 
     const resourceType = req.query.resource_type as string | undefined;
+    const resourceTypesParam = req.query.resource_types as string | undefined;
     const action = req.query.action as string | undefined;
     const search = req.query.search as string | undefined;
 
@@ -89,6 +90,18 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     if (resourceType) {
       conditions.push(`resource_type = $${paramIdx++}`);
       params.push(resourceType);
+    }
+
+    if (resourceTypesParam) {
+      const types = resourceTypesParam
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (types.length > 0) {
+        const placeholders = types.map(() => `$${paramIdx++}`).join(', ');
+        conditions.push(`resource_type IN (${placeholders})`);
+        params.push(...types);
+      }
     }
 
     if (action) {
