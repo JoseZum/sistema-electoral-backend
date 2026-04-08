@@ -44,6 +44,47 @@ Scripts disponibles
 npm run dev - Inicia con nodemon (recarga automática)
 npm start - Inicia en modo producción
 npm run build - Compila TypeScript a JavaScript
+npm run test - Ejecuta pruebas automatizadas
+npm run test:watch - Ejecuta pruebas en modo watch
+npm run test:coverage - Ejecuta pruebas con reporte de cobertura
+npm run test:dashboard:smoke - Ejecuta smoke test de dashboard (requiere API y DB)
+
+Pruebas implementadas
+
+Estrategia aplicada
+
+- Caja negra (blackbox): validación de comportamiento HTTP en endpoints expuestos.
+- Caja blanca (glassbox): validación de reglas de negocio en servicios con mocks de repositorios.
+- Compilación y tipado: verificación estática con TypeScript usando `npm run typecheck`.
+- Integración puntual: smoke test de dashboard contra API + base de datos real.
+
+Suites automatizadas actuales
+
+- API: `tests/api/health.e2e.test.ts` (endpoint `GET /api/health`).
+- Unitarias Auth: `tests/unit/authService.test.ts`.
+- Unitarias Dashboard: `tests/unit/dashboardService.test.ts`.
+- Unitarias Elections: `tests/unit/electionService.test.ts`.
+- Unitarias Voting: `tests/unit/votingService.test.ts`.
+
+Resultado actual de la suite
+
+- Comando: `npm test`.
+- Estado: 5 archivos de prueba y 16 pruebas pasando.
+- Cobertura: disponible con `npm run test:coverage` (reporte en consola y HTML).
+
+Alcance cubierto por las pruebas
+
+- Validaciones de dominio y padrón en autenticación.
+- Restricciones de edición y transición de estados en elecciones.
+- Reglas de publicación de elecciones (mínimo opciones y votantes elegibles).
+- Flujo de voto nominal/anónimo y errores esperados de voto duplicado.
+- Cálculo de resultados y participación.
+
+Alcance no cubierto completamente (pendiente)
+
+- Integración completa endpoint por endpoint con base de datos para todos los módulos.
+- Pruebas de carga/performance y pruebas de seguridad especializadas.
+- Cobertura exhaustiva de middlewares y todos los controladores.
 
 Endpoints principales
 
