@@ -83,12 +83,20 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     const action = req.query.action as string | undefined;
     const search = req.query.search as string | undefined;
 
+    const fromClause = `
+      FROM audit_logs al
+      LEFT JOIN students actor_by_id ON actor_by_id.id = al.actor_id
+      LEFT JOIN students actor_by_carnet
+        ON actor_by_id.id IS NULL
+       AND actor_by_carnet.carnet = al.actor_carnet
+    `;
+
     const conditions: string[] = [];
     const params: unknown[] = [];
     let paramIdx = 1;
 
     if (resourceType) {
-      conditions.push(`resource_type = $${paramIdx++}`);
+      conditions.push(`al.resource_type = $${paramIdx++}`);
       params.push(resourceType);
     }
 
@@ -99,21 +107,22 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
         .filter(Boolean);
       if (types.length > 0) {
         const placeholders = types.map(() => `$${paramIdx++}`).join(', ');
-        conditions.push(`resource_type IN (${placeholders})`);
+        conditions.push(`al.resource_type IN (${placeholders})`);
         params.push(...types);
       }
     }
 
     if (action) {
-      conditions.push(`action ILIKE $${paramIdx++}`);
+      conditions.push(`al.action ILIKE $${paramIdx++}`);
       params.push(`%${action}%`);
     }
 
     if (search) {
       conditions.push(`(
-        actor_carnet ILIKE $${paramIdx} OR
-        resource_id::TEXT ILIKE $${paramIdx} OR
-        details::TEXT ILIKE $${paramIdx}
+        COALESCE(actor_by_id.full_name, actor_by_carnet.full_name) ILIKE $${paramIdx} OR
+        al.actor_carnet ILIKE $${paramIdx} OR
+        al.resource_id::TEXT ILIKE $${paramIdx} OR
+        al.details::TEXT ILIKE $${paramIdx}
       )`);
       params.push(`%${search}%`);
       paramIdx++;
@@ -122,13 +131,19 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const countResult = await pool.query(
-      `SELECT count(*) FROM audit_logs ${where}`,
+      `SELECT count(*) ${fromClause} ${where}`,
       params
     );
     const total = parseInt(countResult.rows[0].count, 10);
 
     const dataResult = await pool.query(
-      `SELECT * FROM audit_logs ${where} ORDER BY created_at DESC LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`,
+      `SELECT
+         al.*,
+         COALESCE(actor_by_id.full_name, actor_by_carnet.full_name) AS actor_name
+       ${fromClause}
+       ${where}
+       ORDER BY al.created_at DESC
+       LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`,
       [...params, limit, offset]
     );
 

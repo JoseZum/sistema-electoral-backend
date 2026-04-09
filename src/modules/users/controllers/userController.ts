@@ -1,6 +1,25 @@
 import { Request, Response, NextFunction } from 'express';
 import * as userService from '../services/userService';
 
+function getRequestIp(req: Request): string | undefined {
+  const forwardedFor = req.headers['x-forwarded-for'];
+  if (typeof forwardedFor === 'string') {
+    return forwardedFor.split(',')[0]?.trim();
+  }
+  if (Array.isArray(forwardedFor) && forwardedFor.length > 0) {
+    return forwardedFor[0];
+  }
+  return req.ip || req.socket.remoteAddress;
+}
+
+function getAuditActor(req: Request) {
+  return {
+    id: req.user?.studentId,
+    carnet: req.user?.carnet,
+    ip: getRequestIp(req),
+  };
+}
+
 // ── Estudiantes ──
 
 export async function getStudents(req: Request, res: Response, next: NextFunction) {
@@ -40,7 +59,7 @@ export async function getStudentById(req: Request, res: Response, next: NextFunc
 
 export async function createStudent(req: Request, res: Response, next: NextFunction) {
   try {
-    const student = await userService.createStudent(req.body);
+    const student = await userService.createStudent(req.body, getAuditActor(req));
     res.status(201).json(student);
   } catch (error) {
     next(error);
@@ -49,7 +68,7 @@ export async function createStudent(req: Request, res: Response, next: NextFunct
 
 export async function updateStudent(req: Request, res: Response, next: NextFunction) {
   try {
-    const student = await userService.updateStudent(req.params.id as string, req.body);
+    const student = await userService.updateStudent(req.params.id as string, req.body, getAuditActor(req));
     res.json(student);
   } catch (error) {
     next(error);
@@ -58,7 +77,7 @@ export async function updateStudent(req: Request, res: Response, next: NextFunct
 
 export async function deleteStudent(req: Request, res: Response, next: NextFunction) {
   try {
-    const student = await userService.deactivateStudent(req.params.id as string);
+    const student = await userService.deactivateStudent(req.params.id as string, getAuditActor(req));
     res.json(student);
   } catch (error) {
     next(error);
@@ -74,7 +93,7 @@ export async function importPadron(req: Request, res: Response, next: NextFuncti
     const result = await userService.importPadron(req.file.buffer, {
       id: req.user?.studentId,
       carnet: req.user?.carnet,
-      ip: req.ip || req.headers['x-forwarded-for'] as string || req.socket.remoteAddress,
+      ip: getRequestIp(req),
     });
     res.json(result);
   } catch (error) {
@@ -104,7 +123,7 @@ export async function getAdminById(req: Request, res: Response, next: NextFuncti
 
 export async function createAdmin(req: Request, res: Response, next: NextFunction) {
   try {
-    const admin = await userService.createAdmin(req.body);
+    const admin = await userService.createAdmin(req.body, getAuditActor(req));
     res.status(201).json(admin);
   } catch (error) {
     next(error);
@@ -113,7 +132,7 @@ export async function createAdmin(req: Request, res: Response, next: NextFunctio
 
 export async function updateAdmin(req: Request, res: Response, next: NextFunction) {
   try {
-    const admin = await userService.updateAdmin(req.params.id as string, req.body);
+    const admin = await userService.updateAdmin(req.params.id as string, req.body, getAuditActor(req));
     res.json(admin);
   } catch (error) {
     next(error);
@@ -122,7 +141,7 @@ export async function updateAdmin(req: Request, res: Response, next: NextFunctio
 
 export async function deleteAdmin(req: Request, res: Response, next: NextFunction) {
   try {
-    const admin = await userService.deleteAdmin(req.params.id as string);
+    const admin = await userService.deleteAdmin(req.params.id as string, getAuditActor(req));
     res.json(admin);
   } catch (error) {
     next(error);

@@ -1,6 +1,13 @@
 import { pool } from '../../../config/database';
+import { PoolClient } from 'pg';
 import { Admin } from '../models/userModel';
 import { CreateAdminDto, UpdateAdminDto } from '../dtos/adminDtos';
+
+type Queryable = PoolClient | typeof pool;
+
+function getDb(client?: PoolClient): Queryable {
+  return client || pool;
+}
 
 export async function findAdminById(id: string): Promise<Admin | null> {
   const result = await pool.query<Admin>(
@@ -29,8 +36,23 @@ export async function findAllAdmins() {
   return result.rows;
 }
 
-export async function createAdmin(data: CreateAdminDto): Promise<Admin> {
-  const result = await pool.query<Admin>(
+export async function countAdmins(client?: PoolClient): Promise<number> {
+  const db = getDb(client);
+  const result = await db.query<{ count: string }>('SELECT COUNT(*) AS count FROM admins');
+  return parseInt(result.rows[0].count, 10);
+}
+
+export async function findFirstAdmin(client?: PoolClient): Promise<Admin | null> {
+  const db = getDb(client);
+  const result = await db.query<Admin>(
+    'SELECT * FROM admins ORDER BY created_at ASC, id ASC LIMIT 1'
+  );
+  return result.rows[0] || null;
+}
+
+export async function createAdmin(data: CreateAdminDto, client?: PoolClient): Promise<Admin> {
+  const db = getDb(client);
+  const result = await db.query<Admin>(
     `INSERT INTO admins (students_id, position_title, role, permissions)
      VALUES ($1, $2, $3, $4)
      RETURNING *`,
@@ -39,7 +61,7 @@ export async function createAdmin(data: CreateAdminDto): Promise<Admin> {
   return result.rows[0];
 }
 
-export async function updateAdmin(id: string, data: UpdateAdminDto): Promise<Admin | null> {
+export async function updateAdmin(id: string, data: UpdateAdminDto, client?: PoolClient): Promise<Admin | null> {
   const fields: string[] = [];
   const params: unknown[] = [];
   let paramIndex = 1;
@@ -63,15 +85,17 @@ export async function updateAdmin(id: string, data: UpdateAdminDto): Promise<Adm
 
   fields.push('updated_at = now()');
 
-  const result = await pool.query<Admin>(
+  const db = getDb(client);
+  const result = await db.query<Admin>(
     `UPDATE admins SET ${fields.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
     [...params, id]
   );
   return result.rows[0] || null;
 }
 
-export async function deleteAdmin(id: string): Promise<Admin | null> {
-  const result = await pool.query<Admin>(
+export async function deleteAdmin(id: string, client?: PoolClient): Promise<Admin | null> {
+  const db = getDb(client);
+  const result = await db.query<Admin>(
     'DELETE FROM admins WHERE id = $1 RETURNING *',
     [id]
   );
