@@ -1,7 +1,7 @@
 import { pool } from './database';
 import { PoolClient } from 'pg';
 
-interface AuditActor {
+export interface AuditActor {
   id?: string;
   carnet?: string;
   ip?: string;

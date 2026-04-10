@@ -102,8 +102,9 @@ export async function findAllStudents(filters: StudentFiltersDto = {}): Promise<
 }
 
 // Crear estudiante
-export async function createStudent(data: CreateStudentDto): Promise<Student> {
-  const result = await pool.query<Student>(
+export async function createStudent(data: CreateStudentDto, client?: PoolClient): Promise<Student> {
+  const db = client || pool;
+  const result = await db.query<Student>(
     `INSERT INTO students (carnet, full_name, email, sede, career, degree_level)
      VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING *`,
@@ -113,7 +114,7 @@ export async function createStudent(data: CreateStudentDto): Promise<Student> {
 }
 
 // Actualizar estudiante
-export async function updateStudent(id: string, data: UpdateStudentDto): Promise<Student | null> {
+export async function updateStudent(id: string, data: UpdateStudentDto, client?: PoolClient): Promise<Student | null> {
   const fields: string[] = [];
   const params: unknown[] = [];
   let paramIndex = 1;
@@ -129,7 +130,8 @@ export async function updateStudent(id: string, data: UpdateStudentDto): Promise
 
   fields.push(`updated_at = now()`);
 
-  const result = await pool.query<Student>(
+  const db = client || pool;
+  const result = await db.query<Student>(
     `UPDATE students SET ${fields.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
     [...params, id]
   );
@@ -137,8 +139,9 @@ export async function updateStudent(id: string, data: UpdateStudentDto): Promise
 }
 
 // Desactivar estudiante (soft delete)
-export async function deactivateStudent(id: string): Promise<Student | null> {
-  const result = await pool.query<Student>(
+export async function deactivateStudent(id: string, client?: PoolClient): Promise<Student | null> {
+  const db = client || pool;
+  const result = await db.query<Student>(
     'UPDATE students SET is_active = false, updated_at = now() WHERE id = $1 RETURNING *',
     [id]
   );

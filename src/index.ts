@@ -10,7 +10,7 @@ import { votingRoutes } from './modules/voting';
 import { auditRoutes } from './modules/audit';
 import { scrutinyRoutes } from './modules/scrutiny';
 import { errorHandler } from './middleware/errorHandler';
-//import {scrutinyRoutes } from './modules/scrutiny';
+import { dashboardRoutes } from './modules/dashboard';
 
 const app = express();
 
@@ -36,6 +36,7 @@ app.use('/api/elections', electionRoutes);
 app.use('/api/voting', votingRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/scrutiny', scrutinyRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
