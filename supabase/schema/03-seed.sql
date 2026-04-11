@@ -223,10 +223,12 @@ AND (
 -- ============================================================
 -- Usuario de soporte para pruebas de login y permisos administrativos.
 INSERT INTO students (carnet, full_name, email, sede, career, degree_level)
+VALUES ('2022437529', 'Aarón Ortiz Jiménez', 'aaortiz@estudiantec.cr', 'Cartago', 'Ingenieria en Computacion', 'Bachillerato')
 VALUES ('2022437963', 'Mariela Solano Gómez', 'm.solano@estudiantec.cr', 'Cartago', 'Ingenieria en Computacion', 'Bachillerato')
 ON CONFLICT (email) DO NOTHING;
 
 INSERT INTO admins (students_id, position_title, role, permissions)
 SELECT id, 'Administrador', 'admin', '{"all": true}'::jsonb
+FROM students WHERE email = 'aaortiz@estudiantec.cr'
 FROM students WHERE email = 'm.solano@estudiantec.cr'
 ON CONFLICT DO NOTHING;
