@@ -67,8 +67,7 @@ BEGIN
     -- Elimina material sensible del token para reducir trazabilidad posterior.
     -- Conserva solamente el estado de uso y las marcas temporales requeridas.
     UPDATE voting_tokens
-    SET code_hash = NULL,
-        token_hash = NULL,
+    SET token_hash = NULL,
         token_encrypted = NULL
     WHERE election_id = p_election_id
       AND student_id = v_token_record.student_id;

@@ -32,34 +32,6 @@ export interface VoteOption {
 export interface CastVoteDto {
   electionId: string;
   optionId: string;
-  token?: string;  // required for anonymous elections
-}
-
-export interface VoteTokenResponse {
-  token: string;
-  election_id: string;
-  expires_info: string;
-}
-
-export interface RedeemVoteCodeDto {
-  code: string;
-  carnet?: string;
-}
-
-export interface GeneratedVotingCode {
-  student_id: string;
-  carnet: string;
-  full_name: string;
-  email: string;
-  code: string;
-}
-
-export interface GenerateVotingCodesResponse {
-  election_id: string;
-  generated_count: number;
-  pending_voters: number;
-  skipped_used_count: number;
-  codes: GeneratedVotingCode[];
 }
 
 export interface PublicResults {

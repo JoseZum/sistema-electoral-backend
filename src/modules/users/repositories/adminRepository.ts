@@ -28,7 +28,7 @@ export async function findAdminByStudentId(studentId: string): Promise<Admin | n
 export async function findAllAdmins() {
   const result = await pool.query(
     `SELECT a.id, a.students_id, a.position_title, a.role, a.permissions, a.created_at, a.updated_at,
-            s.carnet, s.full_name, s.email, s.sede, s.career
+            s.carnet, s.full_name, s.sede, s.career
      FROM admins a
      JOIN students s ON a.students_id = s.id
      ORDER BY a.created_at DESC`

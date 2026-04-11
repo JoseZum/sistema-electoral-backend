@@ -13,9 +13,6 @@ router.get('/elections', votingController.getMyElections);
 // Get election detail for voting
 router.get('/elections/:id', votingController.getElectionDetail);
 
-// Request vote token (anonymous elections only)
-router.post('/elections/:id/token', votingController.requestToken);
-
 // Cast vote
 router.post('/cast', votingController.castVote);
 

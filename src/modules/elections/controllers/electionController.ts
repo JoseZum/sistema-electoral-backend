@@ -117,15 +117,6 @@ export async function clearVoters(req: Request<IdParam>, res: Response, next: Ne
   }
 }
 
-export async function generateVotingCodes(req: Request<IdParam>, res: Response, next: NextFunction) {
-  try {
-    const result = await electionService.generateVotingCodes(req.params.id);
-    res.json(result);
-  } catch (error) {
-    next(error);
-  }
-}
-
 // Results
 export async function getResults(req: Request<IdParam>, res: Response, next: NextFunction) {
   try {

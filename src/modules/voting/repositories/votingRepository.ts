@@ -58,53 +58,20 @@ export async function findElectionOptions(electionId: string): Promise<VoteOptio
   return result.rows;
 }
 
-// Get student ID from email
-export async function findStudentIdByEmail(email: string): Promise<string | null> {
-  const result = await pool.query<{ id: string }>(
-    'SELECT id FROM students WHERE email = $1 AND is_active = true',
-    [email]
-  );
-  return result.rows[0]?.id || null;
-}
-
 export async function findStudentIdentityByEmail(email: string): Promise<{
   id: string;
   carnet: string;
   full_name: string;
-  email: string;
 } | null> {
   const result = await pool.query<{
     id: string;
     carnet: string;
     full_name: string;
-    email: string;
   }>(
-    'SELECT id, carnet, full_name, email FROM students WHERE email = $1 AND is_active = true',
+    'SELECT id, carnet, full_name FROM students WHERE email = $1 AND is_active = true',
     [email]
   );
   return result.rows[0] || null;
-}
-
-export async function getVoterStatus(electionId: string, studentId: string): Promise<{
-  token_used: boolean;
-  has_token: boolean;
-} | null> {
-  const result = await pool.query<{ token_used: boolean; token_hash: string | null }>(
-    `SELECT
-       ev.token_used,
-       vt.token_hash
-     FROM election_voters ev
-     LEFT JOIN voting_tokens vt
-       ON vt.election_id = ev.election_id
-      AND vt.student_id = ev.student_id
-     WHERE ev.election_id = $1 AND ev.student_id = $2`,
-    [electionId, studentId]
-  );
-  if (!result.rows[0]) return null;
-  return {
-    token_used: result.rows[0].token_used,
-    has_token: result.rows[0].token_hash !== null,
-  };
 }
 
 export async function listPendingAnonymousVoters(
@@ -114,19 +81,16 @@ export async function listPendingAnonymousVoters(
   student_id: string;
   carnet: string;
   full_name: string;
-  email: string;
 }>> {
   const result = await db.query<{
     student_id: string;
     carnet: string;
     full_name: string;
-    email: string;
   }>(
     `SELECT
        ev.student_id,
        s.carnet,
-       s.full_name,
-       s.email
+       s.full_name
      FROM election_voters ev
      INNER JOIN students s ON s.id = ev.student_id
      WHERE ev.election_id = $1
@@ -143,7 +107,6 @@ export async function insertMissingVotingTokens(
   rows: Array<{
     election_id: string;
     student_id: string;
-    code_hash: string;
     token_hash: string;
     token_encrypted: string;
   }>,
@@ -155,16 +118,15 @@ export async function insertMissingVotingTokens(
 
   const electionIds = rows.map((row) => row.election_id);
   const studentIds = rows.map((row) => row.student_id);
-  const codeHashes = rows.map((row) => row.code_hash);
   const tokenHashes = rows.map((row) => row.token_hash);
   const encryptedTokens = rows.map((row) => row.token_encrypted);
 
   const result = await db.query<{ student_id: string }>(
-    `INSERT INTO voting_tokens (election_id, student_id, code_hash, token_hash, token_encrypted)
-     SELECT * FROM unnest($1::uuid[], $2::uuid[], $3::text[], $4::text[], $5::text[])
+    `INSERT INTO voting_tokens (election_id, student_id, token_hash, token_encrypted)
+     SELECT * FROM unnest($1::uuid[], $2::uuid[], $3::text[], $4::text[])
      ON CONFLICT (election_id, student_id) DO NOTHING
      RETURNING student_id`,
-    [electionIds, studentIds, codeHashes, tokenHashes, encryptedTokens]
+    [electionIds, studentIds, tokenHashes, encryptedTokens]
   );
 
   return result.rows.map((row) => row.student_id);
@@ -174,7 +136,6 @@ export async function upsertVotingTokens(
   rows: Array<{
     election_id: string;
     student_id: string;
-    code_hash: string;
     token_hash: string;
     token_encrypted: string;
   }>,
@@ -186,46 +147,24 @@ export async function upsertVotingTokens(
 
   const electionIds = rows.map((row) => row.election_id);
   const studentIds = rows.map((row) => row.student_id);
-  const codeHashes = rows.map((row) => row.code_hash);
   const tokenHashes = rows.map((row) => row.token_hash);
   const encryptedTokens = rows.map((row) => row.token_encrypted);
 
   const result = await db.query<{ student_id: string }>(
-    `INSERT INTO voting_tokens (election_id, student_id, code_hash, token_hash, token_encrypted)
-     SELECT * FROM unnest($1::uuid[], $2::uuid[], $3::text[], $4::text[], $5::text[])
+    `INSERT INTO voting_tokens (election_id, student_id, token_hash, token_encrypted)
+     SELECT * FROM unnest($1::uuid[], $2::uuid[], $3::text[], $4::text[])
      ON CONFLICT (election_id, student_id) DO UPDATE
-       SET code_hash = EXCLUDED.code_hash,
-           token_hash = EXCLUDED.token_hash,
+       SET token_hash = EXCLUDED.token_hash,
            token_encrypted = EXCLUDED.token_encrypted,
            generated_at = now(),
            used = false,
            used_at = NULL
      WHERE voting_tokens.used = false
      RETURNING student_id`,
-    [electionIds, studentIds, codeHashes, tokenHashes, encryptedTokens]
+    [electionIds, studentIds, tokenHashes, encryptedTokens]
   );
 
   return result.rows.map((row) => row.student_id);
-}
-
-export async function findVotingTokenByCode(
-  electionId: string,
-  studentId: string,
-  codeHash: string
-): Promise<{
-  token_encrypted: string;
-} | null> {
-  const result = await pool.query<{ token_encrypted: string }>(
-    `SELECT token_encrypted
-     FROM voting_tokens
-     WHERE election_id = $1
-       AND student_id = $2
-       AND code_hash = $3
-       AND used = false`,
-    [electionId, studentId, codeHash]
-  );
-
-  return result.rows[0] || null;
 }
 
 export async function findVotingTokenByStudent(

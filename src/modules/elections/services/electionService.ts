@@ -10,7 +10,7 @@ import {
 } from '../models/electionModel';
 import { withAuditContext } from '../../../config/audit-context';
 import { PoolClient } from 'pg';
-import { generateVotingCodesForElection } from '../../voting/services/votingService';
+import { prepareAnonymousVotingTokensForElection } from '../../voting/services/votingService';
 
 type AuditActor = {
   id?: string;
@@ -175,7 +175,7 @@ export async function changeStatus(id: string, newStatus: Election['status'] | '
   );
 
   if (updatedElection?.status === 'OPEN' && updatedElection.is_anonymous) {
-    await generateVotingCodesForElection(id);
+    await prepareAnonymousVotingTokensForElection(id);
   }
 
   return updatedElection;
@@ -260,13 +260,6 @@ export async function getResults(electionId: string) {
   const results = await electionRepo.getElectionResults(electionId);
   if (!results) throw new Error('No se pudieron obtener los resultados');
   return results;
-}
-
-export async function generateVotingCodes(electionId: string) {
-  await electionRepo.syncAutomaticStatuses();
-  const election = await electionRepo.findElectionById(electionId);
-  if (!election) throw new Error('Elección no encontrada');
-  return generateVotingCodesForElection(electionId);
 }
 
 // Estadísticas para monitoreo

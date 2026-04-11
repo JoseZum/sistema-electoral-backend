@@ -145,7 +145,7 @@ AND (
 -- ============================================================
 -- Caracteristicas:
 -- - Voto anonimo (sin student_id).
--- - Metodo de autenticacion EMAIL_TOKEN.
+-- - Metodo de autenticacion MICROSOFT.
 -- - Fuente de votantes: padron completo.
 
 INSERT INTO elections (
@@ -158,7 +158,7 @@ SELECT
     'Consulta sobre cambios en reglamento estudiantil',
     'OPEN',
     true,
-    'EMAIL_TOKEN',
+    'MICROSOFT',
     'FULL_PADRON',
     NULL,
     true,

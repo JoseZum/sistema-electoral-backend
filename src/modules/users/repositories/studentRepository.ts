@@ -78,7 +78,7 @@ export async function findAllStudents(filters: StudentFiltersDto = {}): Promise<
     params.push(is_active);
   }
   if (search) {
-    conditions.push(`(full_name ILIKE $${paramIndex} OR carnet ILIKE $${paramIndex} OR email ILIKE $${paramIndex})`);
+    conditions.push(`(full_name ILIKE $${paramIndex} OR carnet ILIKE $${paramIndex})`);
     params.push(`%${search}%`);
     paramIndex++;
   }

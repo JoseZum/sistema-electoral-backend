@@ -2,7 +2,7 @@
 -- ENUMS
 -- ============================================
 CREATE TYPE election_status AS ENUM ('DRAFT', 'SCHEDULED', 'OPEN', 'CLOSED', 'SCRUTINIZED', 'ARCHIVED');
-CREATE TYPE auth_method_type AS ENUM ('MICROSOFT', 'EMAIL_TOKEN', 'BOTH');
+CREATE TYPE auth_method_type AS ENUM ('MICROSOFT');
 CREATE TYPE voter_source_type AS ENUM ('FULL_PADRON', 'FILTERED', 'MANUAL');
 
 -- ============================================
@@ -88,12 +88,11 @@ CREATE INDEX idx_election_voters_election ON election_voters(election_id);
 CREATE INDEX idx_election_voters_student ON election_voters(student_id);
 
 -- ============================================
--- CODIGOS / TOKENS DE ACCESO PARA VOTO ANONIMO
+-- TOKENS INTERNOS PARA VOTO ANONIMO
 -- ============================================
 CREATE TABLE voting_tokens (
     election_id      UUID NOT NULL,
     student_id       UUID NOT NULL,
-    code_hash        TEXT,
     token_hash       TEXT,
     token_encrypted  TEXT,
     used             BOOLEAN DEFAULT false,
@@ -107,7 +106,6 @@ CREATE TABLE voting_tokens (
 );
 
 CREATE INDEX idx_voting_tokens_student ON voting_tokens(student_id);
-CREATE INDEX idx_voting_tokens_code_hash ON voting_tokens(election_id, student_id, code_hash) WHERE code_hash IS NOT NULL;
 CREATE UNIQUE INDEX uniq_voting_tokens_hash ON voting_tokens(token_hash) WHERE token_hash IS NOT NULL;
 
 -- ============================================
