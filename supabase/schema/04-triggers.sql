@@ -55,6 +55,8 @@ BEGIN
         concat(v_resource ->> 'election_id', ':', v_resource ->> 'student_id')
       WHEN v_resource ? 'election_id' AND v_resource ? 'member_id' THEN
         concat(v_resource ->> 'election_id', ':', v_resource ->> 'member_id')
+      WHEN v_resource ? 'tag_id' AND v_resource ? 'student_id' THEN
+        concat(v_resource ->> 'tag_id', ':', v_resource ->> 'student_id')
       ELSE NULL
     END
   );
@@ -141,6 +143,29 @@ CREATE TRIGGER trg_elections_update
   FOR EACH ROW EXECUTE FUNCTION fn_audit_log('election');
 
 -- ============================================
+-- TRIGGERS: TAGS
+-- ============================================
+CREATE TRIGGER trg_tags_insert
+  AFTER INSERT ON tags
+  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('tag');
+
+CREATE TRIGGER trg_tags_update
+  AFTER UPDATE ON tags
+  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('tag');
+
+CREATE TRIGGER trg_tags_delete
+  AFTER DELETE ON tags
+  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('tag');
+
+CREATE TRIGGER trg_tag_members_insert
+  AFTER INSERT ON tag_members
+  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('tag_member');
+
+CREATE TRIGGER trg_tag_members_delete
+  AFTER DELETE ON tag_members
+  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('tag_member');
+
+-- ============================================
 -- TRIGGERS: ELECTION_OPTIONS
 -- ============================================
 CREATE TRIGGER trg_election_options_insert
@@ -212,4 +237,8 @@ CREATE TRIGGER trg_admins_updated_at
 
 CREATE TRIGGER trg_elections_updated_at
   BEFORE UPDATE ON elections
+  FOR EACH ROW EXECUTE FUNCTION fn_set_updated_at();
+
+CREATE TRIGGER trg_tags_updated_at
+  BEFORE UPDATE ON tags
   FOR EACH ROW EXECUTE FUNCTION fn_set_updated_at();

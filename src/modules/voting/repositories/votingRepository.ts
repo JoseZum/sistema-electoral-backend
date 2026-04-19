@@ -9,10 +9,11 @@ export async function findElectionsForVoter(studentId: string): Promise<VoterEle
   const result = await pool.query<VoterElection>(`
     SELECT
       e.id, e.title, e.description, e.status,
-      e.is_anonymous, e.start_time, e.end_time,
+      e.is_anonymous, t.name AS tag_name, e.start_time, e.end_time,
       ev.token_used AS has_voted,
       (SELECT COUNT(*)::int FROM election_options eo WHERE eo.election_id = e.id) AS total_options
     FROM elections e
+    LEFT JOIN tags t ON t.id = e.tag_id
     INNER JOIN election_voters ev ON ev.election_id = e.id AND ev.student_id = $1
     WHERE e.status IN ('SCHEDULED', 'OPEN', 'CLOSED', 'SCRUTINIZED', 'ARCHIVED')
     ORDER BY
@@ -34,6 +35,7 @@ export async function findElectionForVoting(electionId: string, studentId: strin
   description: string | null;
   status: string;
   is_anonymous: boolean;
+  tag_name: string | null;
   start_time: Date | null;
   end_time: Date | null;
   has_voted: boolean;
@@ -41,9 +43,10 @@ export async function findElectionForVoting(electionId: string, studentId: strin
   const result = await pool.query(`
     SELECT
       e.id, e.title, e.description, e.status,
-      e.is_anonymous, e.start_time, e.end_time,
+      e.is_anonymous, t.name AS tag_name, e.start_time, e.end_time,
       ev.token_used AS has_voted
     FROM elections e
+    LEFT JOIN tags t ON t.id = e.tag_id
     INNER JOIN election_voters ev ON ev.election_id = e.id AND ev.student_id = $2
     WHERE e.id = $1
   `, [electionId, studentId]);

@@ -49,10 +49,19 @@ export async function syncAutomaticStatuses(db: Queryable = pool): Promise<void>
 export async function findAllElections(): Promise<ElectionWithStats[]> {
   const result = await pool.query<ElectionWithStats>(`
     SELECT e.*,
+      t.name AS tag_name,
+      t.description AS tag_description,
+      COALESCE(tag_stats.member_count, 0)::int AS tag_member_count,
       COALESCE(ev.total_voters, 0)::int AS total_voters,
       COALESCE(ev.votes_cast, 0)::int AS votes_cast,
       COALESCE(eo.options_count, 0)::int AS options_count
     FROM elections e
+    LEFT JOIN tags t ON t.id = e.tag_id
+    LEFT JOIN (
+      SELECT tag_id, COUNT(*) AS member_count
+      FROM tag_members
+      GROUP BY tag_id
+    ) tag_stats ON tag_stats.tag_id = t.id
     LEFT JOIN (
       SELECT election_id,
         COUNT(*) AS total_voters,
@@ -72,7 +81,18 @@ export async function findAllElections(): Promise<ElectionWithStats[]> {
 
 export async function findElectionById(id: string): Promise<Election | null> {
   const result = await pool.query<Election>(
-    'SELECT * FROM elections WHERE id = $1',
+    `SELECT e.*,
+      t.name AS tag_name,
+      t.description AS tag_description,
+      COALESCE(tag_stats.member_count, 0)::int AS tag_member_count
+     FROM elections e
+     LEFT JOIN tags t ON t.id = e.tag_id
+     LEFT JOIN (
+       SELECT tag_id, COUNT(*) AS member_count
+       FROM tag_members
+       GROUP BY tag_id
+     ) tag_stats ON tag_stats.tag_id = t.id
+     WHERE e.id = $1`,
     [id]
   );
   return result.rows[0] || null;
@@ -81,10 +101,19 @@ export async function findElectionById(id: string): Promise<Election | null> {
 export async function findElectionWithStats(id: string): Promise<ElectionWithStats | null> {
   const result = await pool.query<ElectionWithStats>(`
     SELECT e.*,
+      t.name AS tag_name,
+      t.description AS tag_description,
+      COALESCE(tag_stats.member_count, 0)::int AS tag_member_count,
       COALESCE(ev.total_voters, 0)::int AS total_voters,
       COALESCE(ev.votes_cast, 0)::int AS votes_cast,
       COALESCE(eo.options_count, 0)::int AS options_count
     FROM elections e
+    LEFT JOIN tags t ON t.id = e.tag_id
+    LEFT JOIN (
+      SELECT tag_id, COUNT(*) AS member_count
+      FROM tag_members
+      GROUP BY tag_id
+    ) tag_stats ON tag_stats.tag_id = t.id
     LEFT JOIN (
       SELECT election_id,
         COUNT(*) AS total_voters,
@@ -105,8 +134,8 @@ export async function findElectionWithStats(id: string): Promise<ElectionWithSta
 export async function createElection(data: CreateElectionDto, createdBy?: string): Promise<Election> {
   const status = data.status || 'DRAFT';
   const result = await pool.query<Election>(
-    `INSERT INTO elections (title, description, status, is_anonymous, auth_method, voter_source, voter_filter, start_time, end_time, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    `INSERT INTO elections (title, description, status, is_anonymous, auth_method, voter_source, voter_filter, tag_id, starts_immediately, immediate_minutes, start_time, end_time, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
      RETURNING *`,
     [
       data.title,
@@ -116,6 +145,9 @@ export async function createElection(data: CreateElectionDto, createdBy?: string
       data.auth_method || 'MICROSOFT',
       data.voter_source,
       data.voter_filter ? JSON.stringify(data.voter_filter) : null,
+      data.tag_id || null,
+      data.starts_immediately || false,
+      data.immediate_minutes ?? null,
       data.start_time || null,
       data.end_time || null,
       createdBy || null,
@@ -135,6 +167,9 @@ export async function updateElection(id: string, data: UpdateElectionDto, db: Qu
   if (data.auth_method !== undefined) { fields.push(`auth_method = $${idx++}`); params.push(data.auth_method); }
   if (data.voter_source !== undefined) { fields.push(`voter_source = $${idx++}`); params.push(data.voter_source); }
   if (data.voter_filter !== undefined) { fields.push(`voter_filter = $${idx++}`); params.push(JSON.stringify(data.voter_filter)); }
+  if (data.tag_id !== undefined) { fields.push(`tag_id = $${idx++}`); params.push(data.tag_id); }
+  if (data.starts_immediately !== undefined) { fields.push(`starts_immediately = $${idx++}`); params.push(data.starts_immediately); }
+  if (data.immediate_minutes !== undefined) { fields.push(`immediate_minutes = $${idx++}`); params.push(data.immediate_minutes); }
   if (data.status !== undefined) { fields.push(`status = $${idx++}`); params.push(data.status); }
   if (data.start_time !== undefined) { fields.push(`start_time = $${idx++}`); params.push(data.start_time); }
   if (data.end_time !== undefined) { fields.push(`end_time = $${idx++}`); params.push(data.end_time); }
@@ -246,6 +281,23 @@ export async function populateVotersFromPadron(
      SELECT $1, id FROM students WHERE ${where}
      ON CONFLICT (election_id, student_id) DO NOTHING`,
     params
+  );
+  return result.rowCount ?? 0;
+}
+
+export async function populateVotersFromTag(
+  electionId: string,
+  tagId: string
+): Promise<number> {
+  const result = await pool.query(
+    `INSERT INTO election_voters (election_id, student_id)
+     SELECT $1, s.id
+     FROM tag_members tm
+     INNER JOIN students s ON s.id = tm.student_id
+     WHERE tm.tag_id = $2
+       AND s.is_active = true
+     ON CONFLICT (election_id, student_id) DO NOTHING`,
+    [electionId, tagId]
   );
   return result.rowCount ?? 0;
 }

@@ -5,8 +5,14 @@ export interface Election {
   status: 'DRAFT' | 'SCHEDULED' | 'OPEN' | 'CLOSED' | 'SCRUTINIZED' | 'ARCHIVED';
   is_anonymous: boolean;
   auth_method: 'MICROSOFT';
-  voter_source: 'FULL_PADRON' | 'FILTERED' | 'MANUAL';
+  voter_source: 'FULL_PADRON' | 'FILTERED' | 'MANUAL' | 'TAG';
   voter_filter: Record<string, unknown> | null;
+  tag_id: string | null;
+  tag_name?: string | null;
+  tag_description?: string | null;
+  tag_member_count?: number | null;
+  starts_immediately: boolean;
+  immediate_minutes: number | null;
   requires_keys: boolean;
   min_keys: number;
   start_time: Date | null;
@@ -14,6 +20,13 @@ export interface Election {
   created_by: string | null;
   created_at: Date;
   updated_at: Date;
+}
+
+export interface ElectionTagSummary {
+  id: string;
+  name: string;
+  description: string | null;
+  member_count: number;
 }
 
 export interface ElectionOption {
@@ -46,8 +59,11 @@ export interface CreateElectionDto {
   status?: Election['status'];
   voter_source: Election['voter_source'];
   voter_filter?: Record<string, unknown>;
-  start_time?: string;
-  end_time?: string;
+  tag_id?: string | null;
+  starts_immediately?: boolean;
+  immediate_minutes?: number | null;
+  start_time?: string | null;
+  end_time?: string | null;
 }
 
 export interface UpdateElectionDto {
@@ -58,8 +74,11 @@ export interface UpdateElectionDto {
   status?: Election['status'];
   voter_source?: Election['voter_source'];
   voter_filter?: Record<string, unknown>;
-  start_time?: string;
-  end_time?: string;
+  tag_id?: string | null;
+  starts_immediately?: boolean;
+  immediate_minutes?: number | null;
+  start_time?: string | null;
+  end_time?: string | null;
 }
 
 export interface CreateOptionDto {
@@ -82,6 +101,7 @@ export interface PopulateVotersDto {
   sede?: string;
   career?: string;
   student_ids?: string[];
+  tag_id?: string;
 }
 
 export interface ElectionResults {

@@ -1,4 +1,5 @@
 import * as electionRepo from '../repositories/electionRepository';
+import { getTagById } from '../../tags/services/tagService';
 import {
   CreateElectionDto,
   UpdateElectionDto,
@@ -58,6 +59,30 @@ function validateSchedule(startTime?: string | null, endTime?: string | null) {
   }
 }
 
+function validateImmediateConfig(startsImmediately?: boolean, immediateMinutes?: number | null) {
+  if (!startsImmediately) {
+    return;
+  }
+
+  if (
+    typeof immediateMinutes !== 'number'
+    || !Number.isInteger(immediateMinutes)
+    || immediateMinutes <= 0
+    || immediateMinutes > 1440
+  ) {
+    throw new Error('Se necesita una duracion valida para la votacion inmediata');
+  }
+}
+
+function buildImmediateWindow(minutes: number | null | undefined): { startTime: string; endTime: string } {
+  const start = new Date();
+  const end = new Date(start.getTime() + Number(minutes || 0) * 60_000);
+  return {
+    startTime: start.toISOString(),
+    endTime: end.toISOString(),
+  };
+}
+
 function deriveAutomaticStatus(startTime?: string | null, endTime?: string | null): Election['status'] {
   const now = Date.now();
   const start = startTime ? new Date(startTime).getTime() : null;
@@ -110,8 +135,26 @@ export async function getElectionById(id: string) {
 }
 
 export async function createElection(data: CreateElectionDto, createdBy?: string) {
-  validateSchedule(data.start_time || null, data.end_time || null);
-  return electionRepo.createElection({ ...data, status: 'DRAFT' }, createdBy);
+  if (data.voter_source === 'TAG' && !data.tag_id) {
+    throw new Error('Se necesita una tag para crear una votacion por tag');
+  }
+
+  if (data.tag_id) {
+    await getTagById(data.tag_id);
+  }
+
+  validateImmediateConfig(data.starts_immediately, data.immediate_minutes);
+
+  if (!data.starts_immediately) {
+    validateSchedule(data.start_time || null, data.end_time || null);
+  }
+
+  return electionRepo.createElection({
+    ...data,
+    status: 'DRAFT',
+    start_time: data.starts_immediately ? undefined : data.start_time,
+    end_time: data.starts_immediately ? undefined : data.end_time,
+  }, createdBy);
 }
 
 export async function updateElection(id: string, data: UpdateElectionDto, actor?: AuditActor) {
@@ -124,14 +167,31 @@ export async function updateElection(id: string, data: UpdateElectionDto, actor?
   }
 
   const { startTime, endTime } = getMergedSchedule(election, data);
-  validateSchedule(startTime, endTime);
+  validateImmediateConfig(data.starts_immediately, data.immediate_minutes);
+
+  if (!(data.starts_immediately ?? election.starts_immediately)) {
+    validateSchedule(startTime, endTime);
+  }
+
+  if ((data.voter_source ?? election.voter_source) === 'TAG' && !(data.tag_id ?? election.tag_id)) {
+    throw new Error('Se necesita una tag para crear una votacion por tag');
+  }
+
+  if (data.tag_id) {
+    await getTagById(data.tag_id);
+  }
 
   const nextStatus = election.status === 'DRAFT'
     ? 'DRAFT'
     : deriveAutomaticStatus(startTime, endTime);
 
   const updated = await withOptionalAudit(actor, (client) =>
-    electionRepo.updateElection(id, { ...data, status: nextStatus }, client)
+    electionRepo.updateElection(id, {
+      ...data,
+      status: nextStatus,
+      start_time: data.starts_immediately ? undefined : data.start_time,
+      end_time: data.starts_immediately ? undefined : data.end_time,
+    }, client)
   );
 
   if (!updated) throw new Error('No se pudo actualizar la elección');
@@ -151,11 +211,21 @@ export async function changeStatus(id: string, newStatus: Election['status'] | '
   const election = await electionRepo.findElectionById(id);
   if (!election) throw new Error('Elección no encontrada');
 
+  const immediateWindow = election.starts_immediately
+    ? (election.immediate_minutes && election.immediate_minutes > 0
+        ? buildImmediateWindow(election.immediate_minutes)
+        : null)
+    : null;
+
+  if (election.starts_immediately && !immediateWindow) {
+    throw new Error('Se necesita una duracion valida para la votacion inmediata');
+  }
+
   const targetStatus = newStatus === 'AUTO'
-    ? deriveAutomaticStatus(
+    ? (immediateWindow ? 'OPEN' : deriveAutomaticStatus(
         election.start_time ? election.start_time.toISOString() : null,
         election.end_time ? election.end_time.toISOString() : null
-      )
+      ))
     : newStatus;
 
   const allowed = STATUS_TRANSITIONS[election.status];
@@ -171,7 +241,11 @@ export async function changeStatus(id: string, newStatus: Election['status'] | '
   }
 
   const updatedElection = await withOptionalAudit(actor, (client) =>
-    electionRepo.updateElectionStatus(id, targetStatus, client)
+    electionRepo.updateElection(id, {
+      status: targetStatus,
+      start_time: immediateWindow?.startTime,
+      end_time: immediateWindow?.endTime,
+    }, client)
   );
 
   if (updatedElection?.status === 'OPEN' && updatedElection.is_anonymous) {
@@ -221,7 +295,7 @@ export async function deleteOption(electionId: string, optionId: string) {
   return { success: true };
 }
 
-export async function populateVoters(electionId: string, data: { sede?: string; career?: string; student_ids?: string[] }) {
+export async function populateVoters(electionId: string, data: { sede?: string; career?: string; student_ids?: string[]; tag_id?: string }) {
   await electionRepo.syncAutomaticStatuses();
   const election = await electionRepo.findElectionById(electionId);
   if (!election) throw new Error('Elección no encontrada');
@@ -230,7 +304,15 @@ export async function populateVoters(electionId: string, data: { sede?: string; 
   }
 
   let count = 0;
-  if (Array.isArray(data.student_ids)) {
+  if (data.tag_id || election.voter_source === 'TAG') {
+    const tagId = data.tag_id || election.tag_id;
+    if (!tagId) {
+      throw new Error('Se necesita una tag para poblar votantes');
+    }
+
+    await getTagById(tagId);
+    count = await electionRepo.populateVotersFromTag(electionId, tagId);
+  } else if (Array.isArray(data.student_ids)) {
     count = await electionRepo.populateVotersManual(electionId, data.student_ids);
   } else {
     count = await electionRepo.populateVotersFromPadron(electionId, { sede: data.sede, career: data.career });

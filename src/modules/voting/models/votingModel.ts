@@ -4,6 +4,7 @@ export interface VoterElection {
   description: string | null;
   status: string;
   is_anonymous: boolean;
+  tag_name: string | null;
   start_time: Date | null;
   end_time: Date | null;
   has_voted: boolean;
@@ -16,6 +17,7 @@ export interface VoterElectionDetail {
   description: string | null;
   status: string;
   is_anonymous: boolean;
+  tag_name: string | null;
   start_time: Date | null;
   end_time: Date | null;
   has_voted: boolean;

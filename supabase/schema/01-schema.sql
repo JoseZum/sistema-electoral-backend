@@ -3,7 +3,7 @@
 -- ============================================
 CREATE TYPE election_status AS ENUM ('DRAFT', 'SCHEDULED', 'OPEN', 'CLOSED', 'SCRUTINIZED', 'ARCHIVED');
 CREATE TYPE auth_method_type AS ENUM ('MICROSOFT');
-CREATE TYPE voter_source_type AS ENUM ('FULL_PADRON', 'FILTERED', 'MANUAL');
+CREATE TYPE voter_source_type AS ENUM ('FULL_PADRON', 'FILTERED', 'MANUAL', 'TAG');
 
 -- ============================================
 -- PADRON ESTUDIANTIL
@@ -40,6 +40,30 @@ CREATE TABLE admins (
 );
 
 -- ============================================
+-- TAGS DE PADRON
+-- ============================================
+CREATE TABLE tags (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name            TEXT NOT NULL,
+    description     TEXT,
+    created_by      UUID REFERENCES students(id),
+    created_at      TIMESTAMPTZ DEFAULT now(),
+    updated_at      TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE UNIQUE INDEX uniq_tags_name_lower ON tags (LOWER(name));
+
+CREATE TABLE tag_members (
+    tag_id          UUID NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+    student_id      UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    created_at      TIMESTAMPTZ DEFAULT now(),
+    PRIMARY KEY (tag_id, student_id)
+);
+
+CREATE INDEX idx_tag_members_tag ON tag_members(tag_id);
+CREATE INDEX idx_tag_members_student ON tag_members(student_id);
+
+-- ============================================
 -- VOTACIONES / ELECCIONES
 -- ============================================
 CREATE TABLE elections (
@@ -51,6 +75,9 @@ CREATE TABLE elections (
     auth_method     auth_method_type NOT NULL DEFAULT 'MICROSOFT',
     voter_source    voter_source_type NOT NULL,
     voter_filter    JSONB,
+    tag_id          UUID REFERENCES tags(id) ON DELETE SET NULL,
+    starts_immediately BOOLEAN NOT NULL DEFAULT false,
+    immediate_minutes INT,
     requires_keys   BOOLEAN DEFAULT false,
     min_keys        INT DEFAULT 3,
     start_time      TIMESTAMPTZ,
@@ -58,8 +85,14 @@ CREATE TABLE elections (
     scrutinized_at  TIMESTAMPTZ,
     created_by      UUID REFERENCES students(id),
     created_at      TIMESTAMPTZ DEFAULT now(),
-    updated_at      TIMESTAMPTZ DEFAULT now()
+    updated_at      TIMESTAMPTZ DEFAULT now(),
+    CONSTRAINT chk_elections_immediate_minutes CHECK (
+        immediate_minutes IS NULL
+        OR (immediate_minutes >= 1 AND immediate_minutes <= 1440)
+    )
 );
+
+CREATE INDEX idx_elections_tag_id ON elections(tag_id);
 
 -- ============================================
 -- OPCIONES DE VOTACION
