@@ -73,8 +73,8 @@ INSERT INTO elections (
     requires_keys, min_keys, start_time, end_time, created_by
 )
 SELECT
-    'Elección Representantes Estudiantiles 2026',
-    'Elección de representantes estudiantiles',
+    'Eleccion Representantes Estudiantiles 2026',
+    'Eleccion de representantes estudiantiles',
     'OPEN',
     false, 
     'MICROSOFT',
@@ -91,18 +91,18 @@ WHERE email = 'j.zumbado.1@estudiantec.cr';
 -- Opciones de votacion
 INSERT INTO election_options (election_id, label, option_type, display_order)
 SELECT id, 'Candidato A', 'candidate', 1
-FROM elections WHERE title = 'Elección Representantes Estudiantiles 2026';
+FROM elections WHERE title = 'Eleccion Representantes Estudiantiles 2026';
 
 INSERT INTO election_options (election_id, label, option_type, display_order)
 SELECT id, 'Candidato B', 'candidate', 2
-FROM elections WHERE title = 'Elección Representantes Estudiantiles 2026';
+FROM elections WHERE title = 'Eleccion Representantes Estudiantiles 2026';
 
 -- Padron de esta eleccion (solo Ingenieria en Computacion)
 INSERT INTO election_voters (election_id, student_id)
 SELECT e.id, s.id
 FROM elections e
 JOIN students s ON s.career = 'Ingenieria en Computacion'
-WHERE e.title = 'Elección Representantes Estudiantiles 2026';
+WHERE e.title = 'Eleccion Representantes Estudiantiles 2026';
 
 -- Simular participacion: ~85% de votantes marcan token como usado.
 -- Se distribuye token_used_at en las ultimas 24 horas para pruebas de
@@ -115,7 +115,7 @@ SET
         - (floor(random() * 60) * interval '1 minute')
 FROM elections e
 WHERE ev.election_id = e.id
-AND e.title = 'Elección Representantes Estudiantiles 2026'
+AND e.title = 'Eleccion Representantes Estudiantiles 2026'
 AND random() > 0.15;
 
 -- Insertar votos (no anonima): se usa student_id en la tabla votes.
@@ -133,7 +133,7 @@ WHERE ev.token_used = true
 AND ev.token_used_at IS NOT NULL
 AND ev.election_id = (
     SELECT id FROM elections 
-    WHERE title = 'Elección Representantes Estudiantiles 2026'
+    WHERE title = 'Eleccion Representantes Estudiantiles 2026'
 )
 AND (
     (s.carnet::bigint % 2 = 0 AND o.label = 'Candidato A') OR
@@ -154,7 +154,7 @@ INSERT INTO elections (
     requires_keys, min_keys, start_time, end_time, created_by
 )
 SELECT
-    'Referéndum Estudiantil 2026',
+    'Referendum Estudiantil 2026',
     'Consulta sobre cambios en reglamento estudiantil',
     'OPEN',
     true,
@@ -171,19 +171,19 @@ WHERE email = 'fpicado@estudiantec.cr';
 
 -- Opciones de votacion
 INSERT INTO election_options (election_id, label, option_type, display_order)
-SELECT id, 'Sí', 'option', 1
-FROM elections WHERE title = 'Referéndum Estudiantil 2026';
+SELECT id, 'Si', 'option', 1
+FROM elections WHERE title = 'Referendum Estudiantil 2026';
 
 INSERT INTO election_options (election_id, label, option_type, display_order)
 SELECT id, 'No', 'option', 2
-FROM elections WHERE title = 'Referéndum Estudiantil 2026';
+FROM elections WHERE title = 'Referendum Estudiantil 2026';
 
 -- Padron de esta eleccion (todos los estudiantes cargados)
 INSERT INTO election_voters (election_id, student_id)
 SELECT e.id, s.id
 FROM elections e
 JOIN students s ON true
-WHERE e.title = 'Referéndum Estudiantil 2026';
+WHERE e.title = 'Referendum Estudiantil 2026';
 
 -- Simular participacion: ~60% de votantes.
 -- Se distribuye token_used_at en las ultimas 48 horas.
@@ -195,7 +195,7 @@ SET
         - (floor(random() * 60) * interval '1 minute')
 FROM elections e
 WHERE ev.election_id = e.id
-AND e.title = 'Referéndum Estudiantil 2026'
+AND e.title = 'Referendum Estudiantil 2026'
 AND random() > 0.4;
 
 -- Insertar votos (anonima): se usa token_hash pseudoaleatorio.
@@ -212,24 +212,25 @@ WHERE ev.token_used = true
 AND ev.token_used_at IS NOT NULL
 AND ev.election_id = (
     SELECT id FROM elections 
-    WHERE title = 'Referéndum Estudiantil 2026'
+    WHERE title = 'Referendum Estudiantil 2026'
 )
 AND (
-    (random() > 0.5 AND o.label = 'Sí') OR
+    (random() > 0.5 AND o.label = 'Si') OR
     (random() <= 0.5 AND o.label = 'No')
 );
+
 -- ============================================================
 -- ADMIN ADICIONAL DE PRUEBA
 -- ============================================================
 -- Usuario de soporte para pruebas de login y permisos administrativos.
 INSERT INTO students (carnet, full_name, email, sede, career, degree_level)
-VALUES ('2022437529', 'Aarón Ortiz Jiménez', 'aaortiz@estudiantec.cr', 'Cartago', 'Ingenieria en Computacion', 'Bachillerato')
-INSERT INTO students (carnet, full_name, email, sede, career, degree_level)
-VALUES ('2022437963', 'Mariela Solano Gómez', 'm.solano@estudiantec.cr', 'Cartago', 'Ingenieria en Computacion', 'Bachillerato')
+VALUES
+('2022437529', 'Aaron Ortiz Jimenez', 'aaortiz@estudiantec.cr', 'Cartago', 'Ingenieria en Computacion', 'Bachillerato'),
+('2022437963', 'Mariela Solano Gomez', 'm.solano@estudiantec.cr', 'Cartago', 'Ingenieria en Computacion', 'Bachillerato')
 ON CONFLICT (email) DO NOTHING;
 
 INSERT INTO admins (students_id, position_title, role, permissions)
 SELECT id, 'Administrador', 'admin', '{"all": true}'::jsonb
-FROM students WHERE email = 'aaortiz@estudiantec.cr'
-FROM students WHERE email = 'm.solano@estudiantec.cr'
+FROM students
+WHERE email IN ('aaortiz@estudiantec.cr', 'm.solano@estudiantec.cr')
 ON CONFLICT DO NOTHING;
