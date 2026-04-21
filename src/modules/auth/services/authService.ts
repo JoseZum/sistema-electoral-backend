@@ -1,3 +1,4 @@
+import { AppError } from '../../../errors/appError';
 import { verifyMicrosoftIdToken } from './microsoftTokenService';
 import { findStudentByEmail } from '../../users/repositories/studentRepository';
 import { findAdminByStudentId } from '../../users/repositories/adminRepository';
@@ -7,26 +8,34 @@ import { AuthResponse, SessionJWTPayload } from '../models/authModel';
 const ALLOWED_DOMAIN = '@estudiantec.cr';
 
 export async function authenticateWithMicrosoft(idToken: string): Promise<AuthResponse> {
-  // 1. Verificar token de Microsoft ID
   const claims = await verifyMicrosoftIdToken(idToken);
 
   const email = claims.email || claims.preferred_username;
   if (!email) {
-    throw new Error('No se encontró correo electrónico en los claims del token');
+    throw new AppError({
+      status: 401,
+      code: 'AUTH_EMAIL_MISSING',
+      message: 'Autenticacion fallida: no se encontro correo en la cuenta de Microsoft.',
+    });
   }
 
-  // 2. Validar dominio @estudiantec.cr
   if (!email.toLowerCase().endsWith(ALLOWED_DOMAIN)) {
-    throw new Error('Solo se permiten cuentas @estudiantec.cr');
+    throw new AppError({
+      status: 403,
+      code: 'AUTH_DOMAIN_NOT_ALLOWED',
+      message: 'Solo se permiten cuentas @estudiantec.cr',
+    });
   }
 
-  // 3. Buscar estudiante en el padrón
   const student = await findStudentByEmail(email.toLowerCase());
   if (!student) {
-    throw new Error('Estudiante no encontrado en el padrón electoral. Contacte al TEE.');
+    throw new AppError({
+      status: 404,
+      code: 'AUTH_STUDENT_NOT_FOUND',
+      message: 'Estudiante no encontrado en el padron electoral. Contacte al TEE.',
+    });
   }
 
-  // 4. Verificar si es admin del TEE
   let role: SessionJWTPayload['role'] = 'voter';
 
   const admin = await findAdminByStudentId(student.id);
@@ -34,7 +43,6 @@ export async function authenticateWithMicrosoft(idToken: string): Promise<AuthRe
     role = 'admin';
   }
 
-  // 5. Crear JWT de sesión
   const sessionPayload: SessionJWTPayload = {
     studentId: student.id,
     carnet: student.carnet,

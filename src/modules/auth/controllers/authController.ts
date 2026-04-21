@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { AppError } from '../../../errors/appError';
 import { authenticateWithMicrosoft } from '../services/authService';
 
 export async function microsoftAuthHandler(
@@ -10,7 +11,13 @@ export async function microsoftAuthHandler(
     const { idToken } = req.body;
 
     if (!idToken || typeof idToken !== 'string') {
-      res.status(400).json({ error: 'Falta el idToken o es inválido en el cuerpo de la petición' });
+      next(
+        new AppError({
+          status: 400,
+          code: 'AUTH_INVALID_REQUEST',
+          message: 'Falta el idToken o es invalido en el cuerpo de la peticion.',
+        })
+      );
       return;
     }
 

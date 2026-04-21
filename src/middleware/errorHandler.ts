@@ -1,43 +1,96 @@
 import { Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
+import { AppError, isAppError } from '../errors/appError';
+
+function isDatabaseError(error: unknown): error is Error & { code?: string } {
+  return error instanceof Error && typeof (error as { code?: unknown }).code === 'string';
+}
+
+function normalizeError(error: unknown): AppError {
+  if (isAppError(error)) {
+    return error;
+  }
+
+  if (error instanceof jwt.TokenExpiredError) {
+    return new AppError({
+      status: 401,
+      code: 'AUTH_TOKEN_EXPIRED',
+      message: 'La sesion con Microsoft expiro. Inicia sesion nuevamente.',
+      details: error.message,
+      cause: error,
+    });
+  }
+
+  if (error instanceof jwt.JsonWebTokenError || error instanceof jwt.NotBeforeError) {
+    return new AppError({
+      status: 401,
+      code: 'AUTH_TOKEN_INVALID',
+      message: 'Autenticacion fallida: token invalido.',
+      details: error.message,
+      cause: error,
+    });
+  }
+
+  if (error instanceof SyntaxError && 'body' in (error as object)) {
+    return new AppError({
+      status: 400,
+      code: 'INVALID_JSON_BODY',
+      message: 'El cuerpo de la peticion no es JSON valido.',
+      details: error.message,
+      cause: error,
+    });
+  }
+
+  if (isDatabaseError(error)) {
+    const code = error.code || '';
+
+    if (code === '28P01' || error.message.includes('password authentication failed')) {
+      return new AppError({
+        status: 503,
+        code: 'DB_AUTH_FAILED',
+        message: 'El servicio no esta disponible en este momento.',
+        details: error.message,
+        cause: error,
+      });
+    }
+
+    if (code.startsWith('08') || error.message.includes('ECONNREFUSED')) {
+      return new AppError({
+        status: 503,
+        code: 'DB_CONNECTION_ERROR',
+        message: 'No fue posible conectar con la base de datos.',
+        details: error.message,
+        cause: error,
+      });
+    }
+  }
+
+  return new AppError({
+    status: 500,
+    code: 'INTERNAL_SERVER_ERROR',
+    message: 'Error interno del servidor',
+    details: error instanceof Error ? error.message : String(error),
+    cause: error,
+  });
+}
 
 export function errorHandler(
-  err: Error,
-  _req: Request,
+  err: unknown,
+  req: Request,
   res: Response,
   _next: NextFunction
 ): void {
-  console.error('Error no manejado:', err.message);
+  const normalized = normalizeError(err);
 
-  if (err.message.includes('Solo se permiten cuentas @estudiantec.cr') || err.message.includes('@estudiantec.cr')) {
-    res.status(403).json({ error: err.message });
-    return;
-  }
+  console.error(`[${normalized.code}] ${req.method} ${req.originalUrl}`, {
+    message: normalized.message,
+    details: normalized.details,
+    stack: err instanceof Error ? err.stack : undefined,
+  });
 
-  if (err.message.includes('no encontrado') || err.message.includes('No se encontró')) {
-    res.status(404).json({ error: err.message });
-    return;
-  }
-
-  if (err.message.includes('inválido') || err.message.includes('no se pudo decodificar')) {
-    res.status(401).json({ error: 'Autenticación fallida: ' + err.message });
-    return;
-  }
-
-  if (
-    err.message.includes('Solo se puede') ||
-    err.message.includes('Solo se pueden') ||
-    err.message.includes('No se puede cambiar') ||
-    err.message.includes('Se necesitan al menos') ||
-    err.message.includes('Se necesita al menos') ||
-    err.message.includes('no son v') ||
-    err.message.includes('La fecha de cierre')
-  ) {
-    res.status(400).json({ error: err.message });
-    return;
-  }
-
-  res.status(500).json({
-    error: 'Error interno del servidor',
-    ...(process.env.NODE_ENV === 'development' && { details: err.message }),
+  res.status(normalized.status).json({
+    error: normalized.message,
+    code: normalized.code,
+    ...(process.env.NODE_ENV === 'development' && normalized.details ? { details: normalized.details } : {}),
   });
 }
