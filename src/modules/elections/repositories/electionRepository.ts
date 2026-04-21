@@ -368,9 +368,14 @@ export async function getElectionResults(electionId: string): Promise<ElectionRe
   if (!election.is_anonymous) {
     const votersResult = await pool.query<{ full_name: string; carnet: string }>(`
       SELECT DISTINCT s.full_name, s.carnet
-      FROM votes v
-      INNER JOIN students s ON s.id = v.student_id
-      WHERE v.election_id = $1 AND v.student_id IS NOT NULL
+      FROM students s
+      WHERE s.id IN (
+        SELECT v.student_id FROM votes v
+        WHERE v.election_id = $1 AND v.student_id IS NOT NULL
+        UNION
+        SELECT ev.student_id FROM election_voters ev
+        WHERE ev.election_id = $1 AND ev.token_used = true
+      )
       ORDER BY s.full_name ASC
     `, [electionId]);
     voters = votersResult.rows;
