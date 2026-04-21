@@ -367,10 +367,10 @@ export async function getElectionResults(electionId: string): Promise<ElectionRe
   let voters: Array<{ full_name: string; carnet: string }> | undefined;
   if (!election.is_anonymous) {
     const votersResult = await pool.query<{ full_name: string; carnet: string }>(`
-      SELECT s.full_name, s.carnet
-      FROM election_voters ev
-      INNER JOIN students s ON s.id = ev.student_id
-      WHERE ev.election_id = $1 AND ev.token_used = true
+      SELECT DISTINCT s.full_name, s.carnet
+      FROM votes v
+      INNER JOIN students s ON s.id = v.student_id
+      WHERE v.election_id = $1 AND v.student_id IS NOT NULL
       ORDER BY s.full_name ASC
     `, [electionId]);
     voters = votersResult.rows;
