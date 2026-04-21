@@ -364,6 +364,18 @@ export async function getElectionResults(electionId: string): Promise<ElectionRe
   const voterStats = await getVoterCount(electionId);
   const totalVotes = optionsResult.rows.reduce((acc, r) => acc + parseInt(r.vote_count, 10), 0);
 
+  let voters: Array<{ full_name: string; carnet: string }> | undefined;
+  if (!election.is_anonymous) {
+    const votersResult = await pool.query<{ full_name: string; carnet: string }>(`
+      SELECT s.full_name, s.carnet
+      FROM election_voters ev
+      INNER JOIN students s ON s.id = ev.student_id
+      WHERE ev.election_id = $1 AND ev.token_used = true
+      ORDER BY s.full_name ASC
+    `, [electionId]);
+    voters = votersResult.rows;
+  }
+
   return {
     election,
     options: optionsResult.rows.map(r => ({
@@ -376,6 +388,7 @@ export async function getElectionResults(electionId: string): Promise<ElectionRe
     total_votes: totalVotes,
     total_eligible: voterStats.total,
     participation_rate: voterStats.total > 0 ? (voterStats.voted / voterStats.total) * 100 : 0,
+    voters,
   };
 }
 

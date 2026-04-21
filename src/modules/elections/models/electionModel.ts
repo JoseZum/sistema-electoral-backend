@@ -116,6 +116,10 @@ export interface ElectionResults {
   total_votes: number;
   total_eligible: number;
   participation_rate: number;
+  voters?: Array<{
+    full_name: string;
+    carnet: string;
+  }>;
 }
 
 // Para monitoreo
