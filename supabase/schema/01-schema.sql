@@ -46,6 +46,12 @@ CREATE TABLE tags (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name            TEXT NOT NULL,
     description     TEXT,
+    color           TEXT NOT NULL DEFAULT '#C62828'
+                    CHECK (color IN (
+                      '#C62828', '#AD1457', '#6A1B9A', '#4527A0',
+                      '#283593', '#1565C0', '#006064', '#00695C',
+                      '#2E7D32', '#BF360C', '#5D4037', '#37474F'
+                    )),
     created_by      UUID REFERENCES students(id),
     created_at      TIMESTAMPTZ DEFAULT now(),
     updated_at      TIMESTAMPTZ DEFAULT now()

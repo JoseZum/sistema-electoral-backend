@@ -7,7 +7,7 @@ type Queryable = Pool | PoolClient;
 export async function findAllTags(db: Queryable = pool): Promise<TagSummary[]> {
   const result = await db.query<TagSummary>(`
     SELECT
-      t.id, t.name, t.description, t.created_by, t.created_at, t.updated_at,
+      t.id, t.name, t.description, t.color, t.created_by, t.created_at, t.updated_at,
       COUNT(tm.student_id)::int AS member_count
     FROM tags t
     LEFT JOIN tag_members tm ON tm.tag_id = t.id
@@ -20,7 +20,7 @@ export async function findAllTags(db: Queryable = pool): Promise<TagSummary[]> {
 export async function findTagById(id: string, db: Queryable = pool): Promise<TagSummary | null> {
   const result = await db.query<TagSummary>(`
     SELECT
-      t.id, t.name, t.description, t.created_by, t.created_at, t.updated_at,
+      t.id, t.name, t.description, t.color, t.created_by, t.created_at, t.updated_at,
       COUNT(tm.student_id)::int AS member_count
     FROM tags t
     LEFT JOIN tag_members tm ON tm.tag_id = t.id
@@ -33,7 +33,7 @@ export async function findTagById(id: string, db: Queryable = pool): Promise<Tag
 export async function findTagByName(name: string, db: Queryable = pool): Promise<TagSummary | null> {
   const result = await db.query<TagSummary>(`
     SELECT
-      t.id, t.name, t.description, t.created_by, t.created_at, t.updated_at,
+      t.id, t.name, t.description, t.color, t.created_by, t.created_at, t.updated_at,
       COUNT(tm.student_id)::int AS member_count
     FROM tags t
     LEFT JOIN tag_members tm ON tm.tag_id = t.id
@@ -76,21 +76,21 @@ export async function findActiveStudentIdsByIds(studentIds: string[], db: Querya
 }
 
 export async function insertTag(
-  data: { name: string; description?: string | null },
+  data: { name: string; description?: string | null; color: string },
   createdBy?: string | null,
   db: Queryable = pool
 ): Promise<TagSummary> {
   const result = await db.query<TagSummary>(`
-    INSERT INTO tags (name, description, created_by)
-    VALUES ($1, $2, $3)
-    RETURNING id, name, description, created_by, created_at, updated_at, 0::int AS member_count
-  `, [data.name, data.description || null, createdBy || null]);
+    INSERT INTO tags (name, description, color, created_by)
+    VALUES ($1, $2, $3, $4)
+    RETURNING id, name, description, color, created_by, created_at, updated_at, 0::int AS member_count
+  `, [data.name, data.description || null, data.color, createdBy || null]);
   return result.rows[0];
 }
 
 export async function updateTagRecord(
   id: string,
-  data: { name?: string; description?: string | null },
+  data: { name?: string; description?: string | null; color?: string },
   db: Queryable = pool
 ): Promise<TagSummary | null> {
   const fields: string[] = [];
@@ -105,6 +105,10 @@ export async function updateTagRecord(
     fields.push(`description = $${idx++}`);
     params.push(data.description);
   }
+  if (data.color !== undefined) {
+    fields.push(`color = $${idx++}`);
+    params.push(data.color);
+  }
 
   if (fields.length === 0) {
     return findTagById(id, db);
@@ -114,7 +118,7 @@ export async function updateTagRecord(
     UPDATE tags
     SET ${fields.join(', ')}
     WHERE id = $${idx}
-    RETURNING id, name, description, created_by, created_at, updated_at, 0::int AS member_count
+    RETURNING id, name, description, color, created_by, created_at, updated_at, 0::int AS member_count
   `, [...params, id]);
   return result.rows[0] || null;
 }

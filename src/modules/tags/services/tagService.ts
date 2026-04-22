@@ -3,6 +3,7 @@ import { PoolClient } from 'pg';
 import { pool } from '../../../config/database';
 import * as tagRepo from '../repositories/tagRepository';
 import { CreateTagDto, TagDetail, UpdateTagDto } from '../models/tagModel';
+import { DEFAULT_TAG_COLOR, TAG_COLOR_VALUES } from '../constants/tagColors';
 
 type AuditActor = {
   id?: string;
@@ -38,6 +39,16 @@ function normalizeTagName(name: string): string {
 
 function normalizeStudentIds(studentIds: string[]): string[] {
   return Array.from(new Set(studentIds.map((studentId) => studentId.trim()).filter(Boolean)));
+}
+
+function normalizeTagColor(color?: string | null): string {
+  const normalized = (color || DEFAULT_TAG_COLOR).trim().toUpperCase();
+
+  if (!TAG_COLOR_VALUES.includes(normalized as typeof TAG_COLOR_VALUES[number])) {
+    throw new Error('Selecciona un color valido para la tag');
+  }
+
+  return normalized;
 }
 
 async function validateStudentIds(studentIds: string[], client?: PoolClient): Promise<string[]> {
@@ -77,6 +88,7 @@ export async function getTagById(id: string): Promise<TagDetail> {
 
 export async function createTag(data: CreateTagDto, actor?: AuditActor): Promise<TagDetail> {
   const name = normalizeTagName(data.name || '');
+  const color = normalizeTagColor(data.color);
   const studentIds = normalizeStudentIds(data.student_ids || []);
 
   if (!name) {
@@ -90,7 +102,7 @@ export async function createTag(data: CreateTagDto, actor?: AuditActor): Promise
     }
 
     const validStudentIds = await validateStudentIds(studentIds, client);
-    const tag = await tagRepo.insertTag({ name, description: data.description || null }, actor?.id, client);
+    const tag = await tagRepo.insertTag({ name, description: data.description || null, color }, actor?.id, client);
     await tagRepo.replaceTagMembers(tag.id, validStudentIds, client);
     const detail = await tagRepo.getTagDetail(tag.id, client);
 
@@ -104,6 +116,7 @@ export async function createTag(data: CreateTagDto, actor?: AuditActor): Promise
 
 export async function updateTag(id: string, data: UpdateTagDto, actor?: AuditActor): Promise<TagDetail> {
   const nextName = data.name !== undefined ? normalizeTagName(data.name) : undefined;
+  const nextColor = data.color !== undefined ? normalizeTagColor(data.color) : undefined;
   const nextStudentIds = data.student_ids !== undefined ? normalizeStudentIds(data.student_ids) : undefined;
 
   if (nextName !== undefined && !nextName) {
@@ -130,6 +143,7 @@ export async function updateTag(id: string, data: UpdateTagDto, actor?: AuditAct
     await tagRepo.updateTagRecord(id, {
       name: nextName,
       description: data.description !== undefined ? data.description || null : undefined,
+      color: nextColor,
     }, client);
 
     if (nextStudentIds !== undefined) {

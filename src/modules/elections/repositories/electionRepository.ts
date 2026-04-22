@@ -50,6 +50,7 @@ export async function findAllElections(): Promise<ElectionWithStats[]> {
   const result = await pool.query<ElectionWithStats>(`
     SELECT e.*,
       t.name AS tag_name,
+      t.color AS tag_color,
       t.description AS tag_description,
       COALESCE(tag_stats.member_count, 0)::int AS tag_member_count,
       COALESCE(ev.total_voters, 0)::int AS total_voters,
@@ -83,6 +84,7 @@ export async function findElectionById(id: string): Promise<Election | null> {
   const result = await pool.query<Election>(
     `SELECT e.*,
       t.name AS tag_name,
+      t.color AS tag_color,
       t.description AS tag_description,
       COALESCE(tag_stats.member_count, 0)::int AS tag_member_count
      FROM elections e
@@ -102,6 +104,7 @@ export async function findElectionWithStats(id: string): Promise<ElectionWithSta
   const result = await pool.query<ElectionWithStats>(`
     SELECT e.*,
       t.name AS tag_name,
+      t.color AS tag_color,
       t.description AS tag_description,
       COALESCE(tag_stats.member_count, 0)::int AS tag_member_count,
       COALESCE(ev.total_voters, 0)::int AS total_voters,

@@ -9,6 +9,7 @@ export interface Election {
   voter_filter: Record<string, unknown> | null;
   tag_id: string | null;
   tag_name?: string | null;
+  tag_color?: string | null;
   tag_description?: string | null;
   tag_member_count?: number | null;
   starts_immediately: boolean;
@@ -25,6 +26,7 @@ export interface Election {
 export interface ElectionTagSummary {
   id: string;
   name: string;
+  color: string;
   description: string | null;
   member_count: number;
 }
