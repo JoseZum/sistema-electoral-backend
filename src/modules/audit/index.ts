@@ -48,6 +48,14 @@ function formatResourceLabel(resourceType: string | null): string {
   return resourceLabels[resourceType] || resourceType.toLowerCase();
 }
 
+function asObjectRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  return { ...(value as Record<string, unknown>) };
+}
+
 function buildActivityMessage(row: Record<string, unknown>): string {
   const actionLabel = formatActionLabel((row.action as string | null) ?? null);
   const resourceLabel = formatResourceLabel((row.resource_type as string | null) ?? null);
@@ -63,9 +71,24 @@ function buildActivityMessage(row: Record<string, unknown>): string {
 function withDisplayFields(row: Record<string, unknown>): Record<string, unknown> {
   const action = (row.action as string | null) ?? null;
   const resourceType = (row.resource_type as string | null) ?? null;
+  const details = asObjectRecord(row.details);
+  const targetName = (row.target_name as string | null | undefined) ?? null;
+  const targetCarnet = (row.target_carnet as string | null | undefined) ?? null;
+  const enrichedDetails = details ? { ...details } : {};
+
+  if (resourceType === 'admin') {
+    if (targetName && enrichedDetails.target_name === undefined) {
+      enrichedDetails.target_name = targetName;
+    }
+
+    if (targetCarnet && enrichedDetails.target_carnet === undefined) {
+      enrichedDetails.target_carnet = targetCarnet;
+    }
+  }
 
   return {
     ...row,
+    details: Object.keys(enrichedDetails).length > 0 ? enrichedDetails : row.details ?? null,
     actionLabel: formatActionLabel(action),
     resourceLabel: formatResourceLabel(resourceType),
     activityMessage: buildActivityMessage(row),
@@ -89,6 +112,18 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
       LEFT JOIN students actor_by_carnet
         ON actor_by_id.id IS NULL
        AND actor_by_carnet.carnet = al.actor_carnet
+      LEFT JOIN admins target_admin
+        ON al.resource_type = 'admin'
+       AND target_admin.id::TEXT = al.resource_id
+      LEFT JOIN students target_student
+        ON al.resource_type = 'admin'
+       AND target_student.id::TEXT = COALESCE(
+         target_admin.students_id::TEXT,
+         al.details -> 'new' ->> 'students_id',
+         al.details -> 'old' ->> 'students_id',
+         al.details -> 'changes' ->> 'students_id',
+         al.details -> 'previous' ->> 'students_id'
+       )
     `;
 
     const conditions: string[] = [];
@@ -120,6 +155,8 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     if (search) {
       conditions.push(`(
         COALESCE(actor_by_id.full_name, actor_by_carnet.full_name) ILIKE $${paramIdx} OR
+        COALESCE(al.details ->> 'target_name', target_student.full_name) ILIKE $${paramIdx} OR
+        COALESCE(al.details ->> 'target_carnet', target_student.carnet) ILIKE $${paramIdx} OR
         al.actor_carnet ILIKE $${paramIdx} OR
         al.resource_id::TEXT ILIKE $${paramIdx} OR
         al.details::TEXT ILIKE $${paramIdx}
@@ -139,7 +176,9 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     const dataResult = await pool.query(
       `SELECT
          al.*,
-         COALESCE(actor_by_id.full_name, actor_by_carnet.full_name) AS actor_name
+         COALESCE(actor_by_id.full_name, actor_by_carnet.full_name) AS actor_name,
+         COALESCE(al.details ->> 'target_name', target_student.full_name) AS target_name,
+         COALESCE(al.details ->> 'target_carnet', target_student.carnet) AS target_carnet
        ${fromClause}
        ${where}
        ORDER BY al.created_at DESC

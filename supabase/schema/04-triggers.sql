@@ -32,6 +32,8 @@ DECLARE
   v_details     JSONB;
   v_old         JSONB;
   v_new         JSONB;
+  v_target_name TEXT;
+  v_target_carnet TEXT;
 BEGIN
   -- Skip individual student logs during bulk import
   IF TG_ARGV[0] = 'student' AND _audit_get('app.bulk_import') = 'true' THEN
@@ -84,6 +86,20 @@ BEGIN
       SELECT jsonb_object_agg(key, v_old -> key)
       FROM jsonb_each(v_details)
     ));
+  END IF;
+
+  IF TG_ARGV[0] = 'admin' THEN
+    SELECT s.full_name, s.carnet
+    INTO v_target_name, v_target_carnet
+    FROM students s
+    WHERE s.id::TEXT = v_resource ->> 'students_id';
+
+    v_details := COALESCE(v_details, '{}'::jsonb) || jsonb_strip_nulls(
+      jsonb_build_object(
+        'target_name', v_target_name,
+        'target_carnet', v_target_carnet
+      )
+    );
   END IF;
 
   INSERT INTO audit_logs (actor_id, actor_carnet, action, resource_type, resource_id, details, ip_address)
