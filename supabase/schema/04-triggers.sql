@@ -32,6 +32,7 @@ DECLARE
   v_details     JSONB;
   v_old         JSONB;
   v_new         JSONB;
+  v_tag_name    TEXT;
   v_target_name TEXT;
   v_target_carnet TEXT;
 BEGIN
@@ -96,6 +97,52 @@ BEGIN
 
     v_details := COALESCE(v_details, '{}'::jsonb) || jsonb_strip_nulls(
       jsonb_build_object(
+        'target_name', v_target_name,
+        'target_carnet', v_target_carnet
+      )
+    );
+  END IF;
+
+  IF TG_ARGV[0] = 'tag_member' THEN
+    SELECT t.name
+    INTO v_tag_name
+    FROM tags t
+    WHERE t.id::TEXT = v_resource ->> 'tag_id';
+
+    SELECT s.full_name, s.carnet
+    INTO v_target_name, v_target_carnet
+    FROM students s
+    WHERE s.id::TEXT = v_resource ->> 'student_id';
+
+    IF TG_OP = 'INSERT' THEN
+      v_details := jsonb_set(
+        COALESCE(v_details, '{}'::jsonb),
+        '{new}',
+        COALESCE(v_details -> 'new', '{}'::jsonb) || jsonb_strip_nulls(
+          jsonb_build_object(
+            'tag_name', v_tag_name,
+            'student_name', v_target_name,
+            'student_carnet', v_target_carnet
+          )
+        )
+      );
+    ELSIF TG_OP = 'DELETE' THEN
+      v_details := jsonb_set(
+        COALESCE(v_details, '{}'::jsonb),
+        '{old}',
+        COALESCE(v_details -> 'old', '{}'::jsonb) || jsonb_strip_nulls(
+          jsonb_build_object(
+            'tag_name', v_tag_name,
+            'student_name', v_target_name,
+            'student_carnet', v_target_carnet
+          )
+        )
+      );
+    END IF;
+
+    v_details := COALESCE(v_details, '{}'::jsonb) || jsonb_strip_nulls(
+      jsonb_build_object(
+        'tag_name', v_tag_name,
         'target_name', v_target_name,
         'target_carnet', v_target_carnet
       )
