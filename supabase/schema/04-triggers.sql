@@ -45,6 +45,10 @@ BEGIN
     RETURN NEW;
   END IF;
 
+  IF TG_ARGV[0] = 'tag_member' AND _audit_get('app.compound_tag_mode') = 'true' THEN
+    IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
+  END IF;
+
   -- Accion
   v_action := TG_ARGV[0] || '.' || lower(TG_OP);
 

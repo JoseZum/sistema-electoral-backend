@@ -137,6 +137,8 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     const params: unknown[] = [];
     let paramIdx = 1;
 
+    conditions.push(`al.resource_type <> 'tag_member'`);
+
     if (resourceType) {
       conditions.push(`al.resource_type = $${paramIdx++}`);
       params.push(resourceType);
@@ -214,6 +216,7 @@ router.get('/stats', async (_req: Request, res: Response, next: NextFunction) =>
         count(*) as count,
         max(created_at) as last_activity
       FROM audit_logs
+      WHERE resource_type <> 'tag_member'
       GROUP BY resource_type
       ORDER BY count DESC
     `);

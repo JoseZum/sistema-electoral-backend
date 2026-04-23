@@ -33,6 +33,10 @@ async function withOptionalAudit<T>(
   }
 }
 
+async function setAuditSessionValue(client: PoolClient, key: string, value: string) {
+  await client.query('SELECT set_config($1, $2, true)', [key, value]);
+}
+
 function normalizeTagName(name: string): string {
   return name.trim().replace(/\s+/g, ' ');
 }
@@ -70,6 +74,49 @@ async function validateStudentIds(studentIds: string[], client?: PoolClient): Pr
   return validStudentIds;
 }
 
+function buildTagCreationAuditSummary(detail: TagDetail) {
+  return {
+    member_count: detail.members.length,
+    members_summary: detail.members
+      .map((member) => `${member.full_name} - ${member.carnet}`)
+      .join(', '),
+    members: detail.members.map((member) => ({
+      id: member.id,
+      full_name: member.full_name,
+      carnet: member.carnet,
+      sede: member.sede,
+      career: member.career,
+    })),
+  };
+}
+
+async function enrichTagCreationAudit(
+  client: PoolClient,
+  tagId: string,
+  summary: Record<string, unknown>
+) {
+  await client.query(
+    `WITH target AS (
+       SELECT id
+       FROM audit_logs
+       WHERE action = 'tag.insert'
+         AND resource_type = 'tag'
+         AND resource_id = $1
+       ORDER BY created_at DESC
+       LIMIT 1
+     )
+     UPDATE audit_logs al
+     SET details = jsonb_set(
+       COALESCE(al.details, '{}'::jsonb),
+       '{new}',
+       COALESCE(al.details -> 'new', '{}'::jsonb) || $2::jsonb
+     )
+     FROM target
+     WHERE al.id = target.id`,
+    [tagId, JSON.stringify(summary)]
+  );
+}
+
 export async function getTags(): Promise<Awaited<ReturnType<typeof tagRepo.findAllTags>>> {
   return tagRepo.findAllTags();
 }
@@ -96,6 +143,10 @@ export async function createTag(data: CreateTagDto, actor?: AuditActor): Promise
   }
 
   return withOptionalAudit(actor, async (client) => {
+    if (!client) {
+      throw new Error('No se pudo iniciar la transaccion de creacion');
+    }
+
     const existing = await tagRepo.findTagByName(name, client);
     if (existing) {
       throw new Error('Se necesita un nombre unico para la tag');
@@ -103,12 +154,15 @@ export async function createTag(data: CreateTagDto, actor?: AuditActor): Promise
 
     const validStudentIds = await validateStudentIds(studentIds, client);
     const tag = await tagRepo.insertTag({ name, description: data.description || null, color }, actor?.id, client);
+    await setAuditSessionValue(client, 'app.compound_tag_mode', 'true');
     await tagRepo.replaceTagMembers(tag.id, validStudentIds, client);
     const detail = await tagRepo.getTagDetail(tag.id, client);
 
     if (!detail) {
       throw new Error('Tag no encontrada');
     }
+
+    await enrichTagCreationAudit(client, tag.id, buildTagCreationAuditSummary(detail));
 
     return detail;
   });
@@ -124,6 +178,10 @@ export async function updateTag(id: string, data: UpdateTagDto, actor?: AuditAct
   }
 
   return withOptionalAudit(actor, async (client) => {
+    if (!client) {
+      throw new Error('No se pudo iniciar la transaccion de actualizacion');
+    }
+
     const current = await tagRepo.findTagById(id, client);
     if (!current) {
       throw new Error('Tag no encontrada');
@@ -147,6 +205,7 @@ export async function updateTag(id: string, data: UpdateTagDto, actor?: AuditAct
     }, client);
 
     if (nextStudentIds !== undefined) {
+      await setAuditSessionValue(client, 'app.compound_tag_mode', 'true');
       await tagRepo.replaceTagMembers(id, nextStudentIds, client);
     }
 
@@ -161,6 +220,11 @@ export async function updateTag(id: string, data: UpdateTagDto, actor?: AuditAct
 
 export async function deleteTag(id: string, actor?: AuditActor): Promise<{ success: true }> {
   return withOptionalAudit(actor, async (client) => {
+    if (!client) {
+      throw new Error('No se pudo iniciar la transaccion de eliminacion');
+    }
+
+    await setAuditSessionValue(client, 'app.compound_tag_mode', 'true');
     const deleted = await tagRepo.deleteTag(id, client);
     if (!deleted) {
       throw new Error('Tag no encontrada');
