@@ -58,7 +58,7 @@ export interface CreateElectionDto {
   description?: string;
   is_anonymous: boolean;
   auth_method?: Election['auth_method'];
-  status?: Election['status'];
+  status?: Election['status'] | 'AUTO';
   voter_source: Election['voter_source'];
   voter_filter?: Record<string, unknown>;
   tag_id?: string | null;
@@ -66,6 +66,11 @@ export interface CreateElectionDto {
   immediate_minutes?: number | null;
   start_time?: string | null;
   end_time?: string | null;
+}
+
+export interface CreateElectionRequestDto extends CreateElectionDto {
+  options?: CreateOptionDto[];
+  populate?: PopulateVotersDto;
 }
 
 export interface UpdateElectionDto {

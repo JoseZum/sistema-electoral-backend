@@ -41,6 +41,10 @@ BEGIN
     IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
   END IF;
 
+  IF TG_ARGV[0] = 'election_option' AND TG_OP = 'INSERT' AND _audit_get('app.compound_election_mode') = 'true' THEN
+    RETURN NEW;
+  END IF;
+
   -- Accion
   v_action := TG_ARGV[0] || '.' || lower(TG_OP);
 

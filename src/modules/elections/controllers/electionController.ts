@@ -24,7 +24,11 @@ export async function getElectionById(req: Request<IdParam>, res: Response, next
 
 export async function createElection(req: Request, res: Response, next: NextFunction) {
   try {
-    const election = await electionService.createElection(req.body, req.user?.studentId);
+    const election = await electionService.createElection(req.body, {
+      id: req.user?.studentId,
+      carnet: req.user?.carnet,
+      ip: req.ip || req.headers['x-forwarded-for'] as string || req.socket.remoteAddress,
+    });
     res.status(201).json(election);
   } catch (error) {
     next(error);

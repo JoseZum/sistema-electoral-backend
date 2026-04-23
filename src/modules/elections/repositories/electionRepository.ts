@@ -134,9 +134,13 @@ export async function findElectionWithStats(id: string): Promise<ElectionWithSta
   return result.rows[0] || null;
 }
 
-export async function createElection(data: CreateElectionDto, createdBy?: string): Promise<Election> {
+export async function createElection(
+  data: CreateElectionDto,
+  createdBy?: string,
+  db: Queryable = pool
+): Promise<Election> {
   const status = data.status || 'DRAFT';
-  const result = await pool.query<Election>(
+  const result = await db.query<Election>(
     `INSERT INTO elections (title, description, status, is_anonymous, auth_method, voter_source, voter_filter, tag_id, starts_immediately, immediate_minutes, start_time, end_time, created_by)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
      RETURNING *`,
@@ -212,9 +216,13 @@ export async function findOptionsByElection(electionId: string): Promise<Electio
   return result.rows;
 }
 
-export async function createOption(electionId: string, data: CreateOptionDto): Promise<ElectionOption> {
+export async function createOption(
+  electionId: string,
+  data: CreateOptionDto,
+  db: Queryable = pool
+): Promise<ElectionOption> {
   const metadata = withOptionMetadata(data.description, data.metadata);
-  const result = await pool.query<ElectionOption>(
+  const result = await db.query<ElectionOption>(
     `INSERT INTO election_options (election_id, label, option_type, display_order, metadata)
      VALUES ($1, $2, $3, $4, $5)
      RETURNING *`,
@@ -262,7 +270,8 @@ export async function deleteOption(electionId: string, optionId: string): Promis
 
 export async function populateVotersFromPadron(
   electionId: string,
-  filters?: { sede?: string; career?: string }
+  filters?: { sede?: string; career?: string },
+  db: Queryable = pool
 ): Promise<number> {
   const conditions: string[] = ['is_active = true'];
   const params: unknown[] = [electionId];
@@ -279,7 +288,7 @@ export async function populateVotersFromPadron(
 
   const where = conditions.join(' AND ');
 
-  const result = await pool.query(
+  const result = await db.query(
     `INSERT INTO election_voters (election_id, student_id)
      SELECT $1, id FROM students WHERE ${where}
      ON CONFLICT (election_id, student_id) DO NOTHING`,
@@ -290,9 +299,10 @@ export async function populateVotersFromPadron(
 
 export async function populateVotersFromTag(
   electionId: string,
-  tagId: string
+  tagId: string,
+  db: Queryable = pool
 ): Promise<number> {
-  const result = await pool.query(
+  const result = await db.query(
     `INSERT INTO election_voters (election_id, student_id)
      SELECT $1, s.id
      FROM tag_members tm
@@ -307,12 +317,13 @@ export async function populateVotersFromTag(
 
 export async function populateVotersManual(
   electionId: string,
-  studentIds: string[]
+  studentIds: string[],
+  db: Queryable = pool
 ): Promise<number> {
   if (studentIds.length === 0) return 0;
 
   const values = studentIds.map((_, i) => `($1, $${i + 2})`).join(', ');
-  const result = await pool.query(
+  const result = await db.query(
     `INSERT INTO election_voters (election_id, student_id)
      VALUES ${values}
      ON CONFLICT (election_id, student_id) DO NOTHING`,
@@ -336,8 +347,8 @@ export async function getVoterCount(electionId: string): Promise<{ total: number
   };
 }
 
-export async function clearVoters(electionId: string): Promise<void> {
-  await pool.query(
+export async function clearVoters(electionId: string, db: Queryable = pool): Promise<void> {
+  await db.query(
     'DELETE FROM election_voters WHERE election_id = $1',
     [electionId]
   );
