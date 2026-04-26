@@ -8,8 +8,8 @@ export interface AuditActor {
 }
 
 /**
- * Runs a callback inside a transaction with audit session variables set.
- * All triggers that fire within this transaction will pick up the actor info.
+ * Ejecuta un callback dentro de una transacción con variables de sesión de auditoría definidas.
+ * Todos los triggers que se disparen dentro de esta transacción tomarán la información del actor.
  */
 export async function withAuditContext<T>(
   actor: AuditActor,
