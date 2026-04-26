@@ -9,7 +9,7 @@
 --   SET LOCAL app.actor_id = '<uuid>';
 --   SET LOCAL app.actor_carnet = '<carnet>';
 --   SET LOCAL app.client_ip = '<ip>';
--- ============================================
+-- ========================================================
 
 -- Helper: lee variables de sesion sin error si no existen
 CREATE OR REPLACE FUNCTION _audit_get(key TEXT) RETURNS TEXT AS $$
