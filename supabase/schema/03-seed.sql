@@ -1,6 +1,5 @@
 -- ============================================================
--- 03-seed.sql
--- Datos de prueba para desarrollo local
+-- SCRIPT 03: Datos de prueba y primeros administradores 
 --
 -- Objetivo:
 -- 1) Reiniciar datos transaccionales de votacion.
@@ -9,10 +8,11 @@
 --    - Una no anonima (voto vinculado a student_id).
 --    - Una anonima (voto con token_hash, sin student_id).
 --
--- Nota:
+-- Comentarios:
 -- Este script esta orientado a pruebas y demo; no usar como referencia
--- de datos reales de produccion.
--- ============================================================
+-- de datos reales de produccion. En producción, este script se usará para
+-- crear un primer administrador, pero no para cargar datos de votacion.
+-- =============================================================
 
 -- ============================================================
 -- LIMPIEZA DE DATOS TRANSACCIONALES
