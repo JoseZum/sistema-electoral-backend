@@ -1,3 +1,19 @@
+/**
+ * Middleware global de manejo de errores para Express.
+ *
+ * Que hace este modulo:
+ * - Detecta errores conocidos (JWT, JSON invalido y conexion/auth de BD).
+ * - Normaliza cualquier error al formato AppError.
+ * - Registra en consola contexto util para diagnostico.
+ * - Devuelve una respuesta HTTP consistente con code y mensaje.
+ *
+ * Flujo general:
+ * 1) normalizeError transforma el error crudo en AppError.
+ * 2) errorHandler escribe un log estructurado del incidente.
+ * 3) Se responde al cliente con status/code estandarizados.
+ * 4) En desarrollo, incluye details cuando existe informacion adicional.
+ */
+
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { AppError, isAppError } from '../errors/appError';
