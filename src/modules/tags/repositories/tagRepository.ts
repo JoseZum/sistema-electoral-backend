@@ -63,6 +63,17 @@ export async function findTagMembers(tagId: string, db: Queryable = pool): Promi
   return result.rows;
 }
 
+export async function findTagMemberIds(tagId: string, db: Queryable = pool): Promise<string[]> {
+  const result = await db.query<{ student_id: string }>(
+    `SELECT student_id::text AS student_id
+     FROM tag_members
+     WHERE tag_id = $1`,
+    [tagId]
+  );
+
+  return result.rows.map((row) => row.student_id);
+}
+
 export async function findActiveStudentIdsByIds(studentIds: string[], db: Queryable = pool): Promise<string[]> {
   if (studentIds.length === 0) {
     return [];
@@ -139,6 +150,39 @@ export async function replaceTagMembers(
     `INSERT INTO tag_members (tag_id, student_id)
      SELECT * FROM unnest($1::uuid[], $2::uuid[])`,
     [tagIds, studentIds]
+  );
+}
+
+export async function addTagMembers(
+  tagId: string,
+  studentIds: string[],
+  db: Queryable = pool
+): Promise<void> {
+  if (studentIds.length === 0) {
+    return;
+  }
+
+  const tagIds = studentIds.map(() => tagId);
+  await db.query(
+    `INSERT INTO tag_members (tag_id, student_id)
+     SELECT * FROM unnest($1::uuid[], $2::uuid[])
+     ON CONFLICT (tag_id, student_id) DO NOTHING`,
+    [tagIds, studentIds]
+  );
+}
+
+export async function deleteTagMembers(
+  tagId: string,
+  studentIds: string[],
+  db: Queryable = pool
+): Promise<void> {
+  if (studentIds.length === 0) {
+    return;
+  }
+
+  await db.query(
+    'DELETE FROM tag_members WHERE tag_id = $1 AND student_id = ANY($2::uuid[])',
+    [tagId, studentIds]
   );
 }
 

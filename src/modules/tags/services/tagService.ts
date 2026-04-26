@@ -41,6 +41,16 @@ function normalizeTagName(name: string): string {
   return name.trim().replace(/\s+/g, ' ');
 }
 
+function diffStudentIds(currentIds: string[], nextIds: string[]) {
+  const currentSet = new Set(currentIds);
+  const nextSet = new Set(nextIds);
+
+  return {
+    toAdd: nextIds.filter((studentId) => !currentSet.has(studentId)),
+    toRemove: currentIds.filter((studentId) => !nextSet.has(studentId)),
+  };
+}
+
 function normalizeStudentIds(studentIds: string[]): string[] {
   return Array.from(new Set(studentIds.map((studentId) => studentId.trim()).filter(Boolean)));
 }
@@ -205,8 +215,11 @@ export async function updateTag(id: string, data: UpdateTagDto, actor?: AuditAct
     }, client);
 
     if (nextStudentIds !== undefined) {
-      await setAuditSessionValue(client, 'app.compound_tag_mode', 'true');
-      await tagRepo.replaceTagMembers(id, nextStudentIds, client);
+      const currentMemberIds = await tagRepo.findTagMemberIds(id, client);
+      const { toAdd, toRemove } = diffStudentIds(currentMemberIds, nextStudentIds);
+
+      await tagRepo.deleteTagMembers(id, toRemove, client);
+      await tagRepo.addTagMembers(id, toAdd, client);
     }
 
     const detail = await tagRepo.getTagDetail(id, client);

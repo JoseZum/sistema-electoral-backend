@@ -63,10 +63,68 @@ function asObjectRecord(value: unknown): Record<string, unknown> | null {
   return { ...(value as Record<string, unknown>) };
 }
 
+function firstNonEmptyString(...values: Array<unknown>): string | null {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function getTagNameFromDetails(details: Record<string, unknown> | null): string | null {
+  const newRow = asObjectRecord(details?.new);
+  const oldRow = asObjectRecord(details?.old);
+  const changes = asObjectRecord(details?.changes);
+  const previous = asObjectRecord(details?.previous);
+
+  return firstNonEmptyString(
+    newRow?.name,
+    oldRow?.name,
+    changes?.name,
+    previous?.name,
+    details?.tag_name,
+    details?.target_name,
+  );
+}
+
+function formatPersonReference(name: string | null, carnet: string | null): string | null {
+  if (name && carnet) {
+    return `${name} · ${carnet}`;
+  }
+
+  return name || carnet;
+}
+
 function buildActivityMessage(row: Record<string, unknown>): string {
   const actionLabel = formatActionLabel((row.action as string | null) ?? null);
   const resourceLabel = formatResourceLabel((row.resource_type as string | null) ?? null);
   const resourceId = (row.resource_id as string | null) ?? null;
+  const details = asObjectRecord(row.details);
+  const targetName = firstNonEmptyString(row.target_name);
+  const targetCarnet = firstNonEmptyString(row.target_carnet);
+  const tagName = firstNonEmptyString(row.tag_name) ?? getTagNameFromDetails(details);
+
+  if (row.resource_type === 'tag') {
+    const resolvedTagName = tagName ?? targetName;
+    if (resolvedTagName) {
+      return `${actionLabel} "${resolvedTagName}"`;
+    }
+  }
+
+  if (row.resource_type === 'tag_member') {
+    const resolvedTagName = tagName;
+    const personLabel = formatPersonReference(targetName, targetCarnet);
+
+    if (resolvedTagName && personLabel) {
+      return `${actionLabel} en tag "${resolvedTagName}": ${personLabel}`;
+    }
+
+    if (resolvedTagName) {
+      return `${actionLabel} en tag "${resolvedTagName}"`;
+    }
+  }
 
   if (resourceId) {
     return `${actionLabel} en ${resourceLabel} ${resourceId}`;
@@ -81,9 +139,28 @@ function withDisplayFields(row: Record<string, unknown>): Record<string, unknown
   const details = asObjectRecord(row.details);
   const targetName = (row.target_name as string | null | undefined) ?? null;
   const targetCarnet = (row.target_carnet as string | null | undefined) ?? null;
+  const tagName = firstNonEmptyString(row.tag_name) ?? getTagNameFromDetails(details);
   const enrichedDetails = details ? { ...details } : {};
 
   if (resourceType === 'admin') {
+    if (targetName && enrichedDetails.target_name === undefined) {
+      enrichedDetails.target_name = targetName;
+    }
+
+    if (targetCarnet && enrichedDetails.target_carnet === undefined) {
+      enrichedDetails.target_carnet = targetCarnet;
+    }
+  }
+
+  if ((resourceType === 'tag' || resourceType === 'tag_member') && tagName && enrichedDetails.tag_name === undefined) {
+    enrichedDetails.tag_name = tagName;
+  }
+
+  if (resourceType === 'tag' && targetName && enrichedDetails.target_name === undefined) {
+    enrichedDetails.target_name = targetName;
+  }
+
+  if (resourceType === 'tag_member') {
     if (targetName && enrichedDetails.target_name === undefined) {
       enrichedDetails.target_name = targetName;
     }
@@ -119,6 +196,12 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
       LEFT JOIN students actor_by_carnet
         ON actor_by_id.id IS NULL
        AND actor_by_carnet.carnet = al.actor_carnet
+      LEFT JOIN tags target_tag
+        ON al.resource_type = 'tag'
+       AND target_tag.id::TEXT = al.resource_id
+      LEFT JOIN tags target_tag_member
+        ON al.resource_type = 'tag_member'
+       AND target_tag_member.id::TEXT = split_part(al.resource_id, ':', 1)
       LEFT JOIN admins target_admin
         ON al.resource_type = 'admin'
        AND target_admin.id::TEXT = al.resource_id
@@ -131,13 +214,14 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
          al.details -> 'changes' ->> 'students_id',
          al.details -> 'previous' ->> 'students_id'
        )
+      LEFT JOIN students target_tag_member_student
+        ON al.resource_type = 'tag_member'
+       AND target_tag_member_student.id::TEXT = split_part(al.resource_id, ':', 2)
     `;
 
     const conditions: string[] = [];
     const params: unknown[] = [];
     let paramIdx = 1;
-
-    conditions.push(`al.resource_type <> 'tag_member'`);
 
     if (resourceType) {
       conditions.push(`al.resource_type = $${paramIdx++}`);
@@ -164,8 +248,22 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     if (search) {
       conditions.push(`(
         COALESCE(actor_by_id.full_name, actor_by_carnet.full_name) ILIKE $${paramIdx} OR
-        COALESCE(al.details ->> 'target_name', target_student.full_name) ILIKE $${paramIdx} OR
-        COALESCE(al.details ->> 'target_carnet', target_student.carnet) ILIKE $${paramIdx} OR
+        COALESCE(
+          al.details ->> 'target_name',
+          target_student.full_name,
+          target_tag_member_student.full_name,
+          target_tag.name
+        ) ILIKE $${paramIdx} OR
+        COALESCE(
+          al.details ->> 'target_carnet',
+          target_student.carnet,
+          target_tag_member_student.carnet
+        ) ILIKE $${paramIdx} OR
+        COALESCE(
+          al.details ->> 'tag_name',
+          target_tag.name,
+          target_tag_member.name
+        ) ILIKE $${paramIdx} OR
         al.actor_carnet ILIKE $${paramIdx} OR
         al.resource_id::TEXT ILIKE $${paramIdx} OR
         al.details::TEXT ILIKE $${paramIdx}
@@ -186,8 +284,22 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
       `SELECT
          al.*,
          COALESCE(actor_by_id.full_name, actor_by_carnet.full_name) AS actor_name,
-         COALESCE(al.details ->> 'target_name', target_student.full_name) AS target_name,
-         COALESCE(al.details ->> 'target_carnet', target_student.carnet) AS target_carnet
+         COALESCE(
+           al.details ->> 'target_name',
+           target_student.full_name,
+           target_tag_member_student.full_name,
+           target_tag.name
+         ) AS target_name,
+         COALESCE(
+           al.details ->> 'target_carnet',
+           target_student.carnet,
+           target_tag_member_student.carnet
+         ) AS target_carnet,
+         COALESCE(
+           al.details ->> 'tag_name',
+           target_tag.name,
+           target_tag_member.name
+         ) AS tag_name
        ${fromClause}
        ${where}
        ORDER BY al.created_at DESC
@@ -216,7 +328,6 @@ router.get('/stats', async (_req: Request, res: Response, next: NextFunction) =>
         count(*) as count,
         max(created_at) as last_activity
       FROM audit_logs
-      WHERE resource_type <> 'tag_member'
       GROUP BY resource_type
       ORDER BY count DESC
     `);
