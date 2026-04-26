@@ -1,4 +1,4 @@
--- ============================================
+-- ========================================================
 -- SCRIPT 04: AUDIT LOG TRIGGERS
 --
 -- Toda accion relevante se registra automaticamente
