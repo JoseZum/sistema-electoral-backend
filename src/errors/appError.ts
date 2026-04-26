@@ -1,3 +1,17 @@
+/**
+ * Este modulo centraliza el manejo de errores de aplicacion.
+ *
+ * Que define:
+ * - AppErrorOptions: contrato para construir errores con metadatos.
+ * - AppError: error tipado con status HTTP, codigo interno y detalles opcionales.
+ * - isAppError: type guard para validar si un error es AppError.
+ *
+ * Como funciona:
+ * 1) Se crea una instancia de AppError con status, code y message.
+ * 2) Opcionalmente se adjuntan details y cause para depuracion.
+ * 3) En capas superiores (middleware/controladores), isAppError permite
+ *    distinguir errores esperados de errores no controlados.
+ */
 export interface AppErrorOptions {
   status: number;
   code: string;
