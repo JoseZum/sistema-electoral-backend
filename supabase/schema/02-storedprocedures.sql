@@ -12,7 +12,7 @@
 -- ===================================================================
 
 -- ------------------------------------------------------------
--- 1) Registrar voto anonimo por token
+-- 1) Registrar voto anonimo por token de votacion
 -- ------------------------------------------------------------
 CREATE OR REPLACE FUNCTION fn_cast_vote_anonymous(
     p_election_id UUID,
