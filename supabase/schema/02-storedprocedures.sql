@@ -1,14 +1,14 @@
 -- ============================================================
--- STORED PROCEDURES DE VOTACION Y GESTION DE PADRON
+-- SCRIPT 02: STORED PROCEDURES DE VOTACION Y GESTION DE PADRON
 --
 -- Contenido:
 -- 1) fn_cast_vote_anonymous: registra voto anonimo usando token.
 -- 2) fn_cast_vote_named: registra voto no anonimo con student_id.
 -- 3) fn_import_students: importa padron con diff completo.
 --
--- Nota:
+-- Comentarios:
 -- Estas funciones aplican validaciones de integridad y actualizan el
--- estado de participacion en election_voters.
+-- estado de participacion en election_voters como SPs.
 -- ============================================================
 
 -- ------------------------------------------------------------
