@@ -1,16 +1,12 @@
 import { pool } from "../../../config/database";
 import { Pool, PoolClient } from 'pg';
-import { findElectionById } from "../../elections/repositories/electionRepository";
 import { AssingMembersDTO, submitKeyDTO, scrutinykeys } from "../models/scrutiny.types";
 import { Election } from "../../elections/models/electionModel";
 
-type Queyable = Pool | PoolClient;
+type Queryable = Pool | PoolClient;
 
-export async function getScrutinyProgress(election_id:string) {
-    const election = await findElectionById(election_id)
-    if (!election) return null;
-
-    const statsScrutinyResult = await pool.query<{
+export async function getScrutinyProgress(election_id:string, db: Queryable = pool) {
+    const statsScrutinyResult = await db.query<{
         total_members: string; 
         submitted_key: string 
         pending: string;
@@ -25,7 +21,13 @@ export async function getScrutinyProgress(election_id:string) {
         GROUP BY sk.election_id;
         `, [election_id]);
     const row = statsScrutinyResult.rows[0];
-    if (!row) return null;
+    if (!row) {
+        return {
+            total_Members: 0,
+            submittedKeys: 0,
+            pending: 0
+        };
+    }
 
     return {
         total_Members: parseInt(row.total_members),
@@ -41,6 +43,7 @@ export async function getStateKeys(election_id: string) {
         carnet: string;
         email: string;
         date: Date;
+        has_submitted: boolean;
     }>(`
     SELECT 
         s.id,
@@ -62,7 +65,6 @@ export async function getStateKeys(election_id: string) {
 export async function addMembersElection(electionId: string, data: AssingMembersDTO, keysHash?: string[], cretedBy?: string) {
     const memberIds = data.students_id;
     const keyHashes = keysHash;
-    let result;
     if (!memberIds || memberIds.length === 0) {
         throw new Error('students_id es obligatorio y no puede estar vacío.');
     }
@@ -91,17 +93,21 @@ export async function addMembersElection(electionId: string, data: AssingMembers
         const query = `
             INSERT INTO scrutiny_keys (election_id, member_id, key_shard, has_submitted)
             VALUES ${values.join(', ')}
+            ON CONFLICT (election_id, member_id)
+            DO UPDATE SET
+                key_shard = EXCLUDED.key_shard,
+                has_submitted = false,
+                submitted_at = null
         `;
-        const results = await cliente.query(query, params);
-         await cliente.query('COMMIT');
-         result = "result";
+        await cliente.query(query, params);
+        await cliente.query('COMMIT');
+        return true;
     } catch (error) {
         await cliente.query('ROLLBACK');
-        throw new Error("Problemas al realizar bulk insert $1");
+        throw new Error("Problemas al guardar las llaves de escrutinio");
 
     } finally{
         cliente.release();
-        return true;
     }
     
 }
@@ -112,6 +118,7 @@ export async function checkKey(data:submitKeyDTO, keyHash: string ): Promise<boo
         WHERE s.election_id = $1 
         AND s.member_id = $2 
         AND s.key_shard = $3
+        AND s.has_submitted = false
         ) AS exists `, 
          [data.election_id, data.member_id, keyHash]);
     return result.rows[0]?.exists ?? false;
@@ -142,7 +149,7 @@ export async function checkDuplicate(data: string[], electionId: string): Promis
 export async function submitKeys(data: submitKeyDTO): Promise<scrutinykeys | null>{
     const result = await pool.query<scrutinykeys>(`
         UPDATE scrutiny_Keys SET has_submitted = true, submitted_at = now() 
-        WHERE election_id = $1 and member_id = $2 RETURNING *
+        WHERE election_id = $1 and member_id = $2 and has_submitted = false RETURNING *
         `, [data.election_id, data.member_id]);
     
         return result.rows[0] || null;
@@ -153,24 +160,44 @@ export async function finalizeScrutine(electionId:string, finalizedBy?:string): 
     try {
         await client.query('BEGIN');
 
-        const election = await findElectionById(electionId);
-        if (!election) throw new Error("Elección encontrada");
+        const electionResult = await client.query<Election>(
+            'SELECT * FROM elections WHERE id = $1 FOR UPDATE',
+            [electionId]
+        );
+        const election = electionResult.rows[0];
+        if (!election) throw new Error('Eleccion no encontrada');
         if(election.status === 'SCRUTINIZED') throw new Error('La elección ya esta finalizada');
+        if(election.status !== 'CLOSED') throw new Error('Solo se puede finalizar el escrutinio de elecciones cerradas');
 
-        const progress = await getScrutinyProgress(electionId);
+        const progress = await getScrutinyProgress(electionId, client);
 
-        if(!progress || (election.requires_keys && election.min_keys > progress.submittedKeys)){
-            throw new Error('No se han agregado las llaves necesarias para finalizar el escrutinio');
+        if(election.requires_keys && election.min_keys > progress.submittedKeys){
+            throw new Error('No se han entregado las llaves necesarias para finalizar el escrutinio');
         }
 
         const update = await client.query<Election>(
-            'UPDATE elections SET status = $1 WHERE id = $2 RETURNING *',
+            `UPDATE elections
+             SET status = $1,
+                 scrutinized_at = COALESCE(scrutinized_at, now())
+             WHERE id = $2
+             RETURNING *`,
             ['SCRUTINIZED', electionId]
         );
 
         await client.query(
-            'INSERT INTO audit_logs (action, entity_type, entity_id, user_id, details, created_at) VALUES ($1, $2, $3, $4, $5, NOW())',
-            ['FINALIZE_SCRUTINY', 'election', electionId, finalizedBy, 'Elección Finalizada luego de validar las llaves']
+            `INSERT INTO audit_logs (actor_id, action, resource_type, resource_id, details, created_at)
+             VALUES ($1, $2, $3, $4, $5::jsonb, NOW())`,
+            [
+                finalizedBy || null,
+                'scrutiny.finalize',
+                'election',
+                electionId,
+                JSON.stringify({
+                    requires_keys: election.requires_keys,
+                    required_keys: election.requires_keys ? election.min_keys : 0,
+                    submitted_keys: progress.submittedKeys
+                })
+            ]
         );
 
         await client.query('COMMIT');
@@ -179,7 +206,7 @@ export async function finalizeScrutine(electionId:string, finalizedBy?:string): 
     
     } catch(error){
         await client.query('ROLLBACK');
-        throw new Error("Error al finalizar la eleccion")
+        throw error;
     } finally{ 
         client.release();
     }

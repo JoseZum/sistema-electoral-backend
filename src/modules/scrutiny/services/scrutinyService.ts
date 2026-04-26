@@ -54,7 +54,7 @@ export async function getOperativeStateElection(electionId: string) {
     const progresElection = await scrutinyRepository.getScrutinyProgress(electionId);
     if (!progresElection) throw new Error('No se pudiero obtener el progreso de la elección');
     const pendingStudents = await scrutinyRepository.getStateKeys(electionId);
-    if (!progresElection) throw new Error('No se pudiero obtener las keys Faltantes');
+    const canFinalize = !election.requires_keys || progresElection.submittedKeys >= election.min_keys;
     return {
         electionInfo: {
             id: election.id,
@@ -67,7 +67,7 @@ export async function getOperativeStateElection(electionId: string) {
             total_Members: progresElection.total_Members,
             submittedKeys: progresElection.submittedKeys,
             membersPending: pendingStudents,
-            can_finalize: progresElection.submittedKeys >= election.min_keys
+            can_finalize: canFinalize
         },
         general_Metric: {
             total_votes: resultsElection.total_votes,
@@ -78,18 +78,35 @@ export async function getOperativeStateElection(electionId: string) {
     };   
 }
 export async function submitKey(data: submitKeyDTO) {
+    await syncAutomaticStatuses();
+    const election = await findElectionById(data.election_id);
+    if (!election) throw new Error('Eleccion no encontrada');
+    if (!election.requires_keys) throw new Error('Esta eleccion no requiere llaves de escrutinio');
+    if (election.status !== 'CLOSED') throw new Error('Solo se pueden canjear llaves cuando la votacion esta cerrada');
     const keyhash = hashkey(data.key_shard);
     const result = await scrutinyRepository.checkKey(data, keyhash);
     if (!result) throw new Error('Key invalida');
     const submitResult = await scrutinyRepository.submitKeys(data);
     if(!submitResult) throw new Error('No se encontro la llave de escrutinio');
-    return result;  
+    const progress = await scrutinyRepository.getScrutinyProgress(data.election_id);
+    let finalized = false;
+    if (progress && progress.submittedKeys >= election.min_keys) {
+        const finalizedElection = await scrutinyRepository.finalizeScrutine(data.election_id, data.member_id);
+        finalized = finalizedElection?.status === 'SCRUTINIZED';
+    }
+    return {
+        submitted: true,
+        finalized
+    };
 };
 
 export async function addMembersElection(electionId: string, data: AssingMembersDTO, cretedBy?: string) {
+    await syncAutomaticStatuses();
+    const election = await findElectionById(electionId);
+    if (!election) throw new Error('Eleccion no encontrada');
+    if (!election.requires_keys) throw new Error('Esta eleccion no requiere llaves de escrutinio');
+    if (election.status !== 'CLOSED') throw new Error('Las llaves de escrutinio se generan cuando la votacion esta cerrada');
     validateStudentID(data);
-    const isDuplicated = await scrutinyRepository.checkDuplicate(data.students_id, electionId);
-    if (isDuplicated) throw new Error('Existen datos duplicados');
     const {keys, keysHash} = generateKeys(data);
     //Falta la idea de enviar la llave por medio de correos a los diferentes miembros
     const result = await scrutinyRepository.addMembersElection(electionId, data, keysHash, cretedBy);
@@ -102,8 +119,11 @@ export async function scrutinyResult(electionId: string) {
     await syncAutomaticStatuses();
     const election = await findElectionById(electionId);
     if (!election) throw new Error('Elección no encontrada');
-    if (election.status == 'SCRUTINIZED') {
-        throw new Error('Los resultados del escrutinio estan disponibles hasta que se marcaron como finalizado')
+    if (election.requires_keys && !['SCRUTINIZED', 'ARCHIVED'].includes(election.status)) {
+        throw new Error('Los resultados del escrutinio estan disponibles hasta que se marque como finalizado')
+    }
+    if (!election.requires_keys && !['CLOSED', 'SCRUTINIZED', 'ARCHIVED'].includes(election.status)) {
+        throw new Error('Los resultados solo estan disponibles despues de cerrar la votacion')
     }
     const resultsElection = await getElectionResults(electionId);
     if (!resultsElection) throw new Error('No se pudieron obtener los resultados');
@@ -118,5 +138,10 @@ export async function scrutinyResult(electionId: string) {
 }
 
 export async function finaleElection(election_id:string, finalizedBy?: string) {
+    await syncAutomaticStatuses();
+    const election = await findElectionById(election_id);
+    if (election?.status === 'SCRUTINIZED') {
+        return election;
+    }
     return await scrutinyRepository.finalizeScrutine(election_id, finalizedBy);
 }

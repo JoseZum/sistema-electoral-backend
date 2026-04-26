@@ -141,8 +141,8 @@ export async function createElection(
 ): Promise<Election> {
   const status = data.status || 'DRAFT';
   const result = await db.query<Election>(
-    `INSERT INTO elections (title, description, status, is_anonymous, auth_method, voter_source, voter_filter, tag_id, starts_immediately, immediate_minutes, start_time, end_time, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+    `INSERT INTO elections (title, description, status, is_anonymous, auth_method, voter_source, voter_filter, tag_id, starts_immediately, immediate_minutes, requires_keys, min_keys, start_time, end_time, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
      RETURNING *`,
     [
       data.title,
@@ -155,6 +155,8 @@ export async function createElection(
       data.tag_id || null,
       data.starts_immediately || false,
       data.immediate_minutes ?? null,
+      data.requires_keys ?? false,
+      data.min_keys ?? 1,
       data.start_time || null,
       data.end_time || null,
       createdBy || null,
@@ -177,7 +179,15 @@ export async function updateElection(id: string, data: UpdateElectionDto, db: Qu
   if (data.tag_id !== undefined) { fields.push(`tag_id = $${idx++}`); params.push(data.tag_id); }
   if (data.starts_immediately !== undefined) { fields.push(`starts_immediately = $${idx++}`); params.push(data.starts_immediately); }
   if (data.immediate_minutes !== undefined) { fields.push(`immediate_minutes = $${idx++}`); params.push(data.immediate_minutes); }
-  if (data.status !== undefined) { fields.push(`status = $${idx++}`); params.push(data.status); }
+  if (data.requires_keys !== undefined) { fields.push(`requires_keys = $${idx++}`); params.push(data.requires_keys); }
+  if (data.min_keys !== undefined) { fields.push(`min_keys = $${idx++}`); params.push(data.min_keys); }
+  if (data.status !== undefined) {
+    fields.push(`status = $${idx++}`);
+    params.push(data.status);
+    if (data.status === 'SCRUTINIZED') {
+      fields.push('scrutinized_at = COALESCE(scrutinized_at, now())');
+    }
+  }
   if (data.start_time !== undefined) { fields.push(`start_time = $${idx++}`); params.push(data.start_time); }
   if (data.end_time !== undefined) { fields.push(`end_time = $${idx++}`); params.push(data.end_time); }
 
@@ -200,7 +210,14 @@ export async function deleteElection(id: string): Promise<boolean> {
 
 export async function updateElectionStatus(id: string, status: Election['status'], db: Queryable = pool): Promise<Election | null> {
   const result = await db.query<Election>(
-    'UPDATE elections SET status = $1 WHERE id = $2 RETURNING *',
+    `UPDATE elections
+     SET status = $1,
+         scrutinized_at = CASE
+           WHEN $1 = 'SCRUTINIZED' THEN COALESCE(scrutinized_at, now())
+           ELSE scrutinized_at
+         END
+     WHERE id = $2
+     RETURNING *`,
     [status, id]
   );
   return result.rows[0] || null;
@@ -345,6 +362,18 @@ export async function getVoterCount(electionId: string): Promise<{ total: number
     total: parseInt(result.rows[0].total, 10),
     voted: parseInt(result.rows[0].voted, 10),
   };
+}
+
+export async function getSubmittedScrutinyKeyCount(electionId: string, db: Queryable = pool): Promise<number> {
+  const result = await db.query<{ submitted_keys: number | string }>(
+    `SELECT COUNT(*)::int AS submitted_keys
+     FROM scrutiny_keys
+     WHERE election_id = $1
+       AND has_submitted = true`,
+    [electionId]
+  );
+
+  return Number(result.rows[0]?.submitted_keys ?? 0);
 }
 
 export async function clearVoters(electionId: string, db: Queryable = pool): Promise<void> {

@@ -64,6 +64,8 @@ export interface CreateElectionDto {
   tag_id?: string | null;
   starts_immediately?: boolean;
   immediate_minutes?: number | null;
+  requires_keys?: boolean;
+  min_keys?: number | null;
   start_time?: string | null;
   end_time?: string | null;
 }
@@ -84,6 +86,8 @@ export interface UpdateElectionDto {
   tag_id?: string | null;
   starts_immediately?: boolean;
   immediate_minutes?: number | null;
+  requires_keys?: boolean;
+  min_keys?: number | null;
   start_time?: string | null;
   end_time?: string | null;
 }

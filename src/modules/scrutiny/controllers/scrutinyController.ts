@@ -31,7 +31,7 @@ export async function submitKey(req:Request, res: Response, next: NextFunction) 
     try {
         const result = await scrutinyService.submitKey({
             election_id: req.params.electionId as string, 
-            member_id: req.body.memberId,
+            member_id: req.user?.studentId || req.body.memberId,
             key_shard: req.body.key
         })
         res.status(201).json(result);

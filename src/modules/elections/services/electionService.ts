@@ -91,6 +91,35 @@ function validateImmediateConfig(startsImmediately?: boolean, immediateMinutes?:
   }
 }
 
+function normalizeScrutinyConfig(data: {
+  requires_keys?: boolean;
+  min_keys?: number | null;
+}): { requiresKeys: boolean; minKeys: number } {
+  const requiresKeys = data.requires_keys ?? false;
+  const minKeys = Number(data.min_keys ?? 1);
+
+  if (typeof requiresKeys !== 'boolean') {
+    throw new Error('La configuracion de llaves de escrutinio no es valida');
+  }
+
+  if (!Number.isInteger(minKeys) || minKeys < 1) {
+    throw new Error('La cantidad de llaves de escrutinio debe ser al menos 1');
+  }
+
+  return { requiresKeys, minKeys };
+}
+
+async function validateScrutinyKeysReady(election: Election) {
+  if (!election.requires_keys) {
+    return;
+  }
+
+  const submittedKeys = await electionRepo.getSubmittedScrutinyKeyCount(election.id);
+  if (submittedKeys < election.min_keys) {
+    throw new Error('No se han entregado las llaves necesarias para finalizar el escrutinio');
+  }
+}
+
 function buildImmediateWindow(minutes: number | null | undefined): { startTime: string; endTime: string } {
   const start = new Date();
   const end = new Date(start.getTime() + Number(minutes || 0) * 60_000);
@@ -283,6 +312,7 @@ export async function createElection(data: CreateElectionRequestDto, actor?: Aud
     throw new Error('Se necesita una tag para crear una votacion por tag');
   }
 
+  const scrutinyConfig = normalizeScrutinyConfig(data);
   let tagName: string | null = null;
   if (data.tag_id) {
     const tag = await getTagById(data.tag_id);
@@ -339,6 +369,8 @@ export async function createElection(data: CreateElectionRequestDto, actor?: Aud
     const created = await electionRepo.createElection({
       ...data,
       status: finalStatus,
+      requires_keys: scrutinyConfig.requiresKeys,
+      min_keys: scrutinyConfig.minKeys,
       start_time: scheduleWindow.startTime,
       end_time: scheduleWindow.endTime,
     }, actor?.id, client);
@@ -424,6 +456,11 @@ export async function updateElection(id: string, data: UpdateElectionDto, actor?
     await getTagById(data.tag_id);
   }
 
+  const scrutinyConfig = normalizeScrutinyConfig({
+    requires_keys: data.requires_keys ?? election.requires_keys,
+    min_keys: data.min_keys ?? election.min_keys,
+  });
+
   const nextStatus = election.status === 'DRAFT'
     ? 'DRAFT'
     : deriveAutomaticStatus(startTime, endTime);
@@ -432,6 +469,8 @@ export async function updateElection(id: string, data: UpdateElectionDto, actor?
     electionRepo.updateElection(id, {
       ...data,
       status: nextStatus,
+      requires_keys: scrutinyConfig.requiresKeys,
+      min_keys: scrutinyConfig.minKeys,
       start_time: data.starts_immediately ? undefined : data.start_time,
       end_time: data.starts_immediately ? undefined : data.end_time,
     }, client)
@@ -481,6 +520,10 @@ export async function changeStatus(id: string, newStatus: Election['status'] | '
     if (options.length < 2) throw new Error('Se necesitan al menos 2 opciones para publicar la votación');
     const voterStats = await electionRepo.getVoterCount(id);
     if (voterStats.total === 0) throw new Error('Se necesita al menos 1 votante elegible');
+  }
+
+  if (targetStatus === 'SCRUTINIZED') {
+    await validateScrutinyKeysReady(election);
   }
 
   const updatedElection = await withOptionalAudit(actor, (client) =>
@@ -581,6 +624,9 @@ export async function getResults(electionId: string) {
   if (!election) throw new Error('Elección no encontrada');
   if (!['CLOSED', 'SCRUTINIZED', 'ARCHIVED'].includes(election.status)) {
     throw new Error('Los resultados solo están disponibles después de cerrar la votación');
+  }
+  if (election.requires_keys && !['SCRUTINIZED', 'ARCHIVED'].includes(election.status)) {
+    throw new Error('Los resultados requieren finalizar el escrutinio con las llaves configuradas');
   }
   const results = await electionRepo.getElectionResults(electionId);
   if (!results) throw new Error('No se pudieron obtener los resultados');
