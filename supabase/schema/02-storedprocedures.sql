@@ -9,7 +9,7 @@
 -- Comentarios:
 -- Estas funciones aplican validaciones de integridad y actualizan el
 -- estado de participacion en election_voters como SPs.
--- ============================================================
+-- ====================================================================
 
 -- ------------------------------------------------------------
 -- 1) Registrar voto anonimo por token
