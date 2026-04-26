@@ -12,7 +12,7 @@
 -- Este script esta orientado a pruebas y demo; no usar como referencia
 -- de datos reales de produccion. En producción, este script se usará para
 -- crear un primer administrador, pero no para cargar datos de votacion.
--- =============================================================
+-- ========================================================================
 
 -- ============================================================
 -- LIMPIEZA DE DATOS TRANSACCIONALES
