@@ -1,6 +1,6 @@
 -- ============================================
 -- SCRIPT 04: AUDIT LOG TRIGGERS
--- ============================================
+--
 -- Toda accion relevante se registra automaticamente
 -- via triggers, sin consumir requests de la API.
 --
