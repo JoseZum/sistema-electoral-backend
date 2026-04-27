@@ -14,6 +14,7 @@
  * 4) En desarrollo, incluye details cuando existe informacion adicional.
  * 
  *
+*/
 
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
