@@ -190,6 +190,8 @@ function withDisplayFields(row: Record<string, unknown>): Record<string, unknown
   };
 }
 
+// Endpoint para consultar los logs de auditoría con filtros y paginación. 
+// funciona principalmente como un proxy que expone la información ya enriquecida por los triggers de la base de datos.
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const page = parseInt(req.query.page as string, 10) || 1;
