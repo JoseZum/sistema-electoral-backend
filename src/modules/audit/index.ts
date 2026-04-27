@@ -2,6 +2,17 @@ import { Router } from 'express';
 import { pool } from '../../config/database';
 import { Request, Response, NextFunction } from 'express';
 
+/*
+*
+* Este pequeño módulo proporciona endpoints para acceder a los registros de auditoría del sistema.
+* 
+* El módulo solo es un archivo index.ts debido a que la lógica de auditoría está implementada 
+* principalmente en la base de datos mediante TRIGGERS y funciones PL/pgSQL.
+* 
+* 
+* 
+*/
+
 const router = Router();
 
 const actionLabels: Record<string, string> = {
