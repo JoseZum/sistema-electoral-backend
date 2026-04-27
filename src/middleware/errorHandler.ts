@@ -12,7 +12,8 @@
  * 2) errorHandler escribe un log estructurado del incidente.
  * 3) Se responde al cliente con status/code estandarizados.
  * 4) En desarrollo, incluye details cuando existe informacion adicional.
- */
+ * 
+ *
 
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';

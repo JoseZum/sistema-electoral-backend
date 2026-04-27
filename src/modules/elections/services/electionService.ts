@@ -14,6 +14,7 @@ import { withAuditContext } from '../../../config/audit-context';
 import { PoolClient } from 'pg';
 import { pool } from '../../../config/database';
 import { prepareAnonymousVotingTokensForElection } from '../../voting/services/votingService';
+import { AppError } from '../../../errors/appError';
 
 type AuditActor = {
   id?: string;
@@ -409,7 +410,11 @@ export async function createElection(data: CreateElectionRequestDto, actor?: Aud
 
     const voterStats = await electionRepo.getVoterCount(created.id);
     if (finalStatus !== 'DRAFT' && voterStats.total === 0) {
-      throw new Error('Se necesita al menos 1 votante elegible');
+      throw new AppError({
+        status: 400,
+        code: 'ELECTION_NO_ELIGIBLE_VOTERS',
+        message: 'Se necesita al menos 1 votante elegible',
+      });
     }
 
     if (isCompoundCreation) {
@@ -519,7 +524,13 @@ export async function changeStatus(id: string, newStatus: Election['status'] | '
     const options = await electionRepo.findOptionsByElection(id);
     if (options.length < 2) throw new Error('Se necesitan al menos 2 opciones para publicar la votación');
     const voterStats = await electionRepo.getVoterCount(id);
-    if (voterStats.total === 0) throw new Error('Se necesita al menos 1 votante elegible');
+    if (voterStats.total === 0) {
+      throw new AppError({
+        status: 400,
+        code: 'ELECTION_NO_ELIGIBLE_VOTERS',
+        message: 'Se necesita al menos 1 votante elegible',
+      });
+    }
   }
 
   if (targetStatus === 'SCRUTINIZED') {
