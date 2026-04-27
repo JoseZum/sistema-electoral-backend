@@ -9,7 +9,7 @@ import { Request, Response, NextFunction } from 'express';
 * El módulo solo es un archivo index.ts debido a que la lógica de auditoría está implementada 
 * principalmente en la base de datos mediante TRIGGERS y funciones PL/pgSQL.
 * 
-* 
+* El endpoint GET /audit/ permite consultar los logs de auditoría.
 * 
 */
 
