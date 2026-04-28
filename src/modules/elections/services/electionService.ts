@@ -408,7 +408,7 @@ export async function createElection(data: CreateElectionRequestDto, actor?: Aud
       }
     }
 
-    const voterStats = await electionRepo.getVoterCount(created.id);
+    const voterStats = await electionRepo.getVoterCount(created.id, client);
     if (finalStatus !== 'DRAFT' && voterStats.total === 0) {
       throw new AppError({
         status: 400,

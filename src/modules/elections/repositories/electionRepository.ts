@@ -349,8 +349,8 @@ export async function populateVotersManual(
   return result.rowCount ?? 0;
 }
 
-export async function getVoterCount(electionId: string): Promise<{ total: number; voted: number }> {
-  const result = await pool.query<{ total: string; voted: string }>(
+export async function getVoterCount(electionId: string, db: Queryable = pool): Promise<{ total: number; voted: number }> {
+  const result = await db.query<{ total: string; voted: string }>(
     `SELECT
        COUNT(*) AS total,
        COUNT(*) FILTER (WHERE token_used = true) AS voted
