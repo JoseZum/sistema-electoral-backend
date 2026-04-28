@@ -27,12 +27,41 @@ function getSigningKey(header: jwt.JwtHeader): Promise<string> {
 
     jwksClient.getSigningKey(header.kid, (err, key) => {
       if (err) {
+        const errorName = err instanceof Error ? err.name : '';
+        const errorMessage = err instanceof Error ? err.message : String(err);
+
+        if (errorName === 'SigningKeyNotFoundError') {
+          reject(
+            new AppError({
+              status: 401,
+              code: 'AUTH_SIGNING_KEY_NOT_FOUND',
+              message: 'Autenticacion fallida: no se encontro una clave publica compatible para validar el token de Microsoft.',
+              details: errorMessage,
+              cause: err,
+            })
+          );
+          return;
+        }
+
+        if (errorName === 'JwksRateLimitError') {
+          reject(
+            new AppError({
+              status: 503,
+              code: 'AUTH_JWKS_RATE_LIMITED',
+              message: 'El servicio de validacion con Microsoft esta temporalmente saturado. Intenta nuevamente en unos minutos.',
+              details: errorMessage,
+              cause: err,
+            })
+          );
+          return;
+        }
+
         reject(
           new AppError({
             status: 503,
             code: 'AUTH_JWKS_UNAVAILABLE',
             message: 'No fue posible validar la autenticacion con Microsoft. Intenta nuevamente.',
-            details: err.message,
+            details: errorMessage,
             cause: err,
           })
         );
