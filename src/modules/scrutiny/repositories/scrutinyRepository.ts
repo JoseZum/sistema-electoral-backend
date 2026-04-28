@@ -193,9 +193,11 @@ export async function finalizeScrutine(electionId:string, finalizedBy?:string): 
                 'election',
                 electionId,
                 JSON.stringify({
+                    election_title: election.title,
                     requires_keys: election.requires_keys,
                     required_keys: election.requires_keys ? election.min_keys : 0,
-                    submitted_keys: progress.submittedKeys
+                    submitted_keys: progress.submittedKeys,
+                    total_members: progress.total_Members
                 })
             ]
         );

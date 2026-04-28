@@ -111,6 +111,54 @@ BEGIN
     );
   END IF;
 
+  -- Enriquecimiento para ELECTIONS: incluir titulo legible y, al cerrar, el conteo agregado
+  IF TG_ARGV[0] = 'election' THEN
+    v_details := COALESCE(v_details, '{}'::jsonb) || jsonb_strip_nulls(
+      jsonb_build_object(
+        'election_title', v_resource ->> 'title'
+      )
+    );
+
+    IF TG_OP = 'UPDATE'
+       AND (v_new ->> 'status') IS DISTINCT FROM (v_old ->> 'status')
+       AND (v_new ->> 'status') = 'CLOSED' THEN
+      DECLARE
+        v_ballots_count BIGINT;
+      BEGIN
+        SELECT count(*) INTO v_ballots_count
+        FROM votes
+        WHERE election_id::TEXT = v_resource ->> 'id';
+
+        v_details := v_details || jsonb_build_object('ballots_count', v_ballots_count);
+      END;
+    END IF;
+  END IF;
+
+  -- Enriquecimiento para SCRUTINY_KEYS: nombre de eleccion y titular de la llave
+  IF TG_ARGV[0] = 'scrutiny_key' THEN
+    DECLARE
+      v_election_title TEXT;
+      v_holder_name    TEXT;
+      v_holder_carnet  TEXT;
+    BEGIN
+      SELECT e.title INTO v_election_title
+      FROM elections e
+      WHERE e.id::TEXT = v_resource ->> 'election_id';
+
+      SELECT s.full_name, s.carnet INTO v_holder_name, v_holder_carnet
+      FROM students s
+      WHERE s.id::TEXT = v_resource ->> 'member_id';
+
+      v_details := COALESCE(v_details, '{}'::jsonb) || jsonb_strip_nulls(
+        jsonb_build_object(
+          'election_title', v_election_title,
+          'holder_name', v_holder_name,
+          'holder_carnet', v_holder_carnet
+        )
+      );
+    END;
+  END IF;
+
   IF TG_ARGV[0] = 'tag_member' THEN
     SELECT t.name
     INTO v_tag_name
@@ -252,20 +300,12 @@ CREATE TRIGGER trg_election_options_delete
   FOR EACH ROW EXECUTE FUNCTION fn_audit_log('election_option');
 
 -- ============================================
--- TRIGGERS: ELECTION_VOTERS
+-- PRIVACIDAD: NO se auditan eventos individuales de voto/canjeo
+-- de token. Esos triggers fueron eliminados a proposito para
+-- evitar trazabilidad de votantes. La auditoria solo expone el
+-- conteo agregado al cerrar la eleccion (ver fn_audit_log para
+-- 'election' con status CLOSED).
 -- ============================================
-CREATE TRIGGER trg_election_voters_update
-  AFTER UPDATE ON election_voters
-  FOR EACH ROW
-  WHEN (OLD.token_used IS DISTINCT FROM NEW.token_used)
-  EXECUTE FUNCTION fn_audit_log('election_voter');
-
--- ============================================
--- TRIGGERS: VOTES
--- ============================================
-CREATE TRIGGER trg_votes_insert
-  AFTER INSERT ON votes
-  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('vote');
 
 -- ============================================
 -- TRIGGERS: SCRUTINY_KEYS

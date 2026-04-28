@@ -32,8 +32,9 @@ const actionLabels: Record<string, string> = {
   'tag_member.delete': 'Miembro eliminado de tag',
   'election.open': 'Eleccion abierta',
   'election.close': 'Eleccion cerrada',
-  'vote.insert': 'Voto emitido',
-  'vote.delete': 'Voto eliminado',
+  'scrutiny.finalize': 'Escrutinio finalizado',
+  'scrutiny_key.insert': 'Llave de escrutinio asignada',
+  'scrutiny_key.update': 'Llave de escrutinio entregada',
   'auth.login': 'Inicio de sesion',
   'auth.logout': 'Cierre de sesion',
 };
@@ -44,10 +45,14 @@ const resourceLabels: Record<string, string> = {
   election: 'eleccion',
   tag: 'tag',
   tag_member: 'tag',
-  vote: 'voto',
+  scrutiny_key: 'llave de escrutinio',
   auth: 'autenticacion',
   padron: 'padron',
 };
+
+// Estos resource_types NUNCA deben aparecer en auditoria por privacidad.
+// Hay registros viejos en la BD que filtramos al leer.
+const PRIVATE_RESOURCE_TYPES: string[] = ['vote', 'election_voter'];
 
 function toTitleCase(value: string): string {
   if (!value) return value;
@@ -108,6 +113,21 @@ function formatPersonReference(name: string | null, carnet: string | null): stri
   return name || carnet;
 }
 
+function getDetailString(details: Record<string, unknown> | null, key: string): string | null {
+  if (!details) return null;
+  const direct = details[key];
+  if (typeof direct === 'string' && direct.trim().length > 0) return direct;
+
+  const nested = ['new', 'old', 'changes', 'previous'];
+  for (const slot of nested) {
+    const obj = asObjectRecord(details[slot]);
+    if (obj && typeof obj[key] === 'string' && (obj[key] as string).trim().length > 0) {
+      return obj[key] as string;
+    }
+  }
+  return null;
+}
+
 function buildActivityMessage(row: Record<string, unknown>): string {
   const actionLabel = formatActionLabel((row.action as string | null) ?? null);
   const resourceLabel = formatResourceLabel((row.resource_type as string | null) ?? null);
@@ -116,6 +136,16 @@ function buildActivityMessage(row: Record<string, unknown>): string {
   const targetName = firstNonEmptyString(row.target_name);
   const targetCarnet = firstNonEmptyString(row.target_carnet);
   const tagName = firstNonEmptyString(row.tag_name) ?? getTagNameFromDetails(details);
+  const electionTitle =
+    firstNonEmptyString(row.election_title) ?? getDetailString(details, 'election_title');
+  const holderName = getDetailString(details, 'holder_name') ?? firstNonEmptyString(row.holder_name);
+  const ballotsCountRaw = details?.ballots_count;
+  const ballotsCount =
+    typeof ballotsCountRaw === 'number'
+      ? ballotsCountRaw
+      : typeof ballotsCountRaw === 'string'
+      ? Number(ballotsCountRaw)
+      : null;
 
   if (row.resource_type === 'tag') {
     const resolvedTagName = tagName ?? targetName;
@@ -134,6 +164,29 @@ function buildActivityMessage(row: Record<string, unknown>): string {
 
     if (resolvedTagName) {
       return `${actionLabel} en tag "${resolvedTagName}"`;
+    }
+  }
+
+  if (row.resource_type === 'election' && electionTitle) {
+    if (row.action === 'scrutiny.finalize') {
+      const submitted = details?.submitted_keys;
+      if (typeof submitted === 'number' || typeof submitted === 'string') {
+        return `Escrutinio finalizado de "${electionTitle}" (${submitted} llaves entregadas)`;
+      }
+      return `Escrutinio finalizado de "${electionTitle}"`;
+    }
+    if (Number.isFinite(ballotsCount) && ballotsCount !== null) {
+      return `Votación cerrada de "${electionTitle}" — ${ballotsCount} boletas emitidas`;
+    }
+    return `${actionLabel} "${electionTitle}"`;
+  }
+
+  if (row.resource_type === 'scrutiny_key') {
+    const titlePart = electionTitle ? `de "${electionTitle}"` : '';
+    const holderPart = holderName ? `· ${holderName}` : '';
+    const composed = [actionLabel, titlePart, holderPart].filter(Boolean).join(' ');
+    if (composed.trim().length > 0) {
+      return composed;
     }
   }
 
@@ -178,6 +231,27 @@ function withDisplayFields(row: Record<string, unknown>): Record<string, unknown
 
     if (targetCarnet && enrichedDetails.target_carnet === undefined) {
       enrichedDetails.target_carnet = targetCarnet;
+    }
+  }
+
+  if (resourceType === 'election' || resourceType === 'scrutiny_key') {
+    const electionTitle =
+      (row.election_title as string | null | undefined) ??
+      (enrichedDetails.election_title as string | undefined) ??
+      null;
+    if (electionTitle && enrichedDetails.election_title === undefined) {
+      enrichedDetails.election_title = electionTitle;
+    }
+  }
+
+  if (resourceType === 'scrutiny_key') {
+    const holderName = (row.holder_name as string | null | undefined) ?? null;
+    const holderCarnet = (row.holder_carnet as string | null | undefined) ?? null;
+    if (holderName && enrichedDetails.holder_name === undefined) {
+      enrichedDetails.holder_name = holderName;
+    }
+    if (holderCarnet && enrichedDetails.holder_carnet === undefined) {
+      enrichedDetails.holder_carnet = holderCarnet;
     }
   }
 
@@ -230,11 +304,30 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
       LEFT JOIN students target_tag_member_student
         ON al.resource_type = 'tag_member'
        AND target_tag_member_student.id::TEXT = split_part(al.resource_id, ':', 2)
+      LEFT JOIN elections target_election
+        ON al.resource_type = 'election'
+       AND target_election.id::TEXT = al.resource_id
+      LEFT JOIN scrutiny_keys target_scrutiny_key
+        ON al.resource_type = 'scrutiny_key'
+       AND target_scrutiny_key.id::TEXT = al.resource_id
+      LEFT JOIN elections scrutiny_key_election
+        ON al.resource_type = 'scrutiny_key'
+       AND scrutiny_key_election.id = target_scrutiny_key.election_id
+      LEFT JOIN students scrutiny_key_holder
+        ON al.resource_type = 'scrutiny_key'
+       AND scrutiny_key_holder.id = target_scrutiny_key.member_id
     `;
 
     const conditions: string[] = [];
     const params: unknown[] = [];
     let paramIdx = 1;
+
+    // Privacidad: nunca retornamos eventos individuales de voto/canjeo de token.
+    if (PRIVATE_RESOURCE_TYPES.length > 0) {
+      const placeholders = PRIVATE_RESOURCE_TYPES.map(() => `$${paramIdx++}`).join(', ');
+      conditions.push(`al.resource_type NOT IN (${placeholders})`);
+      params.push(...PRIVATE_RESOURCE_TYPES);
+    }
 
     if (resourceType) {
       conditions.push(`al.resource_type = $${paramIdx++}`);
@@ -245,7 +338,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
       const types = resourceTypesParam
         .split(',')
         .map((s) => s.trim())
-        .filter(Boolean);
+        .filter((t) => t && !PRIVATE_RESOURCE_TYPES.includes(t));
       if (types.length > 0) {
         const placeholders = types.map(() => `$${paramIdx++}`).join(', ');
         conditions.push(`al.resource_type IN (${placeholders})`);
@@ -312,7 +405,20 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
            al.details ->> 'tag_name',
            target_tag.name,
            target_tag_member.name
-         ) AS tag_name
+         ) AS tag_name,
+         COALESCE(
+           al.details ->> 'election_title',
+           target_election.title,
+           scrutiny_key_election.title
+         ) AS election_title,
+         COALESCE(
+           al.details ->> 'holder_name',
+           scrutiny_key_holder.full_name
+         ) AS holder_name,
+         COALESCE(
+           al.details ->> 'holder_carnet',
+           scrutiny_key_holder.carnet
+         ) AS holder_carnet
        ${fromClause}
        ${where}
        ORDER BY al.created_at DESC
@@ -335,15 +441,21 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
 
 router.get('/stats', async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    const result = await pool.query(`
-      SELECT
+    const placeholders = PRIVATE_RESOURCE_TYPES.map((_, i) => `$${i + 1}`).join(', ');
+    const where = PRIVATE_RESOURCE_TYPES.length > 0
+      ? `WHERE resource_type NOT IN (${placeholders})`
+      : '';
+    const result = await pool.query(
+      `SELECT
         resource_type,
         count(*) as count,
         max(created_at) as last_activity
       FROM audit_logs
+      ${where}
       GROUP BY resource_type
-      ORDER BY count DESC
-    `);
+      ORDER BY count DESC`,
+      PRIVATE_RESOURCE_TYPES,
+    );
     res.json(result.rows);
   } catch (error) {
     next(error);
