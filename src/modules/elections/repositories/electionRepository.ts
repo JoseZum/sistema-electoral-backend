@@ -440,8 +440,7 @@ export async function getElectionResults(electionId: string): Promise<ElectionRe
   };
 }
 
-
-// ── Monitoreo ──
+// Para monitoreo
 export async function getVotesByHour(electionId: string): Promise<VotesByHour[]> {
   const result = await pool.query<{ hour: Date; count: number }>(
     `SELECT 
