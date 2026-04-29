@@ -31,6 +31,7 @@
     "@types/multer": "^2.1.0",
     "@types/node": "^22.10.0",
     "@types/pg": "^8.11.10",
+    "@playwright/test": "^1.49.1",
     "@vitest/ui": "^2.1.8",
     "nodemon": "^3.1.9",
     "ts-node": "^10.9.2",
