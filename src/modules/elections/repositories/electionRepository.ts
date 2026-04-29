@@ -223,7 +223,7 @@ export async function updateElectionStatus(id: string, status: Election['status'
   return result.rows[0] || null;
 }
 
-// ── Options ──
+// Opciones
 
 export async function findOptionsByElection(electionId: string): Promise<ElectionOption[]> {
   const result = await pool.query<ElectionOption>(
