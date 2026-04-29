@@ -383,7 +383,7 @@ export async function clearVoters(electionId: string, db: Queryable = pool): Pro
   );
 }
 
-// ── Results ──
+// Resultados
 
 export async function getElectionResults(electionId: string): Promise<ElectionResults | null> {
   const election = await findElectionById(electionId);
