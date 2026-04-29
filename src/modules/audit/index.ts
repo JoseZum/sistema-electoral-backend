@@ -206,7 +206,7 @@ function withDisplayFields(row: Record<string, unknown>): Record<string, unknown
   const tagName = firstNonEmptyString(row.tag_name) ?? getTagNameFromDetails(details);
   const enrichedDetails = details ? { ...details } : {};
 
-  if (resourceType === 'admin') {
+  if (resourceType === 'admin' || resourceType === 'student') {
     if (targetName && enrichedDetails.target_name === undefined) {
       enrichedDetails.target_name = targetName;
     }
@@ -304,6 +304,9 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
       LEFT JOIN students target_tag_member_student
         ON al.resource_type = 'tag_member'
        AND target_tag_member_student.id::TEXT = split_part(al.resource_id, ':', 2)
+      LEFT JOIN students target_student_resource
+        ON al.resource_type = 'student'
+       AND target_student_resource.id::TEXT = al.resource_id
       LEFT JOIN elections target_election
         ON al.resource_type = 'election'
        AND target_election.id::TEXT = al.resource_id
@@ -357,12 +360,16 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
         COALESCE(
           al.details ->> 'target_name',
           target_student.full_name,
+          target_student_resource.full_name,
+          al.details -> 'old' ->> 'full_name',
           target_tag_member_student.full_name,
           target_tag.name
         ) ILIKE $${paramIdx} OR
         COALESCE(
           al.details ->> 'target_carnet',
           target_student.carnet,
+          target_student_resource.carnet,
+          al.details -> 'old' ->> 'carnet',
           target_tag_member_student.carnet
         ) ILIKE $${paramIdx} OR
         COALESCE(
@@ -393,12 +400,16 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
          COALESCE(
            al.details ->> 'target_name',
            target_student.full_name,
+           target_student_resource.full_name,
+           al.details -> 'old' ->> 'full_name',
            target_tag_member_student.full_name,
            target_tag.name
          ) AS target_name,
          COALESCE(
            al.details ->> 'target_carnet',
            target_student.carnet,
+           target_student_resource.carnet,
+           al.details -> 'old' ->> 'carnet',
            target_tag_member_student.carnet
          ) AS target_carnet,
          COALESCE(
