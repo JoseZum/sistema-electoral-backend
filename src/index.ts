@@ -30,7 +30,7 @@ app.use('/api/auth', authLimiter);
 // Parseo del cuerpo de las peticiones
 app.use(express.json({ limit: '1mb' }));
 
-// Rutas
+// Rutas de los módulos
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/elections', electionRoutes);
