@@ -103,7 +103,7 @@ export async function importPadron(req: Request, res: Response, next: NextFuncti
   }
 }
 
-// ── Admins ──
+// Sección de Administradores
 
 export async function getAdmins(_req: Request, res: Response, next: NextFunction) {
   try {
