@@ -12,8 +12,7 @@ export async function operativeStatusElection(req:Request, res: Response, next: 
     }
 };
 
-// Assing members to an elections.
-
+// Asignar miembros 
 
 export async function assingMembersElection(req:Request, res: Response, next: NextFunction) {
     try {
