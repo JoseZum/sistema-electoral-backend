@@ -19,7 +19,7 @@ const app = express();
 app.use(helmet());
 app.use(cors(corsOptions));
 
-// Limitación de tasa de peticiones
+// RateLimit para seguridad en endpoints 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
