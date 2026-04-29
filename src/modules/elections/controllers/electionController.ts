@@ -70,7 +70,7 @@ export async function changeStatus(req: Request<IdParam>, res: Response, next: N
   }
 }
 
-// Options
+// Opciones 
 export async function addOption(req: Request<IdParam>, res: Response, next: NextFunction) {
   try {
     const option = await electionService.addOption(req.params.id, req.body);
