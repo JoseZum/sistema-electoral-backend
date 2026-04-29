@@ -102,7 +102,7 @@ export async function deleteOption(req: Request<IdOptionParam>, res: Response, n
   }
 }
 
-// Voters
+// Votantes 
 export async function populateVoters(req: Request<IdParam>, res: Response, next: NextFunction) {
   try {
     const result = await electionService.populateVoters(req.params.id, req.body);
