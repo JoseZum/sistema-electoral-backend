@@ -22,7 +22,7 @@ function getAuditActor(req: Request) {
   };
 }
 
-// ── Estudiantes ──
+// Sección de Estudiantes
 
 export async function getStudents(req: Request, res: Response, next: NextFunction) {
   try {
