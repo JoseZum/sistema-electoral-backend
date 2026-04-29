@@ -34,6 +34,10 @@ const STATUS_TRANSITIONS: Record<string, Election['status'][]> = {
   SCRUTINIZED: ['ARCHIVED'],
 };
 
+function canArchiveWithoutScrutiny(election: Election, targetStatus: Election['status']) {
+  return election.status === 'CLOSED' && targetStatus === 'ARCHIVED' && !election.requires_keys;
+}
+
 async function withOptionalAudit<T>(
   actor: AuditActor | undefined,
   fn: (client?: PoolClient) => Promise<T>
@@ -516,7 +520,8 @@ export async function changeStatus(id: string, newStatus: Election['status'] | '
     : newStatus;
 
   const allowed = STATUS_TRANSITIONS[election.status];
-  if (!allowed || !allowed.includes(targetStatus)) {
+  const archiveWithoutScrutiny = canArchiveWithoutScrutiny(election, targetStatus);
+  if ((!allowed || !allowed.includes(targetStatus)) && !archiveWithoutScrutiny) {
     throw new Error(`No se puede cambiar de ${election.status} a ${targetStatus}`);
   }
 
