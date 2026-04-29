@@ -7,6 +7,9 @@
 -- 3) Crear dos elecciones de ejemplo:
 --    - Una no anonima (voto vinculado a student_id).
 --    - Una anonima (voto con token_hash, sin student_id).
+-- 4) Agregar dos escenarios mas:
+--    - Una eleccion cerrada, terminada y sin posibilidad de escrutinio.
+--    - Una eleccion ya escrutinizada.
 --
 -- Comentarios:
 -- Este script esta orientado a pruebas y demo; no usar como referencia
@@ -41,6 +44,28 @@ SELECT id, 'Administrador', 'admin', '{"all": true}'::jsonb
 FROM students 
 WHERE email IN ('j.zumbado.1@estudiantec.cr', 'fpicado@estudiantec.cr')
 ON CONFLICT DO NOTHING;
+
+-- ============================================================
+-- PADRON AMPLIADO PARA ESCENARIOS DE ALTO VOLUMEN
+-- ============================================================
+-- Se agregan mas estudiantes para que las elecciones de prueba tengan
+-- una cantidad visible de votos y resultados mas realistas.
+
+INSERT INTO students (carnet, full_name, email, sede, career, degree_level)
+SELECT
+    (2024010000 + gs)::text,
+    'Estudiante Prueba ' || lpad(gs::text, 2, '0'),
+    'prueba' || gs::text || '@estudiantec.cr',
+    CASE (gs % 4)
+        WHEN 0 THEN 'Cartago'
+        WHEN 1 THEN 'San Jose'
+        WHEN 2 THEN 'Limon'
+        ELSE 'Heredia'
+    END,
+    'Ingenieria en Computacion',
+    'Bachillerato'
+FROM generate_series(1, 32) AS gs
+ON CONFLICT (email) DO NOTHING;
 
 -- ============================================================
 -- PADRON DE PRUEBA ADICIONAL
@@ -234,3 +259,211 @@ SELECT id, 'Administrador', 'admin', '{"all": true}'::jsonb
 FROM students
 WHERE email IN ('aaortiz@estudiantec.cr', 'm.solano@estudiantec.cr')
 ON CONFLICT DO NOTHING;
+
+-- ============================================================
+-- ELECCION 3: CERRADA, FINALIZADA Y SIN ESCRUTINIO
+-- ============================================================
+-- Caracteristicas:
+-- - Ya termino.
+-- - No requiere llaves de escrutinio.
+-- - Tiene 4 candidatos y un volumen alto de votos de prueba.
+
+INSERT INTO elections (
+    title, description, status, is_anonymous,
+    auth_method, voter_source, voter_filter,
+    requires_keys, min_keys, start_time, end_time, created_by
+)
+SELECT
+    'Eleccion Consejo Estudiantil 2025',
+    'Eleccion cerrada sin escrutinio para pruebas de resultados',
+    'CLOSED',
+    false,
+    'MICROSOFT',
+    'FULL_PADRON',
+    NULL,
+    false,
+    1,
+    now() - interval '10 days',
+    now() - interval '3 days',
+    id
+FROM students
+WHERE email = 'j.zumbado.1@estudiantec.cr';
+
+INSERT INTO election_options (election_id, label, option_type, display_order)
+SELECT id, 'Candidato A', 'candidate', 1
+FROM elections WHERE title = 'Eleccion Consejo Estudiantil 2025';
+
+INSERT INTO election_options (election_id, label, option_type, display_order)
+SELECT id, 'Candidato B', 'candidate', 2
+FROM elections WHERE title = 'Eleccion Consejo Estudiantil 2025';
+
+INSERT INTO election_options (election_id, label, option_type, display_order)
+SELECT id, 'Candidato C', 'candidate', 3
+FROM elections WHERE title = 'Eleccion Consejo Estudiantil 2025';
+
+INSERT INTO election_options (election_id, label, option_type, display_order)
+SELECT id, 'Candidato D', 'candidate', 4
+FROM elections WHERE title = 'Eleccion Consejo Estudiantil 2025';
+
+INSERT INTO election_voters (election_id, student_id)
+SELECT e.id, s.id
+FROM elections e
+JOIN students s ON true
+WHERE e.title = 'Eleccion Consejo Estudiantil 2025';
+
+WITH eligible_closed AS (
+    SELECT
+        ev.election_id,
+        ev.student_id,
+        row_number() OVER (ORDER BY ev.student_id) AS rn
+    FROM election_voters ev
+    JOIN elections e ON e.id = ev.election_id
+    WHERE e.title = 'Eleccion Consejo Estudiantil 2025'
+)
+UPDATE election_voters ev
+SET
+    token_used = true,
+    token_used_at = (
+        SELECT e.end_time
+        FROM elections e
+        WHERE e.id = ev.election_id
+    )
+        - (eligible_closed.rn % 18) * interval '1 hour'
+        - (floor(random() * 45) * interval '1 minute')
+FROM eligible_closed
+WHERE ev.election_id = eligible_closed.election_id
+  AND ev.student_id = eligible_closed.student_id
+  AND random() > 0.12;
+
+INSERT INTO votes (election_id, option_id, student_id, created_at)
+SELECT
+    ev.election_id,
+    o.id,
+    ev.student_id,
+    ev.token_used_at
+FROM election_voters ev
+JOIN students s ON s.id = ev.student_id
+JOIN election_options o ON o.election_id = ev.election_id
+JOIN elections e ON e.id = ev.election_id
+WHERE e.title = 'Eleccion Consejo Estudiantil 2025'
+  AND ev.token_used = true
+  AND ev.token_used_at IS NOT NULL
+  AND o.label = CASE (s.carnet::bigint % 4)
+      WHEN 0 THEN 'Candidato A'
+      WHEN 1 THEN 'Candidato B'
+      WHEN 2 THEN 'Candidato C'
+      ELSE 'Candidato D'
+  END;
+
+-- ============================================================
+-- ELECCION 4: YA ESCRUTINIZADA
+-- ============================================================
+-- Caracteristicas:
+-- - Ya fue cerrada y escrutinizada.
+-- - Requiere llaves de escrutinio y ya fueron entregadas.
+-- - Tiene 4 candidatos y bastante participacion de prueba.
+
+INSERT INTO elections (
+    title, description, status, is_anonymous,
+    auth_method, voter_source, voter_filter,
+    requires_keys, min_keys, start_time, end_time, scrutinized_at, created_by
+)
+SELECT
+    'Eleccion Rectoria Estudiantil 2025',
+    'Eleccion ya escrutinizada para pruebas de tablero y resultados',
+    'SCRUTINIZED',
+    true,
+    'MICROSOFT',
+    'FULL_PADRON',
+    NULL,
+    true,
+    3,
+    now() - interval '12 days',
+    now() - interval '5 days',
+    now() - interval '4 days',
+    id
+FROM students
+WHERE email = 'fpicado@estudiantec.cr';
+
+INSERT INTO election_options (election_id, label, option_type, display_order)
+SELECT id, 'Candidato A', 'candidate', 1
+FROM elections WHERE title = 'Eleccion Rectoria Estudiantil 2025';
+
+INSERT INTO election_options (election_id, label, option_type, display_order)
+SELECT id, 'Candidato B', 'candidate', 2
+FROM elections WHERE title = 'Eleccion Rectoria Estudiantil 2025';
+
+INSERT INTO election_options (election_id, label, option_type, display_order)
+SELECT id, 'Candidato C', 'candidate', 3
+FROM elections WHERE title = 'Eleccion Rectoria Estudiantil 2025';
+
+INSERT INTO election_options (election_id, label, option_type, display_order)
+SELECT id, 'Candidato D', 'candidate', 4
+FROM elections WHERE title = 'Eleccion Rectoria Estudiantil 2025';
+
+INSERT INTO election_voters (election_id, student_id)
+SELECT e.id, s.id
+FROM elections e
+JOIN students s ON true
+WHERE e.title = 'Eleccion Rectoria Estudiantil 2025';
+
+WITH eligible_scrutinized AS (
+    SELECT
+        ev.election_id,
+        ev.student_id,
+        row_number() OVER (ORDER BY ev.student_id) AS rn
+    FROM election_voters ev
+    JOIN elections e ON e.id = ev.election_id
+    WHERE e.title = 'Eleccion Rectoria Estudiantil 2025'
+)
+UPDATE election_voters ev
+SET
+    token_used = true,
+    token_used_at = (
+        SELECT e.end_time
+        FROM elections e
+        WHERE e.id = ev.election_id
+    )
+        - (eligible_scrutinized.rn % 24) * interval '1 hour'
+        - (floor(random() * 50) * interval '1 minute')
+FROM eligible_scrutinized
+WHERE ev.election_id = eligible_scrutinized.election_id
+  AND ev.student_id = eligible_scrutinized.student_id
+  AND random() > 0.08;
+
+INSERT INTO votes (election_id, option_id, token_hash, created_at)
+SELECT
+    ev.election_id,
+    o.id,
+    md5(random()::text || clock_timestamp()::text),
+    ev.token_used_at
+FROM election_voters ev
+JOIN students s ON s.id = ev.student_id
+JOIN election_options o ON o.election_id = ev.election_id
+JOIN elections e ON e.id = ev.election_id
+WHERE e.title = 'Eleccion Rectoria Estudiantil 2025'
+  AND ev.token_used = true
+  AND ev.token_used_at IS NOT NULL
+  AND o.label = CASE (s.carnet::bigint % 4)
+      WHEN 0 THEN 'Candidato A'
+      WHEN 1 THEN 'Candidato B'
+      WHEN 2 THEN 'Candidato C'
+      ELSE 'Candidato D'
+  END;
+
+INSERT INTO scrutiny_keys (election_id, member_id, key_shard, has_submitted, submitted_at)
+SELECT
+    e.id,
+    s.id,
+    md5(e.title || ':' || s.email),
+    true,
+    now() - interval '4 days'
+FROM elections e
+JOIN students s ON s.email IN (
+    'j.zumbado.1@estudiantec.cr',
+    'fpicado@estudiantec.cr',
+    'aaortiz@estudiantec.cr',
+    'm.solano@estudiantec.cr'
+)
+WHERE e.title = 'Eleccion Rectoria Estudiantil 2025'
+ON CONFLICT (election_id, member_id) DO NOTHING;
