@@ -121,7 +121,7 @@ export async function clearVoters(req: Request<IdParam>, res: Response, next: Ne
   }
 }
 
-// Results
+// Resultados
 export async function getResults(req: Request<IdParam>, res: Response, next: NextFunction) {
   try {
     const results = await electionService.getResults(req.params.id);
