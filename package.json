@@ -8,6 +8,8 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
     "test:dashboard:smoke": "ts-node src/scripts/dashboardSmokeTest.ts"
   },
   "dependencies": {
@@ -29,8 +31,10 @@
     "@types/multer": "^2.1.0",
     "@types/node": "^22.10.0",
     "@types/pg": "^8.11.10",
+    "@vitest/ui": "^2.1.8",
     "nodemon": "^3.1.9",
     "ts-node": "^10.9.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
   }
 }
