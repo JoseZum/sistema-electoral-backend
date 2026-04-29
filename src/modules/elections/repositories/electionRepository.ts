@@ -283,7 +283,7 @@ export async function deleteOption(electionId: string, optionId: string): Promis
   return (result.rowCount ?? 0) > 0;
 }
 
-// ── Voters ──
+// Votantes
 
 export async function populateVotersFromPadron(
   electionId: string,
