@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import * as userService from '../services/userService';
 
+// Controladores para la gestión de usuarios (estudiantes y admins)
+
 function getRequestIp(req: Request): string | undefined {
   const forwardedFor = req.headers['x-forwarded-for'];
   if (typeof forwardedFor === 'string') {
