@@ -4,6 +4,7 @@ import * as adminRepo from '../repositories/adminRepository';
 import { CreateStudentDto, UpdateStudentDto, StudentFiltersDto } from '../dtos/studentDtos';
 import { CreateAdminDto, UpdateAdminDto } from '../dtos/adminDtos';
 import { AuditActor, withAuditContext } from '../../../config/audit-context';
+import { badRequest, conflict, notFound } from '../../../errors/httpErrors';
 
 function normalizeKey(value: string): string {
   return value
@@ -48,7 +49,7 @@ async function validateStudentCatalogSelection(data: {
     const sede = normalizeCatalogEntry(data.sede);
     const validSedes = new Set(catalog.sedes.map(normalizeCatalogEntry));
     if (!validSedes.has(sede)) {
-      throw new Error('La sede seleccionada no existe en el padrón actual');
+      throw badRequest('STUDENT_INVALID_SEDE', 'La sede seleccionada no existe en el padrón actual');
     }
   }
 
@@ -56,7 +57,7 @@ async function validateStudentCatalogSelection(data: {
     const career = normalizeCatalogEntry(data.career);
     const validCareers = new Set(catalog.careers.map(normalizeCatalogEntry));
     if (!validCareers.has(career)) {
-      throw new Error('La carrera seleccionada no existe en el padrón actual');
+      throw badRequest('STUDENT_INVALID_CAREER', 'La carrera seleccionada no existe en el padrón actual');
     }
   }
 }
@@ -73,13 +74,13 @@ export async function getStudentCatalog() {
 
 export async function getStudentById(id: string) {
   const student = await studentRepo.findStudentById(id);
-  if (!student) throw new Error('Estudiante no encontrado');
+  if (!student) throw notFound('STUDENT_NOT_FOUND', 'Estudiante no encontrado');
   return student;
 }
 
 export async function createStudent(data: CreateStudentDto, actor?: AuditActor) {
   const existing = await studentRepo.findStudentByEmail(data.email);
-  if (existing) throw new Error('Ya existe un estudiante con ese email');
+  if (existing) throw conflict('STUDENT_EMAIL_ALREADY_EXISTS', 'Ya existe un estudiante con ese email');
   await validateStudentCatalogSelection({
     sede: data.sede,
     career: data.career,
@@ -99,7 +100,7 @@ export async function updateStudent(id: string, data: UpdateStudentDto, actor?: 
     { id: actor?.id, carnet: actor?.carnet, ip: actor?.ip },
     (client) => studentRepo.updateStudent(id, data, client)
   );
-  if (!student) throw new Error('Estudiante no encontrado');
+  if (!student) throw notFound('STUDENT_NOT_FOUND', 'Estudiante no encontrado');
   return student;
 }
 
@@ -108,7 +109,7 @@ export async function deactivateStudent(id: string, actor?: AuditActor) {
     { id: actor?.id, carnet: actor?.carnet, ip: actor?.ip },
     (client) => studentRepo.deactivateStudent(id, client)
   );
-  if (!student) throw new Error('Estudiante no encontrado');
+  if (!student) throw notFound('STUDENT_NOT_FOUND', 'Estudiante no encontrado');
   return student;
 }
 
@@ -141,7 +142,7 @@ export async function importPadron(
     data.push(...normalizedRows.filter(r => r.Carnet && r.Nombre && r.Correo));
   }
 
-  if (data.length === 0) throw new Error('El archivo no contiene datos válidos');
+  if (data.length === 0) throw badRequest('PADRON_FILE_NO_VALID_DATA', 'El archivo no contiene datos válidos');
 
   // Run inside audit context so triggers capture WHO did this
   const summary = await withAuditContext(
@@ -160,13 +161,13 @@ export async function getAllAdmins() {
 
 export async function getAdminById(id: string) {
   const admin = await adminRepo.findAdminById(id);
-  if (!admin) throw new Error('Admin no encontrado');
+  if (!admin) throw notFound('ADMIN_NOT_FOUND', 'Admin no encontrado');
   return admin;
 }
 
 export async function createAdmin(data: CreateAdminDto, actor?: AuditActor) {
   const existing = await adminRepo.findAdminByStudentId(data.students_id);
-  if (existing) throw new Error('Este estudiante ya es admin');
+  if (existing) throw conflict('ADMIN_STUDENT_ALREADY_ADMIN', 'Este estudiante ya es admin');
   return withAuditContext(
     { id: actor?.id, carnet: actor?.carnet, ip: actor?.ip },
     (client) => adminRepo.createAdmin(data, client)
@@ -178,7 +179,7 @@ export async function updateAdmin(id: string, data: UpdateAdminDto, actor?: Audi
     { id: actor?.id, carnet: actor?.carnet, ip: actor?.ip },
     (client) => adminRepo.updateAdmin(id, data, client)
   );
-  if (!admin) throw new Error('Admin no encontrado');
+  if (!admin) throw notFound('ADMIN_NOT_FOUND', 'Admin no encontrado');
   return admin;
 }
 
@@ -188,16 +189,16 @@ export async function deleteAdmin(id: string, actor?: AuditActor) {
     async (client) => {
       const totalAdmins = await adminRepo.countAdmins(client);
       if (totalAdmins <= 1) {
-        throw new Error('Debe existir al menos un administrador');
+        throw conflict('ADMIN_MINIMUM_REQUIRED', 'Debe existir al menos un administrador');
       }
 
       const firstAdmin = await adminRepo.findFirstAdmin(client);
       if (firstAdmin?.id === id) {
-        throw new Error('El primer administrador no se puede eliminar');
+        throw conflict('ADMIN_FIRST_ADMIN_PROTECTED', 'El primer administrador no se puede eliminar');
       }
 
       const admin = await adminRepo.deleteAdmin(id, client);
-      if (!admin) throw new Error('Admin no encontrado');
+      if (!admin) throw notFound('ADMIN_NOT_FOUND', 'Admin no encontrado');
       return admin;
     }
   );
