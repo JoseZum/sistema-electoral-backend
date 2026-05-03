@@ -32,6 +32,7 @@ const STATUS_TRANSITIONS: Record<string, Election['status'][]> = {
   OPEN: ['CLOSED'],
   CLOSED: ['SCRUTINIZED'],
   SCRUTINIZED: ['ARCHIVED'],
+  ARCHIVED: ['CLOSED', 'SCRUTINIZED'],
 };
 
 function canArchiveWithoutScrutiny(election: Election, targetStatus: Election['status']) {
