@@ -45,6 +45,14 @@ BEGIN
     RETURN NEW;
   END IF;
 
+  -- Cuando se elimina una eleccion completa, el cascade FK dispara
+  -- triggers de DELETE en election_options. Esos eventos son ruido:
+  -- el evento de election.delete ya cuenta la historia.
+  IF TG_OP = 'DELETE' AND _audit_get('app.cascade_election_delete') = 'true'
+     AND TG_ARGV[0] IN ('election_option') THEN
+    RETURN OLD;
+  END IF;
+
   IF TG_ARGV[0] = 'tag_member' AND _audit_get('app.compound_tag_mode') = 'true' THEN
     IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
   END IF;

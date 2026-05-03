@@ -551,9 +551,12 @@ export async function deleteElection(id: string, actor?: AuditActor) {
     throw notFound('ELECTION_NOT_FOUND', 'Elección no encontrada');
   }
 
-  const deleted = await withOptionalAudit(actor, (client) =>
-    electionRepo.deleteElection(id, client)
-  );
+  const deleted = await withOptionalAudit(actor, async (client) => {
+    if (client) {
+      await setAuditSessionValue(client, 'app.cascade_election_delete', 'true');
+    }
+    return electionRepo.deleteElection(id, client);
+  });
 
   if (!deleted) {
     throw internalError('ELECTION_DELETE_FAILED', 'No se pudo eliminar la votación');
