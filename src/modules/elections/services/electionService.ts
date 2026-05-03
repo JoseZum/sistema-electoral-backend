@@ -15,6 +15,7 @@ import { PoolClient } from 'pg';
 import { pool } from '../../../config/database';
 import { prepareAnonymousVotingTokensForElection } from '../../voting/services/votingService';
 import { AppError } from '../../../errors/appError';
+import { badRequest, conflict, internalError, notFound } from '../../../errors/httpErrors';
 
 type AuditActor = {
   id?: string;
@@ -354,7 +355,7 @@ export async function getElectionById(id: string) {
 
 export async function createElection(data: CreateElectionRequestDto, actor?: AuditActor) {
   if (data.voter_source === 'TAG' && !data.tag_id) {
-    throw new Error('Se necesita una tag para crear una votacion por tag');
+    throw badRequest('ELECTION_TAG_REQUIRED', 'Se necesita una tag para crear una votacion por tag');
   }
 
   const scrutinyConfig = normalizeScrutinyConfig(data);
@@ -399,12 +400,18 @@ export async function createElection(data: CreateElectionRequestDto, actor?: Aud
     : (data.status || 'DRAFT');
 
   if (finalStatus !== 'DRAFT' && options.length < 2) {
-    throw new Error('Se necesitan al menos 2 opciones para publicar la votacion');
+    throw badRequest(
+      'ELECTION_OPTIONS_REQUIRED_FOR_PUBLICATION',
+      'Se necesitan al menos 2 opciones para publicar la votacion'
+    );
   }
 
   const createdElection = await withOptionalAudit(actor, async (client) => {
     if (!client) {
-      throw new Error('No se pudo iniciar la transaccion de creacion');
+      throw internalError(
+        'ELECTION_CREATION_TRANSACTION_FAILED',
+        'No se pudo iniciar la transaccion de creacion'
+      );
     }
 
     if (isCompoundCreation) {
@@ -432,7 +439,7 @@ export async function createElection(data: CreateElectionRequestDto, actor?: Aud
         case 'TAG': {
           const tagId = populateInput?.tag_id || data.tag_id;
           if (!tagId) {
-            throw new Error('Se necesita una tag para poblar votantes');
+            throw badRequest('ELECTION_VOTER_TAG_REQUIRED', 'Se necesita una tag para poblar votantes');
           }
           await electionRepo.populateVotersFromTag(created.id, tagId, client);
           break;
@@ -485,9 +492,14 @@ export async function updateElection(id: string, data: UpdateElectionDto, actor?
   await electionRepo.syncAutomaticStatuses();
 
   const election = await electionRepo.findElectionById(id);
-  if (!election) throw new Error('Elección no encontrada');
+  if (!election) {
+    throw notFound('ELECTION_NOT_FOUND', 'Elección no encontrada');
+  }
   if (!isPreOpenStatus(election.status)) {
-    throw new Error('Solo se pueden editar elecciones en borrador o programadas');
+    throw conflict(
+      'ELECTION_NOT_EDITABLE',
+      'Solo se pueden editar elecciones en borrador o programadas'
+    );
   }
 
   const { startTime, endTime } = getMergedSchedule(election, data);
@@ -498,7 +510,7 @@ export async function updateElection(id: string, data: UpdateElectionDto, actor?
   }
 
   if ((data.voter_source ?? election.voter_source) === 'TAG' && !(data.tag_id ?? election.tag_id)) {
-    throw new Error('Se necesita una tag para crear una votacion por tag');
+    throw badRequest('ELECTION_TAG_REQUIRED', 'Se necesita una tag para crear una votacion por tag');
   }
 
   if (data.tag_id) {
@@ -525,14 +537,18 @@ export async function updateElection(id: string, data: UpdateElectionDto, actor?
     }, client)
   );
 
-  if (!updated) throw new Error('No se pudo actualizar la elección');
+  if (!updated) {
+    throw internalError('ELECTION_UPDATE_FAILED', 'No se pudo actualizar la elección');
+  }
   return updated;
 }
 
 export async function deleteElection(id: string) {
   await electionRepo.syncAutomaticStatuses();
   const deleted = await electionRepo.deleteElection(id);
-  if (!deleted) throw new Error('Solo se pueden eliminar elecciones en borrador');
+  if (!deleted) {
+    throw conflict('ELECTION_DELETE_ONLY_DRAFT', 'Solo se pueden eliminar elecciones en borrador');
+  }
   return { success: true };
 }
 
