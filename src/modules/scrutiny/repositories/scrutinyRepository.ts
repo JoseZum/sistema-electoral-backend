@@ -2,6 +2,7 @@ import { pool } from "../../../config/database";
 import { Pool, PoolClient } from 'pg';
 import { AssingMembersDTO, submitKeyDTO, scrutinykeys } from "../models/scrutiny.types";
 import { Election } from "../../elections/models/electionModel";
+import { badRequest, conflict, internalError, notFound } from "../../../errors/httpErrors";
 
 type Queryable = Pool | PoolClient;
 
@@ -66,10 +67,13 @@ export async function addMembersElection(electionId: string, data: AssingMembers
     const memberIds = data.students_id;
     const keyHashes = keysHash;
     if (!memberIds || memberIds.length === 0) {
-        throw new Error('students_id es obligatorio y no puede estar vacío.');
+        throw badRequest('SCRUTINY_MEMBERS_REQUIRED', 'students_id es obligatorio y no puede estar vacío.');
     }
     if (!keyHashes || keyHashes.length !== memberIds.length) {
-        throw new Error('keysHash es obligatorio y debe tener la misma cantidad de elementos que students_id.');
+        throw internalError(
+            'SCRUTINY_KEY_HASH_MISMATCH',
+            'keysHash es obligatorio y debe tener la misma cantidad de elementos que students_id.'
+        );
     }
 
     const cliente = await pool.connect();
@@ -83,7 +87,7 @@ export async function addMembersElection(electionId: string, data: AssingMembers
         memberIds.forEach((member_id, index) => {
             const currentKey = keyHashes[index];
             if (!currentKey) {
-                throw new Error(`keyHash indefinido en índice ${index}`);
+                throw internalError('SCRUTINY_KEY_HASH_MISSING', `keyHash indefinido en índice ${index}`);
             }
             values.push(`($1, $${paramIndex}, $${paramIndex + 1}, false)`);
             params.push(member_id, currentKey);
@@ -104,7 +108,7 @@ export async function addMembersElection(electionId: string, data: AssingMembers
         return true;
     } catch (error) {
         await cliente.query('ROLLBACK');
-        throw new Error("Problemas al guardar las llaves de escrutinio");
+        throw error;
 
     } finally{
         cliente.release();
@@ -165,14 +169,21 @@ export async function finalizeScrutine(electionId:string, finalizedBy?:string): 
             [electionId]
         );
         const election = electionResult.rows[0];
-        if (!election) throw new Error('Eleccion no encontrada');
-        if(election.status === 'SCRUTINIZED') throw new Error('La elección ya esta finalizada');
-        if(election.status !== 'CLOSED') throw new Error('Solo se puede finalizar el escrutinio de elecciones cerradas');
+        if (!election) throw notFound('SCRUTINY_ELECTION_NOT_FOUND', 'Eleccion no encontrada');
+        if(election.status === 'SCRUTINIZED') throw conflict('SCRUTINY_ELECTION_ALREADY_FINALIZED', 'La elección ya esta finalizada');
+        if(election.status !== 'CLOSED') throw conflict('SCRUTINY_FINALIZE_ELECTION_NOT_CLOSED', 'Solo se puede finalizar el escrutinio de elecciones cerradas');
 
         const progress = await getScrutinyProgress(electionId, client);
 
         if(election.requires_keys && election.min_keys > progress.submittedKeys){
-            throw new Error('No se han entregado las llaves necesarias para finalizar el escrutinio');
+            throw conflict(
+                'SCRUTINY_KEYS_INSUFFICIENT',
+                'No se han entregado las llaves necesarias para finalizar el escrutinio',
+                {
+                    submittedKeys: progress.submittedKeys,
+                    minKeys: election.min_keys
+                }
+            );
         }
 
         const update = await client.query<Election>(
