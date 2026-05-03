@@ -122,7 +122,12 @@ async function validateScrutinyKeysReady(election: Election) {
 
   const submittedKeys = await electionRepo.getSubmittedScrutinyKeyCount(election.id);
   if (submittedKeys < election.min_keys) {
-    throw new Error('No se han entregado las llaves necesarias para finalizar el escrutinio');
+    throw new AppError({
+      status: 400,
+      code: 'ELECTION_SCRUTINY_KEYS_INSUFFICIENT',
+      message: 'No se han entregado las llaves necesarias para finalizar el escrutinio',
+      details: `Llaves entregadas: ${submittedKeys} / mínimo requerido: ${election.min_keys}`,
+    });
   }
 }
 
@@ -501,16 +506,32 @@ export async function changeStatus(id: string, newStatus: Election['status'] | '
   await electionRepo.syncAutomaticStatuses();
 
   const election = await electionRepo.findElectionById(id);
-  if (!election) throw new Error('Elección no encontrada');
+  if (!election) {
+    throw new AppError({
+      status: 404,
+      code: 'ELECTION_NOT_FOUND',
+      message: 'Elección no encontrada',
+    });
+  }
 
-  const immediateWindow = election.starts_immediately
+  const isReversingFromArchive = election.status === 'ARCHIVED' && newStatus !== 'AUTO';
+
+  // Para una elección inmediata se recalcula la ventana únicamente cuando se está
+  // (re)abriendo el flujo. Al desarchivar a CLOSED/SCRUTINIZED no se debe pisar
+  // start_time/end_time porque ya pasaron y la elección debe quedarse en su estado
+  // post-votación sin reabrirse accidentalmente.
+  const immediateWindow = !isReversingFromArchive && election.starts_immediately
     ? (election.immediate_minutes && election.immediate_minutes > 0
         ? buildImmediateWindow(election.immediate_minutes)
         : null)
     : null;
 
-  if (election.starts_immediately && !immediateWindow) {
-    throw new Error('Se necesita una duracion valida para la votacion inmediata');
+  if (!isReversingFromArchive && election.starts_immediately && !immediateWindow) {
+    throw new AppError({
+      status: 400,
+      code: 'ELECTION_INVALID_IMMEDIATE_DURATION',
+      message: 'Se necesita una duración válida para la votación inmediata',
+    });
   }
 
   const targetStatus = newStatus === 'AUTO'
@@ -523,7 +544,11 @@ export async function changeStatus(id: string, newStatus: Election['status'] | '
   const allowed = STATUS_TRANSITIONS[election.status];
   const archiveWithoutScrutiny = canArchiveWithoutScrutiny(election, targetStatus);
   if ((!allowed || !allowed.includes(targetStatus)) && !archiveWithoutScrutiny) {
-    throw new Error(`No se puede cambiar de ${election.status} a ${targetStatus}`);
+    throw new AppError({
+      status: 400,
+      code: 'ELECTION_INVALID_STATUS_TRANSITION',
+      message: `No se puede cambiar de ${election.status} a ${targetStatus}`,
+    });
   }
 
   if (targetStatus === 'OPEN' || targetStatus === 'SCHEDULED') {
