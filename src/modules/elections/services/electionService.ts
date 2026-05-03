@@ -74,11 +74,19 @@ function validateSchedule(startTime?: string | null, endTime?: string | null) {
   const end = new Date(endTime);
 
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-    throw new Error('Las fechas de la votación no son válidas');
+    throw new AppError({
+      status: 400,
+      code: 'ELECTION_INVALID_DATES',
+      message: 'Las fechas de la votación no son válidas',
+    });
   }
 
   if (end <= start) {
-    throw new Error('La fecha de cierre debe ser posterior a la fecha de apertura');
+    throw new AppError({
+      status: 400,
+      code: 'ELECTION_INVALID_END_BEFORE_START',
+      message: 'La fecha de cierre debe ser posterior a la fecha de apertura',
+    });
   }
 }
 
@@ -93,7 +101,11 @@ function validateImmediateConfig(startsImmediately?: boolean, immediateMinutes?:
     || immediateMinutes <= 0
     || immediateMinutes > 1440
   ) {
-    throw new Error('Se necesita una duracion valida para la votacion inmediata');
+    throw new AppError({
+      status: 400,
+      code: 'ELECTION_INVALID_IMMEDIATE_DURATION',
+      message: 'Se necesita una duración válida para la votación inmediata',
+    });
   }
 }
 
@@ -105,11 +117,19 @@ function normalizeScrutinyConfig(data: {
   const minKeys = Number(data.min_keys ?? 1);
 
   if (typeof requiresKeys !== 'boolean') {
-    throw new Error('La configuracion de llaves de escrutinio no es valida');
+    throw new AppError({
+      status: 400,
+      code: 'ELECTION_KEY_CONFIG_INVALID',
+      message: 'La configuración de llaves de escrutinio no es válida',
+    });
   }
 
   if (!Number.isInteger(minKeys) || minKeys < 1) {
-    throw new Error('La cantidad de llaves de escrutinio debe ser al menos 1');
+    throw new AppError({
+      status: 400,
+      code: 'ELECTION_MIN_KEYS_TOO_LOW',
+      message: 'La cantidad de llaves de escrutinio debe ser al menos 1',
+    });
   }
 
   return { requiresKeys, minKeys };
@@ -197,12 +217,20 @@ function normalizeCreateOptions(options: CreateOptionDto[] | undefined): CreateO
 function validateCreateOptions(options: CreateOptionDto[]) {
   const emptyOption = options.find((option) => !option.label);
   if (emptyOption) {
-    throw new Error('Todas las opciones deben tener nombre');
+    throw new AppError({
+      status: 400,
+      code: 'ELECTION_OPTIONS_EMPTY_LABEL',
+      message: 'Todas las opciones deben tener nombre',
+    });
   }
 
   const uniqueLabels = new Set(options.map((option) => option.label.toLowerCase()));
   if (uniqueLabels.size !== options.length) {
-    throw new Error('Las opciones de la votacion no pueden repetirse');
+    throw new AppError({
+      status: 400,
+      code: 'ELECTION_OPTIONS_DUPLICATE',
+      message: 'Las opciones de la votación no pueden repetirse',
+    });
   }
 }
 
@@ -313,7 +341,13 @@ export async function getAllElections() {
 export async function getElectionById(id: string) {
   await electionRepo.syncAutomaticStatuses();
   const election = await electionRepo.findElectionWithStats(id);
-  if (!election) throw new Error('Elección no encontrada');
+  if (!election) {
+    throw new AppError({
+      status: 404,
+      code: 'ELECTION_NOT_FOUND',
+      message: 'Elección no encontrada',
+    });
+  }
   const options = await electionRepo.findOptionsByElection(id);
   return { ...election, options };
 }
