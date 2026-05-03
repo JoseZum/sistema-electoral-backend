@@ -543,12 +543,22 @@ export async function updateElection(id: string, data: UpdateElectionDto, actor?
   return updated;
 }
 
-export async function deleteElection(id: string) {
+export async function deleteElection(id: string, actor?: AuditActor) {
   await electionRepo.syncAutomaticStatuses();
-  const deleted = await electionRepo.deleteElection(id);
-  if (!deleted) {
-    throw conflict('ELECTION_DELETE_ONLY_DRAFT', 'Solo se pueden eliminar elecciones en borrador');
+
+  const election = await electionRepo.findElectionById(id);
+  if (!election) {
+    throw notFound('ELECTION_NOT_FOUND', 'Elección no encontrada');
   }
+
+  const deleted = await withOptionalAudit(actor, (client) =>
+    electionRepo.deleteElection(id, client)
+  );
+
+  if (!deleted) {
+    throw internalError('ELECTION_DELETE_FAILED', 'No se pudo eliminar la votación');
+  }
+
   return { success: true };
 }
 

@@ -50,7 +50,11 @@ export async function updateElection(req: Request<IdParam>, res: Response, next:
 
 export async function deleteElection(req: Request<IdParam>, res: Response, next: NextFunction) {
   try {
-    const result = await electionService.deleteElection(req.params.id);
+    const result = await electionService.deleteElection(req.params.id, {
+      id: req.user?.studentId,
+      carnet: req.user?.carnet,
+      ip: req.ip || req.headers['x-forwarded-for'] as string || req.socket.remoteAddress,
+    });
     res.json(result);
   } catch (error) {
     next(error);

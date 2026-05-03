@@ -200,9 +200,9 @@ export async function updateElection(id: string, data: UpdateElectionDto, db: Qu
   return result.rows[0] || null;
 }
 
-export async function deleteElection(id: string): Promise<boolean> {
-  const result = await pool.query(
-    `DELETE FROM elections WHERE id = $1 AND status = 'DRAFT'`,
+export async function deleteElection(id: string, db: Queryable = pool): Promise<boolean> {
+  const result = await db.query(
+    `DELETE FROM elections WHERE id = $1`,
     [id]
   );
   return (result.rowCount ?? 0) > 0;

@@ -261,6 +261,10 @@ CREATE TRIGGER trg_elections_update
   AFTER UPDATE ON elections
   FOR EACH ROW EXECUTE FUNCTION fn_audit_log('election');
 
+CREATE TRIGGER trg_elections_delete
+  AFTER DELETE ON elections
+  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('election');
+
 -- ============================================
 -- TRIGGERS: TAGS
 -- ============================================
