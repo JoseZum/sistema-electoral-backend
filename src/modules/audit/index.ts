@@ -518,6 +518,36 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
   }
 });
 
+// GET /active-days : dias en los que efectivamente hubo eventos 
+// Pensado para alimentar selectores de rango: el front muestra solo los dias
+// donde tiene sentido elegir, en vez de un calendario abierto.
+router.get('/active-days', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const placeholders = PRIVATE_RESOURCE_TYPES.map((_, i) => `$${i + 1}`).join(', ');
+    const where = PRIVATE_RESOURCE_TYPES.length > 0
+      ? `WHERE resource_type NOT IN (${placeholders})`
+      : '';
+    const result = await pool.query<{ day: string; count: string }>(
+      `SELECT
+         to_char(date_trunc('day', created_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS day,
+         count(*)::text AS count
+       FROM audit_logs
+       ${where}
+       GROUP BY day
+       ORDER BY day DESC`,
+      PRIVATE_RESOURCE_TYPES,
+    );
+    res.json(
+      result.rows.map((row) => ({
+        date: row.day,
+        count: parseInt(row.count, 10),
+      })),
+    );
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/stats', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const placeholders = PRIVATE_RESOURCE_TYPES.map((_, i) => `$${i + 1}`).join(', ');
