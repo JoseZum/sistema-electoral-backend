@@ -603,7 +603,12 @@ export async function changeStatus(id: string, newStatus: Election['status'] | '
 
   if (targetStatus === 'OPEN' || targetStatus === 'SCHEDULED') {
     const options = await electionRepo.findOptionsByElection(id);
-    if (options.length < 2) throw new Error('Se necesitan al menos 2 opciones para publicar la votación');
+    if (options.length < 2) {
+      throw badRequest(
+        'ELECTION_OPTIONS_REQUIRED_FOR_PUBLICATION',
+        'Se necesitan al menos 2 opciones para publicar la votación'
+      );
+    }
     const voterStats = await electionRepo.getVoterCount(id);
     if (voterStats.total === 0) {
       throw new AppError({
@@ -636,9 +641,14 @@ export async function changeStatus(id: string, newStatus: Election['status'] | '
 export async function addOption(electionId: string, data: CreateOptionDto) {
   await electionRepo.syncAutomaticStatuses();
   const election = await electionRepo.findElectionById(electionId);
-  if (!election) throw new Error('Elección no encontrada');
+  if (!election) {
+    throw notFound('ELECTION_NOT_FOUND', 'Elección no encontrada');
+  }
   if (!isPreOpenStatus(election.status)) {
-    throw new Error('Solo se pueden agregar opciones a elecciones en borrador o programadas');
+    throw conflict(
+      'ELECTION_OPTION_ADD_FORBIDDEN',
+      'Solo se pueden agregar opciones a elecciones en borrador o programadas'
+    );
   }
   return electionRepo.createOption(electionId, data);
 }
@@ -647,45 +657,64 @@ export async function updateOption(electionId: string, optionId: string, data: U
   await electionRepo.syncAutomaticStatuses();
 
   const election = await electionRepo.findElectionById(electionId);
-  if (!election) throw new Error('Elección no encontrada');
+  if (!election) {
+    throw notFound('ELECTION_NOT_FOUND', 'Elección no encontrada');
+  }
 
   if (!isPreOpenStatus(election.status) && hasOptionStructureChanges(data)) {
-    throw new Error('Solo se puede editar la descripción de una opción fuera del borrador');
+    throw conflict(
+      'ELECTION_OPTION_STRUCTURE_LOCKED',
+      'Solo se puede editar la descripción de una opción fuera del borrador'
+    );
   }
 
   const option = await withOptionalAudit(actor, (client) =>
     electionRepo.updateOption(electionId, optionId, data, client)
   );
 
-  if (!option) throw new Error('Opción no encontrada');
+  if (!option) {
+    throw notFound('ELECTION_OPTION_NOT_FOUND', 'Opción no encontrada');
+  }
   return option;
 }
 
 export async function deleteOption(electionId: string, optionId: string) {
   await electionRepo.syncAutomaticStatuses();
   const election = await electionRepo.findElectionById(electionId);
-  if (!election) throw new Error('Elección no encontrada');
+  if (!election) {
+    throw notFound('ELECTION_NOT_FOUND', 'Elección no encontrada');
+  }
   if (!isPreOpenStatus(election.status)) {
-    throw new Error('Solo se pueden eliminar opciones de elecciones en borrador o programadas');
+    throw conflict(
+      'ELECTION_OPTION_DELETE_FORBIDDEN',
+      'Solo se pueden eliminar opciones de elecciones en borrador o programadas'
+    );
   }
   const deleted = await electionRepo.deleteOption(electionId, optionId);
-  if (!deleted) throw new Error('Opción no encontrada');
+  if (!deleted) {
+    throw notFound('ELECTION_OPTION_NOT_FOUND', 'Opción no encontrada');
+  }
   return { success: true };
 }
 
 export async function populateVoters(electionId: string, data: { sede?: string; career?: string; student_ids?: string[]; tag_id?: string }) {
   await electionRepo.syncAutomaticStatuses();
   const election = await electionRepo.findElectionById(electionId);
-  if (!election) throw new Error('Elección no encontrada');
+  if (!election) {
+    throw notFound('ELECTION_NOT_FOUND', 'Elección no encontrada');
+  }
   if (!isPreOpenStatus(election.status)) {
-    throw new Error('Solo se pueden poblar votantes en elecciones en borrador o programadas');
+    throw conflict(
+      'ELECTION_VOTERS_POPULATE_FORBIDDEN',
+      'Solo se pueden poblar votantes en elecciones en borrador o programadas'
+    );
   }
 
   let count = 0;
   if (data.tag_id || election.voter_source === 'TAG') {
     const tagId = data.tag_id || election.tag_id;
     if (!tagId) {
-      throw new Error('Se necesita una tag para poblar votantes');
+      throw badRequest('ELECTION_VOTER_TAG_REQUIRED', 'Se necesita una tag para poblar votantes');
     }
 
     await getTagById(tagId);
@@ -702,9 +731,14 @@ export async function populateVoters(electionId: string, data: { sede?: string; 
 export async function clearVoters(electionId: string) {
   await electionRepo.syncAutomaticStatuses();
   const election = await electionRepo.findElectionById(electionId);
-  if (!election) throw new Error('Elección no encontrada');
+  if (!election) {
+    throw notFound('ELECTION_NOT_FOUND', 'Elección no encontrada');
+  }
   if (!isPreOpenStatus(election.status)) {
-    throw new Error('Solo se pueden limpiar votantes en elecciones en borrador o programadas');
+    throw conflict(
+      'ELECTION_VOTERS_CLEAR_FORBIDDEN',
+      'Solo se pueden limpiar votantes en elecciones en borrador o programadas'
+    );
   }
   await electionRepo.clearVoters(electionId);
   return { success: true };
@@ -713,15 +747,25 @@ export async function clearVoters(electionId: string) {
 export async function getResults(electionId: string) {
   await electionRepo.syncAutomaticStatuses();
   const election = await electionRepo.findElectionById(electionId);
-  if (!election) throw new Error('Elección no encontrada');
+  if (!election) {
+    throw notFound('ELECTION_NOT_FOUND', 'Elección no encontrada');
+  }
   if (!['CLOSED', 'SCRUTINIZED', 'ARCHIVED'].includes(election.status)) {
-    throw new Error('Los resultados solo están disponibles después de cerrar la votación');
+    throw conflict(
+      'ELECTION_RESULTS_NOT_CLOSED',
+      'Los resultados solo están disponibles después de cerrar la votación'
+    );
   }
   if (election.requires_keys && !['SCRUTINIZED', 'ARCHIVED'].includes(election.status)) {
-    throw new Error('Los resultados requieren finalizar el escrutinio con las llaves configuradas');
+    throw conflict(
+      'ELECTION_RESULTS_REQUIRE_SCRUTINY',
+      'Los resultados requieren finalizar el escrutinio con las llaves configuradas'
+    );
   }
   const results = await electionRepo.getElectionResults(electionId);
-  if (!results) throw new Error('No se pudieron obtener los resultados');
+  if (!results) {
+    throw internalError('ELECTION_RESULTS_FETCH_FAILED', 'No se pudieron obtener los resultados');
+  }
   return results;
 }
 
@@ -733,11 +777,16 @@ export async function getMonitoringData(electionId: string): Promise<MonitoringD
 
   // 2. Validar existencia
   const election = await electionRepo.findElectionById(electionId);
-  if (!election) throw new Error('Elección no encontrada');
+  if (!election) {
+    throw notFound('ELECTION_NOT_FOUND', 'Elección no encontrada');
+  }
 
   // 3. Validar estado
   if (!['OPEN', 'CLOSED', 'SCRUTINIZED', 'ARCHIVED'].includes(election.status)) {
-    throw new Error('El monitoreo solo está disponible para elecciones activas o finalizadas');
+    throw conflict(
+      'ELECTION_MONITORING_NOT_AVAILABLE',
+      'El monitoreo solo está disponible para elecciones activas o finalizadas'
+    );
   }
 
   // 4. Obtener datos
