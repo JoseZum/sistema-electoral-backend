@@ -6,6 +6,7 @@ import {
   syncAutomaticStatuses,
   findElectionById,
 } from '../../elections/repositories/electionRepository';
+import { conflict, forbidden, internalError, notFound } from '../../../errors/httpErrors';
 
 const tokenEncryptionKey = crypto
   .createHash('sha256')
@@ -32,7 +33,7 @@ function encryptVoteToken(token: string): string {
 function decryptVoteToken(payload: string): string {
   const [ivHex, encryptedHex, tagHex] = payload.split('.');
   if (!ivHex || !encryptedHex || !tagHex) {
-    throw new Error('Token cifrado invalido');
+    throw internalError('VOTING_ENCRYPTED_TOKEN_INVALID', 'Token cifrado invalido');
   }
 
   const decipher = crypto.createDecipheriv(
@@ -53,7 +54,7 @@ function decryptVoteToken(payload: string): string {
 async function resolveStudent(email: string) {
   const student = await votingRepo.findStudentIdentityByEmail(email);
   if (!student) {
-    throw new Error('Estudiante no encontrado en el padron');
+    throw notFound('VOTING_STUDENT_NOT_FOUND', 'Estudiante no encontrado en el padron');
   }
   return student;
 }
@@ -105,7 +106,7 @@ export async function getElectionForVoting(electionId: string, email: string): P
   const student = await resolveStudent(email);
 
   const election = await votingRepo.findElectionForVoting(electionId, student.id);
-  if (!election) throw new Error('No tiene acceso a esta eleccion');
+  if (!election) throw forbidden('VOTING_ELECTION_ACCESS_DENIED', 'No tiene acceso a esta eleccion');
 
   if (election.is_anonymous && ['SCHEDULED', 'OPEN'].includes(election.status)) {
     await prepareAnonymousVotingTokensForElection(electionId);
@@ -121,16 +122,16 @@ export async function castVote(data: { electionId: string; optionId: string }, e
   const student = await resolveStudent(email);
 
   const election = await votingRepo.findElectionForVoting(data.electionId, student.id);
-  if (!election) throw new Error('No tiene acceso a esta eleccion');
-  if (election.status !== 'OPEN') throw new Error('La votacion no esta abierta');
+  if (!election) throw forbidden('VOTING_ELECTION_ACCESS_DENIED', 'No tiene acceso a esta eleccion');
+  if (election.status !== 'OPEN') throw conflict('VOTING_NOT_OPEN', 'La votacion no esta abierta');
 
-  if (election.has_voted) throw new Error('Ya ha emitido su voto en esta eleccion');
+  if (election.has_voted) throw conflict('VOTING_ALREADY_VOTED', 'Ya ha emitido su voto en esta eleccion');
 
   if (election.is_anonymous) {
     await prepareAnonymousVotingTokensForElection(data.electionId);
 
     const tokenRecord = await votingRepo.findVotingTokenByStudent(data.electionId, student.id);
-    if (!tokenRecord) throw new Error('No se encontro un token de votacion para esta eleccion');
+    if (!tokenRecord) throw notFound('VOTING_TOKEN_NOT_FOUND', 'No se encontro un token de votacion para esta eleccion');
 
     const tokenHash = hashVoteToken(decryptVoteToken(tokenRecord.token_encrypted));
 
@@ -139,7 +140,7 @@ export async function castVote(data: { electionId: string; optionId: string }, e
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes('invalido') || msg.includes('utilizado')) {
-        throw new Error('Token invalido o ya utilizado');
+        throw conflict('VOTING_TOKEN_INVALID_OR_USED', 'Token invalido o ya utilizado');
       }
       throw err;
     }
@@ -149,7 +150,7 @@ export async function castVote(data: { electionId: string; optionId: string }, e
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes('duplicate') || msg.includes('unique')) {
-        throw new Error('Ya ha emitido su voto en esta eleccion');
+        throw conflict('VOTING_ALREADY_VOTED', 'Ya ha emitido su voto en esta eleccion');
       }
       throw err;
     }
@@ -163,10 +164,10 @@ export async function getResults(electionId: string, email: string): Promise<Pub
   const student = await resolveStudent(email);
 
   const election = await votingRepo.findElectionForVoting(electionId, student.id);
-  if (!election) throw new Error('No tiene acceso a esta eleccion');
+  if (!election) throw forbidden('VOTING_ELECTION_ACCESS_DENIED', 'No tiene acceso a esta eleccion');
 
   const data = await votingRepo.getPublicResults(electionId);
-  if (!data) throw new Error('Los resultados aun no estan disponibles');
+  if (!data) throw conflict('VOTING_RESULTS_UNAVAILABLE', 'Los resultados aun no estan disponibles');
 
   const totalVotes = data.options.reduce((acc, o) => acc + o.vote_count, 0);
 
