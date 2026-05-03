@@ -8,6 +8,10 @@ import { badRequest, conflict, forbidden, internalError, notFound } from '../../
 
 
 function validateStudentID(listMembers: AssingMembersDTO){
+    if (!Array.isArray(listMembers.students_id) || listMembers.students_id.length === 0) {
+        throw badRequest('SCRUTINY_MEMBERS_REQUIRED', 'students_id es obligatorio y no puede estar vacío.');
+    }
+
     if (new Set(listMembers.students_id).size !== listMembers.students_id.length) 
         throw badRequest('SCRUTINY_DUPLICATE_STUDENT_IDS', 'No se permiten id de usuario duplicados');
 }
@@ -79,6 +83,10 @@ export async function getOperativeStateElection(electionId: string) {
     };   
 }
 export async function submitKey(data: submitKeyDTO) {
+    if (!data.member_id || !data.key_shard) {
+        throw badRequest('SCRUTINY_KEY_SUBMISSION_INVALID', 'Se requiere miembro y llave de escrutinio');
+    }
+
     await syncAutomaticStatuses();
     const election = await findElectionById(data.election_id);
     if (!election) throw notFound('SCRUTINY_ELECTION_NOT_FOUND', 'Eleccion no encontrada');

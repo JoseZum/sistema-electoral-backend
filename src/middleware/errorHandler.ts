@@ -19,8 +19,26 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { AppError, isAppError } from '../errors/appError';
 
-function isDatabaseError(error: unknown): error is Error & { code?: string } {
+type DatabaseError = Error & {
+  code?: string;
+  detail?: string;
+  constraint?: string;
+  table?: string;
+  column?: string;
+};
+
+function isDatabaseError(error: unknown): error is DatabaseError {
   return error instanceof Error && typeof (error as { code?: unknown }).code === 'string';
+}
+
+function getDatabaseErrorDetails(error: DatabaseError) {
+  return {
+    message: error.message,
+    detail: error.detail,
+    constraint: error.constraint,
+    table: error.table,
+    column: error.column,
+  };
 }
 
 function normalizeError(error: unknown): AppError {
@@ -77,6 +95,56 @@ function normalizeError(error: unknown): AppError {
         code: 'DB_CONNECTION_ERROR',
         message: 'No fue posible conectar con la base de datos.',
         details: error.message,
+        cause: error,
+      });
+    }
+
+    if (code === '23505') {
+      return new AppError({
+        status: 409,
+        code: 'DB_UNIQUE_VIOLATION',
+        message: 'El registro ya existe o viola una restriccion unica.',
+        details: getDatabaseErrorDetails(error),
+        cause: error,
+      });
+    }
+
+    if (code === '23503') {
+      return new AppError({
+        status: 400,
+        code: 'DB_FOREIGN_KEY_VIOLATION',
+        message: 'La referencia enviada no existe o no es valida.',
+        details: getDatabaseErrorDetails(error),
+        cause: error,
+      });
+    }
+
+    if (code === '23502') {
+      return new AppError({
+        status: 400,
+        code: 'DB_REQUIRED_FIELD_MISSING',
+        message: 'Falta un campo obligatorio para completar la operacion.',
+        details: getDatabaseErrorDetails(error),
+        cause: error,
+      });
+    }
+
+    if (code === '23514') {
+      return new AppError({
+        status: 400,
+        code: 'DB_CHECK_VIOLATION',
+        message: 'Los datos enviados no cumplen una restriccion de validacion.',
+        details: getDatabaseErrorDetails(error),
+        cause: error,
+      });
+    }
+
+    if (code === '22P02') {
+      return new AppError({
+        status: 400,
+        code: 'DB_INVALID_INPUT',
+        message: 'Uno de los identificadores o valores enviados no tiene un formato valido.',
+        details: getDatabaseErrorDetails(error),
         cause: error,
       });
     }
