@@ -4,6 +4,7 @@ import { pool } from '../../../config/database';
 import * as tagRepo from '../repositories/tagRepository';
 import { CreateTagDto, TagDetail, UpdateTagDto } from '../models/tagModel';
 import { DEFAULT_TAG_COLOR, TAG_COLOR_VALUES } from '../constants/tagColors';
+import { badRequest, conflict, internalError, notFound } from '../../../errors/httpErrors';
 
 type AuditActor = {
   id?: string;
@@ -59,7 +60,7 @@ function normalizeTagColor(color?: string | null): string {
   const normalized = (color || DEFAULT_TAG_COLOR).trim().toUpperCase();
 
   if (!TAG_COLOR_VALUES.includes(normalized as typeof TAG_COLOR_VALUES[number])) {
-    throw new Error('Selecciona un color valido para la tag');
+    throw badRequest('TAG_INVALID_COLOR', 'Selecciona un color valido para la tag');
   }
 
   return normalized;
@@ -67,7 +68,7 @@ function normalizeTagColor(color?: string | null): string {
 
 async function validateStudentIds(studentIds: string[], client?: PoolClient): Promise<string[]> {
   if (studentIds.length === 0) {
-    throw new Error('Se necesita al menos un estudiante para crear la tag');
+    throw badRequest('TAG_STUDENTS_REQUIRED', 'Se necesita al menos un estudiante para crear la tag');
   }
 
   const validStudentIds = client
@@ -78,7 +79,7 @@ async function validateStudentIds(studentIds: string[], client?: PoolClient): Pr
     : await tagRepo.findActiveStudentIdsByIds(studentIds);
 
   if (validStudentIds.length !== studentIds.length) {
-    throw new Error('Estudiante no encontrado en el padron');
+    throw notFound('TAG_STUDENT_NOT_FOUND', 'Estudiante no encontrado en el padron');
   }
 
   return validStudentIds;
@@ -134,7 +135,7 @@ export async function getTags(): Promise<Awaited<ReturnType<typeof tagRepo.findA
 export async function getTag(id: string): Promise<TagDetail> {
   const tag = await tagRepo.getTagDetail(id);
   if (!tag) {
-    throw new Error('Tag no encontrada');
+    throw notFound('TAG_NOT_FOUND', 'Tag no encontrada');
   }
   return tag;
 }
@@ -149,17 +150,17 @@ export async function createTag(data: CreateTagDto, actor?: AuditActor): Promise
   const studentIds = normalizeStudentIds(data.student_ids || []);
 
   if (!name) {
-    throw new Error('Se necesita un nombre para la tag');
+    throw badRequest('TAG_NAME_REQUIRED', 'Se necesita un nombre para la tag');
   }
 
   return withOptionalAudit(actor, async (client) => {
     if (!client) {
-      throw new Error('No se pudo iniciar la transaccion de creacion');
+      throw internalError('TAG_CREATION_TRANSACTION_FAILED', 'No se pudo iniciar la transaccion de creacion');
     }
 
     const existing = await tagRepo.findTagByName(name, client);
     if (existing) {
-      throw new Error('Se necesita un nombre unico para la tag');
+      throw conflict('TAG_NAME_ALREADY_EXISTS', 'Se necesita un nombre unico para la tag');
     }
 
     const validStudentIds = await validateStudentIds(studentIds, client);
@@ -169,7 +170,7 @@ export async function createTag(data: CreateTagDto, actor?: AuditActor): Promise
     const detail = await tagRepo.getTagDetail(tag.id, client);
 
     if (!detail) {
-      throw new Error('Tag no encontrada');
+      throw notFound('TAG_NOT_FOUND', 'Tag no encontrada');
     }
 
     await enrichTagCreationAudit(client, tag.id, buildTagCreationAuditSummary(detail));
@@ -184,23 +185,23 @@ export async function updateTag(id: string, data: UpdateTagDto, actor?: AuditAct
   const nextStudentIds = data.student_ids !== undefined ? normalizeStudentIds(data.student_ids) : undefined;
 
   if (nextName !== undefined && !nextName) {
-    throw new Error('Se necesita un nombre para la tag');
+    throw badRequest('TAG_NAME_REQUIRED', 'Se necesita un nombre para la tag');
   }
 
   return withOptionalAudit(actor, async (client) => {
     if (!client) {
-      throw new Error('No se pudo iniciar la transaccion de actualizacion');
+      throw internalError('TAG_UPDATE_TRANSACTION_FAILED', 'No se pudo iniciar la transaccion de actualizacion');
     }
 
     const current = await tagRepo.findTagById(id, client);
     if (!current) {
-      throw new Error('Tag no encontrada');
+      throw notFound('TAG_NOT_FOUND', 'Tag no encontrada');
     }
 
     if (nextName !== undefined) {
       const existing = await tagRepo.findTagByName(nextName, client);
       if (existing && existing.id !== id) {
-        throw new Error('Se necesita un nombre unico para la tag');
+        throw conflict('TAG_NAME_ALREADY_EXISTS', 'Se necesita un nombre unico para la tag');
       }
     }
 
@@ -224,7 +225,7 @@ export async function updateTag(id: string, data: UpdateTagDto, actor?: AuditAct
 
     const detail = await tagRepo.getTagDetail(id, client);
     if (!detail) {
-      throw new Error('Tag no encontrada');
+      throw notFound('TAG_NOT_FOUND', 'Tag no encontrada');
     }
 
     return detail;
@@ -234,13 +235,13 @@ export async function updateTag(id: string, data: UpdateTagDto, actor?: AuditAct
 export async function deleteTag(id: string, actor?: AuditActor): Promise<{ success: true }> {
   return withOptionalAudit(actor, async (client) => {
     if (!client) {
-      throw new Error('No se pudo iniciar la transaccion de eliminacion');
+      throw internalError('TAG_DELETE_TRANSACTION_FAILED', 'No se pudo iniciar la transaccion de eliminacion');
     }
 
     await setAuditSessionValue(client, 'app.compound_tag_mode', 'true');
     const deleted = await tagRepo.deleteTag(id, client);
     if (!deleted) {
-      throw new Error('Tag no encontrada');
+      throw notFound('TAG_NOT_FOUND', 'Tag no encontrada');
     }
     return { success: true as const };
   });
