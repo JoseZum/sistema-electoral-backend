@@ -29,6 +29,20 @@ async function insertScrutinyKey(
   );
 }
 
+async function cleanupScrutinyAuditLogs(pool: Pool, ids: TestIds): Promise<void> {
+  await pool.query(
+    `DELETE FROM audit_logs
+     WHERE resource_id = ANY($1::text[])
+        OR resource_id = ANY($2::text[])
+        OR EXISTS (
+          SELECT 1
+          FROM unnest($1::text[]) AS election_ids(id)
+          WHERE audit_logs.resource_id LIKE election_ids.id || ':%'
+        )`,
+    [ids.electionIds, ids.studentIds]
+  );
+}
+
 describe('scrutiny concurrency', () => {
   let pool: Pool;
   let ids: TestIds;
@@ -44,6 +58,7 @@ describe('scrutiny concurrency', () => {
 
   afterEach(async () => {
     await cleanupTestData(pool, ids);
+    await cleanupScrutinyAuditLogs(pool, ids);
   });
 
   afterAll(async () => {
@@ -82,6 +97,47 @@ describe('scrutiny concurrency', () => {
     expect(Number(submitted.rows[0].submitted)).toBe(1);
   });
 
+  it('submits 50 different scrutiny keys concurrently without dropping submissions', async () => {
+    const electionId = await insertElection(pool, ids, {
+      status: 'CLOSED',
+      requires_keys: true,
+      min_keys: CONCURRENT_REQUESTS + 1,
+      end_time: new Date('2026-05-01T12:00:00.000Z'),
+    });
+    const members = await Promise.all(
+      Array.from({ length: CONCURRENT_REQUESTS }, async (_, index) => {
+        const memberId = await insertStudent(pool, ids);
+        const key = `member-key-${index}`;
+        await insertScrutinyKey(pool, electionId, memberId, key);
+        return { memberId, key };
+      })
+    );
+
+    const results = await Promise.allSettled(
+      members.map((member) =>
+        submitKey({
+          election_id: electionId,
+          member_id: member.memberId,
+          key_shard: member.key,
+        })
+      )
+    );
+
+    const state = await pool.query<{ status: string; submitted: string }>(
+      `SELECT e.status,
+              COUNT(sk.id) FILTER (WHERE sk.has_submitted = true) AS submitted
+       FROM elections e
+       LEFT JOIN scrutiny_keys sk ON sk.election_id = e.id
+       WHERE e.id = $1
+       GROUP BY e.id`,
+      [electionId]
+    );
+
+    expect(countFulfilled(results)).toBe(CONCURRENT_REQUESTS);
+    expect(state.rows[0].status).toBe('CLOSED');
+    expect(Number(state.rows[0].submitted)).toBe(CONCURRENT_REQUESTS);
+  });
+
   it('submits different keys concurrently and finalizes the election exactly once', async () => {
     const electionId = await insertElection(pool, ids, {
       status: 'CLOSED',
@@ -89,14 +145,8 @@ describe('scrutiny concurrency', () => {
       min_keys: 2,
       end_time: new Date('2026-05-01T12:00:00.000Z'),
     });
-    const memberOne = await insertStudent(pool, ids, {
-      email: 'scrutiny-member-one@estudiantec.cr',
-      carnet: 'TCK000001',
-    });
-    const memberTwo = await insertStudent(pool, ids, {
-      email: 'scrutiny-member-two@estudiantec.cr',
-      carnet: 'TCK000002',
-    });
+    const memberOne = await insertStudent(pool, ids);
+    const memberTwo = await insertStudent(pool, ids);
     await insertScrutinyKey(pool, electionId, memberOne, 'key-one');
     await insertScrutinyKey(pool, electionId, memberTwo, 'key-two');
 
