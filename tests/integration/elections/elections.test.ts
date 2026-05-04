@@ -335,8 +335,8 @@ const mockDb = vi.hoisted(() => {
   }
 
   function likeMatches(value: string, pattern: unknown) {
-    const normalizedValue = value.toLowerCase();
-    const normalizedPattern = String(pattern).toLowerCase();
+    const normalizedValue = value.trim().toLowerCase();
+    const normalizedPattern = String(pattern).trim().toLowerCase();
     if (normalizedPattern.startsWith('%') || normalizedPattern.endsWith('%')) {
       return normalizedValue.includes(normalizedPattern.replace(/%/g, ''));
     }
@@ -758,6 +758,8 @@ const mockDb = vi.hoisted(() => {
     resetState,
     getLastClient: () => lastClient,
     getVotingTokens: () => votingTokens,
+    getElectionVoters: () => electionVoters,
+    getStudents: () => students,
   };
 });
 
@@ -942,6 +944,8 @@ describe('elections integration', () => {
         electionVoterQueries: mockDb.query.mock.calls
           .filter(([sql]) => String(sql).includes('election_voters'))
           .map(([sql, params]) => [String(sql).replace(/\s+/g, ' ').trim(), params]),
+        electionVoters: mockDb.getElectionVoters(),
+        students: mockDb.getStudents(),
       })
     ).toBe(201);
     expect(created.body).toEqual(
