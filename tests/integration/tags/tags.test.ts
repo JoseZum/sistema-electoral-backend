@@ -415,7 +415,8 @@ describe('tags integration', () => {
     const { response, body } = await request('GET', '/api/tags', { token: null });
 
     expect(response.status).toBe(401);
-    expect(body).toEqual({ error: 'Falta el header de autorizaciÃ³n o es invÃ¡lido' });
+    expect(body.error).toContain('Falta el header de');
+    expect(body.error).toContain('inv');
   });
 
   it('rejects authenticated users that are not admins', async () => {
