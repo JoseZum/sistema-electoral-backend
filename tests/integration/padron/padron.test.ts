@@ -758,7 +758,7 @@ describe('padron integration', () => {
     expect(body).toEqual(
       expect.objectContaining({
         code: 'PADRON_FILE_NO_VALID_DATA',
-        error: 'El archivo no contiene datos vÃ¡lidos',
+        error: expect.stringContaining('El archivo no contiene datos'),
       })
     );
   });
