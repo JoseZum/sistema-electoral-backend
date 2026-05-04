@@ -563,14 +563,17 @@ const mockDb = vi.hoisted(() => {
     }
 
     if (sql.startsWith('INSERT INTO election_voters') && sql.includes('SELECT $1, id FROM students')) {
-      let rows = students.filter((student) => student.is_active);
-      let paramIndex = 1;
-      if (sql.includes('sede ILIKE')) rows = rows.filter((student) => likeMatches(student.sede, params[paramIndex++]));
-      if (sql.includes('career ILIKE')) rows = rows.filter((student) => likeMatches(student.career, params[paramIndex++]));
-
+      const electionId = String(params[0]);
       let inserted = 0;
-      rows.forEach((student) => {
-        if (addVoter(String(params[0]), student.id)) inserted += 1;
+      let filterIndex = 1;
+      const sedeFilter = sql.includes('sede ILIKE') ? params[filterIndex++] : undefined;
+      const careerFilter = sql.includes('career ILIKE') ? params[filterIndex++] : undefined;
+
+      students.forEach((student) => {
+        if (!student.is_active) return;
+        if (sedeFilter !== undefined && !likeMatches(student.sede, sedeFilter)) return;
+        if (careerFilter !== undefined && !likeMatches(student.career, careerFilter)) return;
+        if (addVoter(electionId, student.id)) inserted += 1;
       });
       return { rows: [], rowCount: inserted };
     }
