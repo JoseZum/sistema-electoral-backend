@@ -236,7 +236,7 @@ const mockDb = vi.hoisted(() => {
         description: 'Estudiantes de Computacion',
         color: '#283593',
         created_by: adminStudentId,
-        created_at,
+        created_at: createdAt,
         updated_at: updatedAt,
       },
     ];
@@ -431,7 +431,14 @@ const mockDb = vi.hoisted(() => {
       return { rows: [], rowCount: 0 };
     }
 
-    if (sql.startsWith('SELECT e.*') && sql.includes('COALESCE(ev.total_voters')) {
+    if (sql.startsWith('SELECT e.*') && sql.includes('ORDER BY e.created_at DESC')) {
+      const rows = [...elections]
+        .sort((left, right) => right.created_at.getTime() - left.created_at.getTime())
+        .map(electionWithStats);
+      return { rows, rowCount: rows.length };
+    }
+
+    if (sql.startsWith('SELECT e.*') && sql.includes('COALESCE(ev.total_voters') && sql.includes('WHERE e.id = $1')) {
       const election = electionById(params[0]);
       return { rows: election ? [electionWithStats(election)] : [], rowCount: election ? 1 : 0 };
     }
@@ -439,13 +446,6 @@ const mockDb = vi.hoisted(() => {
     if (sql.startsWith('SELECT e.*') && sql.includes('WHERE e.id = $1')) {
       const election = electionById(params[0]);
       return { rows: election ? [enrichElection(election)] : [], rowCount: election ? 1 : 0 };
-    }
-
-    if (sql.startsWith('SELECT e.*') && sql.includes('ORDER BY e.created_at DESC')) {
-      const rows = [...elections]
-        .sort((left, right) => right.created_at.getTime() - left.created_at.getTime())
-        .map(electionWithStats);
-      return { rows, rowCount: rows.length };
     }
 
     if (sql.startsWith('INSERT INTO elections')) {
@@ -935,7 +935,7 @@ describe('elections integration', () => {
       },
     });
 
-    expect(created.response.status).toBe(201);
+    expect(created.response.status, JSON.stringify(created.body)).toBe(201);
     expect(created.body).toEqual(
       expect.objectContaining({
         id: '00000000-0000-4000-8000-000000000001',
@@ -1078,10 +1078,10 @@ describe('elections integration', () => {
   });
 
   it('populates and clears voters for an editable election', async () => {
-    const populated = await request('POST', `/api/elections/${mockDb.ids.scheduledElectionId}/voters/populate`, {
+    const populated = await request('POST', `/api/elections/${mockDb.ids.draftElectionId}/voters/populate`, {
       body: { student_ids: [mockDb.ids.secondVoterStudentId] },
     });
-    const cleared = await request('DELETE', `/api/elections/${mockDb.ids.scheduledElectionId}/voters`);
+    const cleared = await request('DELETE', `/api/elections/${mockDb.ids.draftElectionId}/voters`);
 
     expect(populated.response.status).toBe(200);
     expect(populated.body).toEqual({ added: 1, total: 2 });
