@@ -51,6 +51,14 @@ function decryptVoteToken(payload: string): string {
   return decrypted.toString('utf8');
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isVoteNotOpenError(error: unknown): boolean {
+  return errorMessage(error).includes('votacion no esta abierta');
+}
+
 async function resolveStudent(email: string) {
   const student = await votingRepo.findStudentIdentityByEmail(email);
   if (!student) {
@@ -138,7 +146,10 @@ export async function castVote(data: { electionId: string; optionId: string }, e
     try {
       await votingRepo.castAnonymousVote(data.electionId, data.optionId, tokenHash);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
+      if (isVoteNotOpenError(err)) {
+        throw conflict('VOTING_NOT_OPEN', 'La votacion no esta abierta');
+      }
+      const msg = errorMessage(err);
       if (msg.includes('invalido') || msg.includes('utilizado')) {
         throw conflict('VOTING_TOKEN_INVALID_OR_USED', 'Token invalido o ya utilizado');
       }
@@ -148,7 +159,10 @@ export async function castVote(data: { electionId: string; optionId: string }, e
     try {
       await votingRepo.castNamedVote(data.electionId, data.optionId, student.id);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
+      if (isVoteNotOpenError(err)) {
+        throw conflict('VOTING_NOT_OPEN', 'La votacion no esta abierta');
+      }
+      const msg = errorMessage(err);
       if (msg.includes('duplicate') || msg.includes('unique')) {
         throw conflict('VOTING_ALREADY_VOTED', 'Ya ha emitido su voto en esta eleccion');
       }

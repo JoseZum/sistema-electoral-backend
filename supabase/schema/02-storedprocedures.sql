@@ -24,8 +24,23 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
     v_token_record RECORD;
+    v_election_status election_status;
     v_now TIMESTAMPTZ := now();
 BEGIN
+    -- Bloquea contra cambios de estado concurrentes sin serializar votos entre si.
+    SELECT status INTO v_election_status
+    FROM elections
+    WHERE id = p_election_id
+    FOR SHARE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Eleccion no encontrada';
+    END IF;
+
+    IF v_election_status <> 'OPEN' THEN
+        RAISE EXCEPTION 'La votacion no esta abierta';
+    END IF;
+
     -- Verifica que el token exista, pertenezca a la eleccion y no haya sido usado.
     SELECT * INTO v_token_record
     FROM voting_tokens
@@ -85,7 +100,23 @@ CREATE OR REPLACE FUNCTION fn_cast_vote_named(
 RETURNS VOID
 LANGUAGE plpgsql
 AS $$
+DECLARE
+    v_election_status election_status;
 BEGIN
+    -- Bloquea contra cambios de estado concurrentes sin serializar votos entre si.
+    SELECT status INTO v_election_status
+    FROM elections
+    WHERE id = p_election_id
+    FOR SHARE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Eleccion no encontrada';
+    END IF;
+
+    IF v_election_status <> 'OPEN' THEN
+        RAISE EXCEPTION 'La votacion no esta abierta';
+    END IF;
+
     -- Verifica que el estudiante este habilitado para votar en la eleccion.
     IF NOT EXISTS (
         SELECT 1 FROM election_voters

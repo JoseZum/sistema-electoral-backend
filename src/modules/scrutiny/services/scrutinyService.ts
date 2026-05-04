@@ -5,6 +5,7 @@ import { PoolClient } from 'pg';
 import { syncAutomaticStatuses, findElectionById, getElectionResults } from '../../elections/repositories/electionRepository';
 import {randomInt, randomBytes, createHash } from 'crypto';
 import { badRequest, conflict, forbidden, internalError, notFound } from '../../../errors/httpErrors';
+import { isAppError } from '../../../errors/appError';
 
 
 function validateStudentID(listMembers: AssingMembersDTO){
@@ -22,6 +23,10 @@ function generateAlfaNumkeys():string{
 
 function hashkey(key: string){
     return createHash('sha256').update(key).digest('hex');
+}
+
+function isAlreadyFinalizedError(error: unknown): boolean {
+    return isAppError(error) && error.code === 'SCRUTINY_ELECTION_ALREADY_FINALIZED';
 }
 
 function generateNums(): string{
@@ -100,8 +105,15 @@ export async function submitKey(data: submitKeyDTO) {
     const progress = await scrutinyRepository.getScrutinyProgress(data.election_id);
     let finalized = false;
     if (progress && progress.submittedKeys >= election.min_keys) {
-        const finalizedElection = await scrutinyRepository.finalizeScrutine(data.election_id, data.member_id);
-        finalized = finalizedElection?.status === 'SCRUTINIZED';
+        try {
+            const finalizedElection = await scrutinyRepository.finalizeScrutine(data.election_id, data.member_id);
+            finalized = finalizedElection?.status === 'SCRUTINIZED';
+        } catch (error) {
+            if (!isAlreadyFinalizedError(error)) {
+                throw error;
+            }
+            finalized = true;
+        }
     }
     return {
         submitted: true,
@@ -152,5 +164,17 @@ export async function finaleElection(election_id:string, finalizedBy?: string) {
     if (election?.status === 'SCRUTINIZED') {
         return election;
     }
-    return await scrutinyRepository.finalizeScrutine(election_id, finalizedBy);
+    try {
+        return await scrutinyRepository.finalizeScrutine(election_id, finalizedBy);
+    } catch (error) {
+        if (!isAlreadyFinalizedError(error)) {
+            throw error;
+        }
+
+        const finalizedElection = await findElectionById(election_id);
+        if (!finalizedElection) {
+            throw error;
+        }
+        return finalizedElection;
+    }
 }
