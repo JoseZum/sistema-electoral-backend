@@ -4,7 +4,6 @@ import { VoterElection, VoteOption } from '../models/votingModel';
 
 type Queryable = Pool | PoolClient;
 
-// Get elections where the student is an eligible voter
 export async function findElectionsForVoter(studentId: string): Promise<VoterElection[]> {
   const result = await pool.query<VoterElection>(`
     SELECT
@@ -28,7 +27,6 @@ export async function findElectionsForVoter(studentId: string): Promise<VoterEle
   return result.rows;
 }
 
-// Get election detail for voting (only if voter is eligible and election is OPEN)
 export async function findElectionForVoting(electionId: string, studentId: string): Promise<{
   id: string;
   title: string;
