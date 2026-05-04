@@ -22,7 +22,7 @@ export function createPool(): Pool {
     connectionString:
       process.env.DATABASE_URL ||
       'postgresql://tee_admin:tee_local_password@localhost:5432/tee_voting',
-    max: CONCURRENT_REQUESTS + 10,
+    max: 20,
   });
 }
 

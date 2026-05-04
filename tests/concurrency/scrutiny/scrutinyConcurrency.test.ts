@@ -104,14 +104,13 @@ describe('scrutiny concurrency', () => {
       min_keys: CONCURRENT_REQUESTS + 1,
       end_time: new Date('2026-05-01T12:00:00.000Z'),
     });
-    const members = await Promise.all(
-      Array.from({ length: CONCURRENT_REQUESTS }, async (_, index) => {
-        const memberId = await insertStudent(pool, ids);
-        const key = `member-key-${index}`;
-        await insertScrutinyKey(pool, electionId, memberId, key);
-        return { memberId, key };
-      })
-    );
+    const members: Array<{ memberId: string; key: string }> = [];
+    for (let index = 0; index < CONCURRENT_REQUESTS; index += 1) {
+      const memberId = await insertStudent(pool, ids);
+      const key = `member-key-${index}`;
+      await insertScrutinyKey(pool, electionId, memberId, key);
+      members.push({ memberId, key });
+    }
 
     const results = await Promise.allSettled(
       members.map((member) =>
