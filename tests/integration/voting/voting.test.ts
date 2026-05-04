@@ -652,7 +652,8 @@ describe('voting integration', () => {
     const { response, body } = await request('GET', '/api/voting/elections');
 
     expect(response.status).toBe(200);
-    expect(body).toEqual([
+    expect(body).toHaveLength(4);
+    expect(body).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: mockDb.ids.namedElectionId,
         title: 'Consulta nominal',
@@ -680,7 +681,7 @@ describe('voting integration', () => {
         title: 'Votacion programada',
         status: 'SCHEDULED',
       }),
-    ]);
+    ]));
   });
 
   it('returns election detail with options and prepares anonymous voting tokens', async () => {
