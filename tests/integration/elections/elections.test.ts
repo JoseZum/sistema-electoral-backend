@@ -761,8 +761,6 @@ const mockDb = vi.hoisted(() => {
     resetState,
     getLastClient: () => lastClient,
     getVotingTokens: () => votingTokens,
-    getElectionVoters: () => electionVoters,
-    getStudents: () => students,
   };
 });
 
@@ -940,17 +938,7 @@ describe('elections integration', () => {
       },
     });
 
-    expect(
-      created.response.status,
-      JSON.stringify({
-        body: created.body,
-        electionVoterQueries: mockDb.query.mock.calls
-          .filter(([sql]) => String(sql).includes('election_voters'))
-          .map(([sql, params]) => [String(sql).replace(/\s+/g, ' ').trim(), params]),
-        electionVoters: mockDb.getElectionVoters(),
-        students: mockDb.getStudents(),
-      })
-    ).toBe(201);
+    expect(created.response.status).toBe(201);
     expect(created.body).toEqual(
       expect.objectContaining({
         id: '00000000-0000-4000-8000-000000000001',
