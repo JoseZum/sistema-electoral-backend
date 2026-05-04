@@ -33,6 +33,9 @@ describe('voting while election is closing', () => {
 
   afterEach(async () => {
     await cleanupTestData(pool, ids);
+    await pool.query('DELETE FROM audit_logs WHERE resource_id = ANY($1::text[])', [
+      [...ids.electionIds, ...ids.studentIds],
+    ]);
   });
 
   afterAll(async () => {
@@ -43,18 +46,15 @@ describe('voting while election is closing', () => {
     const electionId = await insertElection(pool, ids, { is_anonymous: false, status: 'OPEN' });
     const optionId = await insertOption(pool, electionId);
     const studentIds = await Promise.all(
-      Array.from({ length: CONCURRENT_REQUESTS }, (_, index) =>
-        insertStudent(pool, ids, {
-          carnet: `TCS${String(index).padStart(6, '0')}`,
-          email: `closing-race-${index}@estudiantec.cr`,
-        })
-      )
+      Array.from({ length: CONCURRENT_REQUESTS }, () => insertStudent(pool, ids))
     );
     await Promise.all(studentIds.map((studentId) => insertElectionVoter(pool, electionId, studentId)));
 
     const closer = await pool.connect();
     try {
       await closer.query('BEGIN');
+      // The close transaction owns the election row first. Vote attempts must wait
+      // in fn_cast_vote_named and reject after CLOSED commits.
       await closer.query(
         `UPDATE elections
          SET status = 'CLOSED'::election_status
