@@ -12,6 +12,7 @@
  * 3) En capas superiores (middleware/controladores), isAppError permite
  *    distinguir errores esperados de errores no controlados.
  */
+
 export interface AppErrorOptions {
   status: number;
   code: string;
