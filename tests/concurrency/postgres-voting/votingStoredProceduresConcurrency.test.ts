@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, afterEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Pool } from 'pg';
 import {
   applyVotingStoredProcedures,
