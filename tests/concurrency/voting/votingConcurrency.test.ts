@@ -380,6 +380,11 @@ const mockDb = vi.hoisted(() => {
       };
     }
 
+    if (sql.startsWith('SELECT e.*') && sql.includes('WHERE e.id = $1')) {
+      const election = electionById(params[0]);
+      return { rows: election ? [election] : [], rowCount: election ? 1 : 0 };
+    }
+
     if (
       sql.startsWith('SELECT e.id') &&
       sql.includes('INNER JOIN election_voters ev') &&
@@ -670,7 +675,8 @@ describe('voting concurrency', () => {
           .getVotesForElection(mockDb.ids.namedElectionId)
           .map((vote) => vote.student_id)
       )
-    ).toHaveSize(CONCURRENT_REQUESTS);
+        .size
+    ).toBe(CONCURRENT_REQUESTS);
     voters.forEach((voter) => {
       expect(mockDb.getVoter(mockDb.ids.namedElectionId, voter.studentId)).toMatchObject({
         token_used: true,
