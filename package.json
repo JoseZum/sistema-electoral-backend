@@ -9,6 +9,7 @@
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
+    "test:concurrency": "vitest run tests/concurrency",
     "test:ui": "vitest --ui",
     "test:dashboard:smoke": "ts-node src/scripts/dashboardSmokeTest.ts"
   },
