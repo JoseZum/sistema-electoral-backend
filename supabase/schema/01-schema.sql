@@ -117,7 +117,7 @@ CREATE TABLE election_options (
 );
 
 -- ============================================
--- VOTANTES ELEGIBLES POR ELECCION
+-- VOTANTES ELEGIBLES POR ELECCIÓN
 -- ============================================
 CREATE TABLE election_voters (
     election_id     UUID NOT NULL REFERENCES elections(id) ON DELETE CASCADE,
