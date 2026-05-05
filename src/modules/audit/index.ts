@@ -139,6 +139,46 @@ function getDetailString(details: Record<string, unknown> | null, key: string): 
   return null;
 }
 
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>]/g, (char) => {
+    switch (char) {
+      case '&':
+        return '&amp;';
+      case '<':
+        return '&lt;';
+      case '>':
+        return '&gt;';
+      default:
+        return char;
+    }
+  });
+}
+
+function sanitizeAuditValue(value: unknown): unknown {
+  if (typeof value === 'string') {
+    return escapeHtml(value);
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeAuditValue(item));
+  }
+
+  if (value instanceof Date || !value || typeof value !== 'object') {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, nestedValue]) => [
+      key,
+      sanitizeAuditValue(nestedValue),
+    ]),
+  );
+}
+
+function sanitizeAuditRecord(row: Record<string, unknown>): Record<string, unknown> {
+  return sanitizeAuditValue(row) as Record<string, unknown>;
+}
+
 function buildActivityMessage(row: Record<string, unknown>): string {
   const actionLabel = formatActionLabel((row.action as string | null) ?? null);
   const resourceLabel = formatResourceLabel((row.resource_type as string | null) ?? null);
@@ -266,13 +306,13 @@ function withDisplayFields(row: Record<string, unknown>): Record<string, unknown
     }
   }
 
-  return {
+  return sanitizeAuditRecord({
     ...row,
     details: Object.keys(enrichedDetails).length > 0 ? enrichedDetails : row.details ?? null,
     actionLabel: formatActionLabel(action),
     resourceLabel: formatResourceLabel(resourceType),
     activityMessage: buildActivityMessage(row),
-  };
+  });
 }
 
 // ─── Construcción común de filtros ─────────────────────────────────────────
@@ -654,10 +694,10 @@ router.get(
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
       res.setHeader('X-Audit-Export-Count', String(result.rows.length));
       res.setHeader('X-Audit-Export-Limit', String(EXPORT_HARD_LIMIT));
+      const enriched = result.rows.map((row) => withDisplayFields(row));
 
       if (format === 'json') {
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
-        const enriched = result.rows.map((row) => withDisplayFields(row));
         res.json({
           exported_at: new Date().toISOString(),
           filters: {
@@ -680,7 +720,7 @@ router.get(
       // BOM para que Excel detecte UTF-8.
       res.write('﻿');
       res.write(CSV_COLUMNS.join(',') + '\n');
-      for (const row of result.rows) {
+      for (const row of enriched) {
         res.write(rowToCsv(row) + '\n');
       }
       res.end();

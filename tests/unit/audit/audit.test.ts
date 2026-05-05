@@ -229,6 +229,31 @@ describe('audit', () => {
       });
     });
 
+    it('escapes persisted HTML payloads before returning audit logs', async () => {
+      const row = {
+        id: '1',
+        action: 'tag.insert',
+        resource_type: 'tag',
+        tag_name: '<script>alert(1)</script>',
+        details: {
+          new: {
+            name: '<img src=x onerror=alert(1)>',
+          },
+        },
+        resource_id: null,
+      };
+      mockLogsQuery([row]);
+      const res = makeRes();
+      await logsHandler(makeReq(), res, makeNext());
+      const { logs } = vi.mocked(res.json).mock.calls[0][0] as any;
+
+      expect(JSON.stringify(logs[0])).not.toContain('<script>');
+      expect(JSON.stringify(logs[0])).not.toContain('<img');
+      expect(logs[0].tag_name).toBe('&lt;script&gt;alert(1)&lt;/script&gt;');
+      expect(logs[0].details.new.name).toBe('&lt;img src=x onerror=alert(1)&gt;');
+      expect(logs[0].activityMessage).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+    });
+
     it('calls next with error when pool.query throws', async () => {
       vi.mocked(pool.query).mockRejectedValue(new Error('DB down'));
       const next = makeNext();
