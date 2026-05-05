@@ -33,6 +33,14 @@ npm run test:security:zap
 Este flujo es autocontenido para GitHub Actions porque levanta postgres, backend y
 ZAP desde `docker-compose.security.yml`.
 
+En Linux, si el contenedor no puede escribir en el checkout, preparar los
+directorios de salida antes del scan:
+
+```bash
+mkdir -p tests/security/.zap tests/security/reports
+chmod -R 777 tests/security/.zap tests/security/reports
+```
+
 ## Endpoints autenticados
 
 ```powershell

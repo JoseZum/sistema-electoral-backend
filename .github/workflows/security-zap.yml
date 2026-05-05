@@ -39,6 +39,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Prepare ZAP writable directories
+        run: |
+          mkdir -p tests/security/.zap tests/security/reports
+          chmod -R 777 tests/security/.zap tests/security/reports
+
       - name: Run OWASP ZAP API scan
         run: |
           docker compose -f docker-compose.security.yml up \
