@@ -7,7 +7,7 @@
   },
   "servers": [
     {
-      "url": "http://host.docker.internal:3001"
+      "url": "http://backend:3001"
     }
   ],
   "tags": [
