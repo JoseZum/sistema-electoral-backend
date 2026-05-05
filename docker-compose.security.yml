@@ -1,0 +1,54 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-tee_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tee_local_password}
+      POSTGRES_DB: ${POSTGRES_DB:-tee_voting}
+    volumes:
+      - ./supabase/schema/01-schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./supabase/schema/02-storedprocedures.sql:/docker-entrypoint-initdb.d/02-storedprocedures.sql:ro
+      - ./supabase/schema/03-seed.sql:/docker-entrypoint-initdb.d/03-seed.sql:ro
+      - ./supabase/schema/04-triggers.sql:/docker-entrypoint-initdb.d/04-triggers.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tee_admin} -d ${POSTGRES_DB:-tee_voting}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: .
+    environment:
+      PORT: 3001
+      NODE_ENV: test
+      AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-aa4e880b-a43f-49d9-b0f2-98bbd86f2dec}
+      AZURE_TENANT_ID: ${AZURE_TENANT_ID:-common}
+      JWT_SECRET: ${JWT_SECRET:-zap_ci_jwt_secret_change_in_prod}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tee_admin}:${POSTGRES_PASSWORD:-tee_local_password}@postgres:5432/${POSTGRES_DB:-tee_voting}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/api/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  zap-api-scan:
+    image: ghcr.io/zaproxy/zaproxy:stable
+    command: ["/bin/sh", "/zap/wrk/zap-api-scan.sh"]
+    environment:
+      ZAP_TARGET_BASE_URL: ${ZAP_TARGET_BASE_URL:-http://backend:3001}
+      ZAP_AUTH_TOKEN: ${ZAP_AUTH_TOKEN:-}
+      ZAP_FAIL_ON_WARNINGS: ${ZAP_FAIL_ON_WARNINGS:-false}
+      ZAP_SAFE_MODE: ${ZAP_SAFE_MODE:-false}
+      ZAP_DEBUG: ${ZAP_DEBUG:-false}
+      ZAP_INCLUDE_ALPHA: ${ZAP_INCLUDE_ALPHA:-false}
+      ZAP_MAX_WAIT_MINUTES: ${ZAP_MAX_WAIT_MINUTES:-5}
+    volumes:
+      - ./tests/security:/zap/wrk:rw
+    depends_on:
+      backend:
+        condition: service_healthy

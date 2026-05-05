@@ -12,7 +12,7 @@
     "test:concurrency": "vitest run tests/concurrency --fileParallelism=false",
     "test:security": "npm run test:security:vulnerabilities",
     "test:security:vulnerabilities": "node tests/security/vulnerabilityAudit.mjs",
-    "test:security:zap": "docker compose --project-directory .. --profile security run --rm zap-api-scan",
+    "test:security:zap": "docker compose -f docker-compose.security.yml up --build --abort-on-container-exit --exit-code-from zap-api-scan zap-api-scan",
     "test:ui": "vitest --ui",
     "test:dashboard:smoke": "ts-node src/scripts/dashboardSmokeTest.ts"
   },

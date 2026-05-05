@@ -1,0 +1,59 @@
+name: Security - OWASP ZAP API Scan
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'supabase/schema/**'
+      - 'tests/security/**'
+      - 'Dockerfile'
+      - 'docker-compose.security.yml'
+      - 'package*.json'
+      - '.github/workflows/security-zap.yml'
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'src/**'
+      - 'supabase/schema/**'
+      - 'tests/security/**'
+      - 'Dockerfile'
+      - 'docker-compose.security.yml'
+      - 'package*.json'
+      - '.github/workflows/security-zap.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  zap-api-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      ZAP_FAIL_ON_WARNINGS: 'false'
+      ZAP_MAX_WAIT_MINUTES: '5'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run OWASP ZAP API scan
+        run: |
+          docker compose -f docker-compose.security.yml up \
+            --build \
+            --abort-on-container-exit \
+            --exit-code-from zap-api-scan \
+            zap-api-scan
+
+      - name: Upload ZAP reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-api-reports
+          path: tests/security/reports/
+          if-no-files-found: warn
+
+      - name: Stop security stack
+        if: always()
+        run: docker compose -f docker-compose.security.yml down -v --remove-orphans
