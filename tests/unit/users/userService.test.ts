@@ -8,13 +8,16 @@ vi.mock('../../../src/config/database', () => ({
 vi.mock('../../../src/config/audit-context', () => ({
   withAuditContext: vi.fn(),
 }));
-vi.mock('xlsx');
+vi.mock('read-excel-file/node', () => ({
+  default: vi.fn(),
+  readSheetNames: vi.fn(),
+}));
 
 import * as studentRepo from '../../../src/modules/users/repositories/studentRepository';
 import * as adminRepo from '../../../src/modules/users/repositories/adminRepository';
 import { withAuditContext } from '../../../src/config/audit-context';
 import { pool } from '../../../src/config/database';
-import XLSX from 'xlsx';
+import readXlsxFile, { readSheetNames } from 'read-excel-file/node';
 import {
   getAllStudents,
   getStudentCatalog,
@@ -243,19 +246,13 @@ describe('userService', () => {
     const summary = { total: 5, new: 3, updated: 1, reactivated: 1, deactivated: 0 };
 
     beforeEach(() => {
-      vi.mocked(XLSX.read).mockReturnValue({
-        SheetNames: ['Hoja1'],
-        Sheets: { Hoja1: {} },
-      } as any);
-      vi.mocked(XLSX.utils.sheet_to_json).mockReturnValue([
-        {
-          carnet: '2021001234',
-          'nombre completo': 'Ana García',
-          correo: 'ana@tec.cr',
-          sede: 'Central',
-          carrera: 'Computación',
-          grado: 'Bachillerato',
-        },
+      vi.mocked(readSheetNames).mockResolvedValue(['Hoja1']);
+      vi.mocked(readXlsxFile).mockResolvedValue([
+        [],
+        [],
+        [],
+        ['carnet', 'nombre completo', 'correo', 'sede', 'carrera', 'grado'],
+        ['2021001234', 'Ana García', 'ana@tec.cr', 'Central', 'Computación', 'Bachillerato'],
       ] as any);
       vi.mocked(studentRepo.importPadron).mockResolvedValue(summary);
     });
@@ -277,8 +274,12 @@ describe('userService', () => {
     });
 
     it('throws when all rows are missing required fields', async () => {
-      vi.mocked(XLSX.utils.sheet_to_json).mockReturnValue([
-        { grado: 'Bachillerato' },
+      vi.mocked(readXlsxFile).mockResolvedValue([
+        [],
+        [],
+        [],
+        ['grado'],
+        ['Bachillerato'],
       ] as any);
       await expect(importPadron(Buffer.from(''), actor)).rejects.toThrow(
         'El archivo no contiene datos válidos'
@@ -286,15 +287,19 @@ describe('userService', () => {
     });
 
     it('throws when sheet returns no rows', async () => {
-      vi.mocked(XLSX.utils.sheet_to_json).mockReturnValue([] as any);
+      vi.mocked(readXlsxFile).mockResolvedValue([[], [], [], ['carnet', 'correo']] as any);
       await expect(importPadron(Buffer.from(''), actor)).rejects.toThrow(
         'El archivo no contiene datos válidos'
       );
     });
 
     it('filters out rows missing Carnet', async () => {
-      vi.mocked(XLSX.utils.sheet_to_json).mockReturnValue([
-        { 'nombre completo': 'Ana García', correo: 'ana@tec.cr' },
+      vi.mocked(readXlsxFile).mockResolvedValue([
+        [],
+        [],
+        [],
+        ['nombre completo', 'correo'],
+        ['Ana García', 'ana@tec.cr'],
       ] as any);
       await expect(importPadron(Buffer.from(''), actor)).rejects.toThrow(
         'El archivo no contiene datos válidos'

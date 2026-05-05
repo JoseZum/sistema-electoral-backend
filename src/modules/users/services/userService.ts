@@ -1,4 +1,4 @@
-import XLSX from 'xlsx';
+import readXlsxFile, { readSheetNames } from 'read-excel-file/node';
 import * as studentRepo from '../repositories/studentRepository';
 import * as adminRepo from '../repositories/adminRepository';
 import { CreateStudentDto, UpdateStudentDto, StudentFiltersDto } from '../dtos/studentDtos';
@@ -29,6 +29,20 @@ function getValueFromRow(row: Record<string, unknown>, possibleKeys: string[]) {
   }
 
   return null;
+}
+
+function rowArrayToObject(headers: unknown[], values: unknown[]): Record<string, unknown> {
+  const row: Record<string, unknown> = {};
+
+  headers.forEach((header, index) => {
+    if (header === undefined || header === null || String(header).trim() === '') {
+      return;
+    }
+
+    row[String(header)] = values[index] ?? null;
+  });
+
+  return row;
 }
 
 function normalizeCatalogEntry(value: string) {
@@ -118,17 +132,13 @@ export async function importPadron(
   fileBuffer: Buffer,
   actor?: AuditActor
 ) {
-  const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
+  const sheetNames = await readSheetNames(fileBuffer);
 
   const data: Record<string, unknown>[] = [];
-  for (const sheetName of workbook.SheetNames) {
-    const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(
-      workbook.Sheets[sheetName],
-      {
-        defval: null,
-        range: 3 // asume que la cabecera real está en la fila 4 debido a títulos previos
-      }
-    );
+  for (const sheetName of sheetNames) {
+    const rows = await readXlsxFile(fileBuffer, { sheet: sheetName });
+    const headers = rows[3] || [];
+    const rawRows = rows.slice(4).map((row) => rowArrayToObject(headers, row));
 
     const normalizedRows = rawRows.map(row => ({
       Carnet: String(getValueFromRow(row, ['carné', 'carnet', 'carne']) || '').trim(),
