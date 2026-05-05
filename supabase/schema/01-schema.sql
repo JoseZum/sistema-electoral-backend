@@ -187,7 +187,7 @@ CREATE TABLE scrutiny_keys (
 );
 
 -- ============================================
--- LOGS DE AUDITORIA
+-- LOGS DE AUDITORÍA
 -- ============================================
 CREATE TABLE audit_logs (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
