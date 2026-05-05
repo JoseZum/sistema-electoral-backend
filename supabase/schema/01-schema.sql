@@ -2,7 +2,7 @@
 -- SCRIPT 01: ESQUEMA PRINCIPAL DE LA BASE DE DATOS
 -- =================================================
 
--- ============================================
+-----------------------------------------------
 -- ENUMS
 -- ============================================
 CREATE TYPE election_status AS ENUM ('DRAFT', 'SCHEDULED', 'OPEN', 'CLOSED', 'SCRUTINIZED', 'ARCHIVED');
