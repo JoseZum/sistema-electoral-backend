@@ -131,7 +131,7 @@ CREATE INDEX idx_election_voters_election ON election_voters(election_id);
 CREATE INDEX idx_election_voters_student ON election_voters(student_id);
 
 -- ============================================
--- TOKENS INTERNOS PARA VOTO ANONIMO
+-- TOKENS INTERNOS PARA VOTO ANÓNIMO
 -- ============================================
 CREATE TABLE voting_tokens (
     election_id      UUID NOT NULL,
