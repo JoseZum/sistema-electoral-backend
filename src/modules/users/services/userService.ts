@@ -1,4 +1,4 @@
-import readXlsxFile, { readSheetNames } from 'read-excel-file/node';
+import readXlsxFile from 'read-excel-file/node';
 import * as studentRepo from '../repositories/studentRepository';
 import * as adminRepo from '../repositories/adminRepository';
 import { CreateStudentDto, UpdateStudentDto, StudentFiltersDto } from '../dtos/studentDtos';
@@ -132,11 +132,11 @@ export async function importPadron(
   fileBuffer: Buffer,
   actor?: AuditActor
 ) {
-  const sheetNames = await readSheetNames(fileBuffer);
+  const sheets = await readXlsxFile(fileBuffer);
 
   const data: Record<string, unknown>[] = [];
-  for (const sheetName of sheetNames) {
-    const rows = await readXlsxFile(fileBuffer, { sheet: sheetName });
+  for (const sheet of sheets) {
+    const rows = sheet.data;
     const headers = rows[3] || [];
     const rawRows = rows.slice(4).map((row) => rowArrayToObject(headers, row));
 

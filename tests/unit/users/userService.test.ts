@@ -10,14 +10,13 @@ vi.mock('../../../src/config/audit-context', () => ({
 }));
 vi.mock('read-excel-file/node', () => ({
   default: vi.fn(),
-  readSheetNames: vi.fn(),
 }));
 
 import * as studentRepo from '../../../src/modules/users/repositories/studentRepository';
 import * as adminRepo from '../../../src/modules/users/repositories/adminRepository';
 import { withAuditContext } from '../../../src/config/audit-context';
 import { pool } from '../../../src/config/database';
-import readXlsxFile, { readSheetNames } from 'read-excel-file/node';
+import readXlsxFile from 'read-excel-file/node';
 import {
   getAllStudents,
   getStudentCatalog,
@@ -246,13 +245,17 @@ describe('userService', () => {
     const summary = { total: 5, new: 3, updated: 1, reactivated: 1, deactivated: 0 };
 
     beforeEach(() => {
-      vi.mocked(readSheetNames).mockResolvedValue(['Hoja1']);
       vi.mocked(readXlsxFile).mockResolvedValue([
-        [],
-        [],
-        [],
-        ['carnet', 'nombre completo', 'correo', 'sede', 'carrera', 'grado'],
-        ['2021001234', 'Ana García', 'ana@tec.cr', 'Central', 'Computación', 'Bachillerato'],
+        {
+          sheet: 'Hoja1',
+          data: [
+            [],
+            [],
+            [],
+            ['carnet', 'nombre completo', 'correo', 'sede', 'carrera', 'grado'],
+            ['2021001234', 'Ana García', 'ana@tec.cr', 'Central', 'Computación', 'Bachillerato'],
+          ],
+        },
       ] as any);
       vi.mocked(studentRepo.importPadron).mockResolvedValue(summary);
     });
@@ -275,11 +278,7 @@ describe('userService', () => {
 
     it('throws when all rows are missing required fields', async () => {
       vi.mocked(readXlsxFile).mockResolvedValue([
-        [],
-        [],
-        [],
-        ['grado'],
-        ['Bachillerato'],
+        { sheet: 'Hoja1', data: [[], [], [], ['grado'], ['Bachillerato']] },
       ] as any);
       await expect(importPadron(Buffer.from(''), actor)).rejects.toThrow(
         'El archivo no contiene datos válidos'
@@ -287,7 +286,9 @@ describe('userService', () => {
     });
 
     it('throws when sheet returns no rows', async () => {
-      vi.mocked(readXlsxFile).mockResolvedValue([[], [], [], ['carnet', 'correo']] as any);
+      vi.mocked(readXlsxFile).mockResolvedValue([
+        { sheet: 'Hoja1', data: [[], [], [], ['carnet', 'correo']] },
+      ] as any);
       await expect(importPadron(Buffer.from(''), actor)).rejects.toThrow(
         'El archivo no contiene datos válidos'
       );
@@ -295,11 +296,10 @@ describe('userService', () => {
 
     it('filters out rows missing Carnet', async () => {
       vi.mocked(readXlsxFile).mockResolvedValue([
-        [],
-        [],
-        [],
-        ['nombre completo', 'correo'],
-        ['Ana García', 'ana@tec.cr'],
+        {
+          sheet: 'Hoja1',
+          data: [[], [], [], ['nombre completo', 'correo'], ['Ana García', 'ana@tec.cr']],
+        },
       ] as any);
       await expect(importPadron(Buffer.from(''), actor)).rejects.toThrow(
         'El archivo no contiene datos válidos'
