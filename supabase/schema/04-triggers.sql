@@ -229,7 +229,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- ============================================
--- TRIGGERS: STUDENTS (padron)
+-- TRIGGERS: STUDENTS (padrón)
 -- ============================================
 CREATE TRIGGER trg_students_insert
   AFTER INSERT ON students
