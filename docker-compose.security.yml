@@ -42,6 +42,11 @@ services:
     environment:
       ZAP_TARGET_BASE_URL: ${ZAP_TARGET_BASE_URL:-http://backend:3001}
       ZAP_AUTH_TOKEN: ${ZAP_AUTH_TOKEN:-}
+      ZAP_GENERATE_TEST_TOKEN: ${ZAP_GENERATE_TEST_TOKEN:-false}
+      ZAP_JWT_SECRET: ${JWT_SECRET:-zap_ci_jwt_secret_change_in_prod}
+      ZAP_TEST_USER_CARNET: ${ZAP_TEST_USER_CARNET:-2024080534}
+      ZAP_TEST_USER_EMAIL: ${ZAP_TEST_USER_EMAIL:-j.zumbado.1@estudiantec.cr}
+      ZAP_TEST_USER_FULL_NAME: ${ZAP_TEST_USER_FULL_NAME:-Jose Fabian Zumbado Ruiz}
       ZAP_FAIL_ON_WARNINGS: ${ZAP_FAIL_ON_WARNINGS:-false}
       ZAP_SAFE_MODE: ${ZAP_SAFE_MODE:-false}
       ZAP_DEBUG: ${ZAP_DEBUG:-false}

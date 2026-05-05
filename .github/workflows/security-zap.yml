@@ -32,6 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
+      ZAP_GENERATE_TEST_TOKEN: 'true'
       ZAP_FAIL_ON_WARNINGS: 'false'
       ZAP_MAX_WAIT_MINUTES: '5'
     steps:

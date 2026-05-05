@@ -27,6 +27,50 @@ with open(target, "w", encoding="utf-8") as fh:
     fh.write("\n")
 PY
 
+case "${ZAP_GENERATE_TEST_TOKEN:-false}" in
+  true|TRUE|1|yes|YES|on|ON)
+    if [ -z "${ZAP_AUTH_TOKEN:-}" ]; then
+      ZAP_AUTH_TOKEN="$(
+        python3 - <<'PY'
+import base64
+import hashlib
+import hmac
+import json
+import os
+import time
+
+secret = os.environ.get("ZAP_JWT_SECRET", "")
+if not secret:
+    raise SystemExit("ZAP_JWT_SECRET is required when ZAP_GENERATE_TEST_TOKEN=true")
+
+now = int(time.time())
+header = {"alg": "HS256", "typ": "JWT"}
+payload = {
+    "carnet": os.environ.get("ZAP_TEST_USER_CARNET", "2024080534"),
+    "email": os.environ.get("ZAP_TEST_USER_EMAIL", "j.zumbado.1@estudiantec.cr"),
+    "fullName": os.environ.get("ZAP_TEST_USER_FULL_NAME", "Jose Fabian Zumbado Ruiz"),
+    "role": "admin",
+    "iat": now,
+    "exp": now + 8 * 60 * 60,
+    "iss": "tee-voting-system",
+}
+
+def b64url(data):
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+
+encoded_header = b64url(json.dumps(header, separators=(",", ":")).encode("utf-8"))
+encoded_payload = b64url(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+message = f"{encoded_header}.{encoded_payload}".encode("ascii")
+signature = hmac.new(secret.encode("utf-8"), message, hashlib.sha256).digest()
+print(f"{encoded_header}.{encoded_payload}.{b64url(signature)}")
+PY
+      )"
+      export ZAP_AUTH_TOKEN
+      echo "[security] JWT de prueba generado para ${ZAP_TEST_USER_EMAIL:-j.zumbado.1@estudiantec.cr}."
+    fi
+    ;;
+esac
+
 set -- zap-api-scan.py \
   -t "$OPENAPI_RUNTIME" \
   -f openapi \
