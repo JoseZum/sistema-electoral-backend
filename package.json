@@ -10,8 +10,13 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:concurrency": "vitest run tests/concurrency --fileParallelism=false",
+    "test:security": "npm run test:security:vulnerabilities",
+    "test:security:vulnerabilities": "node tests/security/vulnerabilityAudit.mjs",
     "test:ui": "vitest --ui",
     "test:dashboard:smoke": "ts-node src/scripts/dashboardSmokeTest.ts"
+  },
+  "overrides": {
+    "path-to-regexp": "0.1.13"
   },
   "dependencies": {
     "cors": "^2.8.5",
