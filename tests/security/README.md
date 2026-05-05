@@ -8,21 +8,17 @@ OpenAPI de `tests/security/openapi.json`.
 Requisitos:
 
 - Docker disponible.
-- Backend levantado en `http://localhost:3001` o un `ZAP_TARGET_BASE_URL` equivalente.
 - Ejecutar contra datos de prueba. El active scan puede enviar `POST`, `PUT` y `DELETE`.
 
-Comandos:
+Comando principal desde la raiz del proyecto:
 
 ```powershell
-npm run test:security:zap
+docker compose --profile security run --rm zap-api-scan
 ```
 
-Con la app levantada por Docker Compose y ZAP dentro de la misma red:
+Tambien existe el script npm desde `sistema-electoral-backend`, pero internamente delega a Docker Compose:
 
 ```powershell
-$env:ZAP_TARGET_BASE_URL="http://backend:3001"
-$env:ZAP_DOCKER_NETWORK="proyecto_default"
-$env:ZAP_SKIP_HEALTHCHECK="true"
 npm run test:security:zap
 ```
 
@@ -30,12 +26,12 @@ Para endpoints autenticados:
 
 ```powershell
 $env:ZAP_AUTH_TOKEN="<jwt-de-prueba>"
-npm run test:security:zap
+docker compose --profile security run --rm zap-api-scan
 ```
 
 Variables utiles:
 
-- `ZAP_TARGET_BASE_URL`: URL base del backend vista desde el contenedor ZAP. Por defecto usa `http://host.docker.internal:3001`.
+- `ZAP_TARGET_BASE_URL`: URL base del backend vista desde el contenedor ZAP. Por defecto usa `http://backend:3001`.
 - `ZAP_AUTH_TOKEN`: JWT opcional. El runner lo inyecta como `Authorization: Bearer <token>`.
 - `ZAP_SAFE_MODE=true`: ejecuta ZAP sin active scan.
 - `ZAP_FAIL_ON_WARNINGS=true`: falla tambien con hallazgos `WARN`.
