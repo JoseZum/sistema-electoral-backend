@@ -678,15 +678,10 @@ test.describe('voting e2e', () => {
     await expect(electionCard).toBeVisible();
     await expect(electionCard.getByText(votingFixture.uiTitle)).toBeVisible();
 
-    const detailResponse = page.waitForResponse(
-      (response) =>
-        response.url() === apiUrl(`/api/voting/elections/${election.id}`) &&
-        response.request().method() === 'GET' &&
-        response.status() === 200
-    );
-    await electionCard.click();
-    await detailResponse;
-
+    await Promise.all([
+      page.waitForURL(new RegExp(`/votaciones/${election.id}$`)),
+      electionCard.click(),
+    ]);
     await expect(page).toHaveURL(new RegExp(`/votaciones/${election.id}$`));
     await expect(page.getByRole('heading', { name: votingFixture.uiTitle })).toBeVisible();
 
