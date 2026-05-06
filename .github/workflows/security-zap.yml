@@ -1,4 +1,4 @@
-name: Security - Gitleaks, CodeQL SAST and OWASP ZAP API Scan
+name: Security - Gitleaks, CodeQL, AuthZ and OWASP ZAP API Scan
 
 on:
   pull_request:
@@ -52,10 +52,37 @@ jobs:
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@v4
 
+  authorization-tests:
+    name: Authorization Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run authorization regression tests
+        run: |
+          npx vitest run \
+            tests/integration/dashboard/dashboard.test.ts \
+            tests/integration/elections/elections.test.ts \
+            tests/integration/voting/voting.test.ts
+
   zap-api-scan:
     needs:
       - gitleaks-secret-scan
       - codeql-sast
+      - authorization-tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:

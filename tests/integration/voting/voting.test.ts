@@ -653,6 +653,13 @@ describe('voting integration', () => {
 
     expect(response.status).toBe(200);
     expect(body).toHaveLength(4);
+    expect(body).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: mockDb.ids.restrictedElectionId,
+        }),
+      ])
+    );
     expect(body).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: mockDb.ids.namedElectionId,
@@ -728,6 +735,23 @@ describe('voting integration', () => {
       'GET',
       `/api/voting/elections/${mockDb.ids.restrictedElectionId}`
     );
+
+    expect(response.status).toBe(403);
+    expect(body).toEqual(
+      expect.objectContaining({
+        code: 'VOTING_ELECTION_ACCESS_DENIED',
+        error: 'No tiene acceso a esta eleccion',
+      })
+    );
+  });
+
+  it('returns 403 when the voter attempts to cast a vote in another voter election', async () => {
+    const { response, body } = await request('POST', '/api/voting/cast', {
+      body: {
+        electionId: mockDb.ids.restrictedElectionId,
+        optionId: mockDb.ids.namedOptionOneId,
+      },
+    });
 
     expect(response.status).toBe(403);
     expect(body).toEqual(
@@ -848,6 +872,21 @@ describe('voting integration', () => {
         },
       ],
     });
+  });
+
+  it('returns 403 when requesting results for another voter election', async () => {
+    const { response, body } = await request(
+      'GET',
+      `/api/voting/elections/${mockDb.ids.restrictedElectionId}/results`
+    );
+
+    expect(response.status).toBe(403);
+    expect(body).toEqual(
+      expect.objectContaining({
+        code: 'VOTING_ELECTION_ACCESS_DENIED',
+        error: 'No tiene acceso a esta eleccion',
+      })
+    );
   });
 
   it('returns 409 when public results are requested before they are available', async () => {

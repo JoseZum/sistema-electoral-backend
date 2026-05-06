@@ -834,6 +834,16 @@ describe('elections integration', () => {
         };
       }
 
+      if (token === 'forged-admin-token') {
+        return {
+          studentId: mockDb.ids.voterStudentId,
+          carnet: '2021001234',
+          email: 'ana@estudiantec.cr',
+          fullName: 'Ana Garcia',
+          role: 'admin',
+        };
+      }
+
       throw new Error('invalid token');
     });
   });
@@ -872,6 +882,19 @@ describe('elections integration', () => {
 
     expect(response.status).toBe(403);
     expect(body.error).toBe('Se requieren permisos administrativos para esta accion.');
+  });
+
+  it('rejects privilege escalation when a voter forges an admin role in the token', async () => {
+    const { response, body } = await request('GET', '/api/elections', {
+      token: 'forged-admin-token',
+    });
+
+    expect(response.status).toBe(403);
+    expect(body.error).toBe('Se requieren permisos administrativos para esta accion.');
+    expect(mockDb.query).toHaveBeenCalledWith(
+      'SELECT * FROM admins WHERE students_id = $1',
+      [mockDb.ids.voterStudentId]
+    );
   });
 
   it('lists elections with stats for an admin user', async () => {
