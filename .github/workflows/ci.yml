@@ -146,7 +146,7 @@ jobs:
 
           for url in "$E2E_BACKEND_URL/api/health" "$E2E_FRONTEND_URL"; do
             for attempt in {1..120}; do
-              if curl -fsS "$url" >/dev/null; then
+              if curl -fs "$url" >/dev/null 2>&1; then
                 break
               fi
 

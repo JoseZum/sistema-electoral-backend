@@ -330,9 +330,11 @@ test.describe('padron e2e', () => {
     await expect(page.getByRole('heading', { name: /Padr.n Estudiantil/i })).toBeVisible();
     await page.getByLabel(/Buscar estudiantes por carnet o nombre/i).fill(padronFixture.carnet);
 
-    await expect(page.getByRole('cell', { name: padronFixture.carnet })).toBeVisible();
-    await expect(page.getByRole('cell', { name: padronFixture.full_name, exact: true })).toBeVisible();
-    await expect(page.getByRole('cell', { name: padronFixture.sede })).toBeVisible();
+    const row = page.getByRole('row').filter({ hasText: padronFixture.carnet });
+    await expect(row).toBeVisible();
+    await expect(row.getByRole('cell', { name: padronFixture.carnet })).toBeVisible();
+    await expect(row.getByRole('cell', { name: padronFixture.full_name, exact: true })).toBeVisible();
+    await expect(row.getByRole('cell', { name: padronFixture.sede })).toBeVisible();
   });
 
   test('admin UI applies sede and career filters', async ({ page }) => {
@@ -346,7 +348,12 @@ test.describe('padron e2e', () => {
     await page.getByLabel(/Filtrar por carrera/i).selectOption(padronFixture.career);
     await page.getByLabel(/Buscar estudiantes por carnet o nombre/i).fill(padronFixture.carnet);
 
-    await expect(page.getByRole('cell', { name: padronFixture.full_name, exact: true })).toBeVisible();
+    await expect(
+      page
+        .getByRole('row')
+        .filter({ hasText: padronFixture.carnet })
+        .getByRole('cell', { name: padronFixture.full_name, exact: true })
+    ).toBeVisible();
 
     await page.getByLabel(/Buscar estudiantes por carnet o nombre/i).fill('E2E_PADRON_NO_EXISTE');
     await expect(page.getByText(/No se encontraron estudiantes/i)).toBeVisible();
