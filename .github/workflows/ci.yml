@@ -124,19 +124,39 @@ jobs:
 
           docker compose -p tee-e2e-ci -f docker-compose.e2e.yml up --build -d postgres backend frontend
 
+          ensure_service_running() {
+            local service="$1"
+            local container_id
+            local status
+
+            container_id="$(docker compose -p tee-e2e-ci -f docker-compose.e2e.yml ps -q "$service")"
+            if [ -z "$container_id" ]; then
+              echo "$service container was not created"
+              docker compose -p tee-e2e-ci -f docker-compose.e2e.yml ps
+              exit 1
+            fi
+
+            status="$(docker inspect -f '{{.State.Status}}' "$container_id")"
+            if [ "$status" = "exited" ] || [ "$status" = "dead" ]; then
+              echo "$service container stopped before becoming ready"
+              docker compose -p tee-e2e-ci -f docker-compose.e2e.yml logs "$service"
+              exit 1
+            fi
+          }
+
           for url in "$E2E_BACKEND_URL/api/health" "$E2E_FRONTEND_URL"; do
-            for attempt in {1..60}; do
+            for attempt in {1..120}; do
               if curl -fsS "$url" >/dev/null; then
                 break
               fi
 
-              if [ "$url" = "$E2E_FRONTEND_URL" ] && ! docker compose -p tee-e2e-ci -f docker-compose.e2e.yml ps --status running | grep -q tee-e2e-ci-frontend; then
-                echo "Frontend container stopped before becoming ready"
-                docker compose -p tee-e2e-ci -f docker-compose.e2e.yml logs frontend
-                exit 1
+              if [ "$url" = "$E2E_BACKEND_URL/api/health" ]; then
+                ensure_service_running backend
+              else
+                ensure_service_running frontend
               fi
 
-              if [ "$attempt" -eq 60 ]; then
+              if [ "$attempt" -eq 120 ]; then
                 echo "Timed out waiting for $url"
                 docker compose -p tee-e2e-ci -f docker-compose.e2e.yml logs
                 exit 1
