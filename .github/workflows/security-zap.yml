@@ -1,4 +1,4 @@
-name: Security - OWASP ZAP API Scan
+name: Security - CodeQL SAST and OWASP ZAP API Scan
 
 on:
   pull_request:
@@ -28,7 +28,29 @@ permissions:
   contents: read
 
 jobs:
+  codeql-sast:
+    name: CodeQL SAST
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: javascript-typescript
+          build-mode: none
+          queries: security-extended
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v4
+
   zap-api-scan:
+    needs: codeql-sast
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
