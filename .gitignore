@@ -16,6 +16,8 @@ yarn-error.log*
 .pnpm-debug.log*
 tests/security/.zap/
 tests/security/reports/
+tests/e2e/artifacts/*
+!tests/e2e/artifacts/.gitkeep
 .vscode/settings.json
 .idea/
 *.swp
