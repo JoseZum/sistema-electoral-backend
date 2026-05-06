@@ -1,0 +1,190 @@
+name: CI - Testing and Security
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  security-events: write
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: Ordered CI
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      NODE_ENV: test
+      PORT: 3001
+      AZURE_CLIENT_ID: aa4e880b-a43f-49d9-b0f2-98bbd86f2dec
+      AZURE_TENANT_ID: common
+      JWT_SECRET: ci_jwt_secret_change_in_prod
+      VOTE_TOKEN_SECRET: ci_vote_token_secret_change_in_prod
+      CORS_ORIGIN: http://localhost:3000
+      DATABASE_URL: postgresql://tee_admin:tee_local_password@localhost:5432/tee_voting
+      E2E_DATABASE_URL: postgresql://tee_admin:tee_local_password@localhost:5432/tee_voting
+      E2E_BACKEND_URL: http://localhost:3001
+      E2E_FRONTEND_URL: http://localhost:3000
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+      NEXT_PUBLIC_AZURE_CLIENT_ID: aa4e880b-a43f-49d9-b0f2-98bbd86f2dec
+      NEXT_PUBLIC_AZURE_TENANT_ID: common
+      NEXT_PUBLIC_REDIRECT_URI: http://localhost:3000
+      SECURITY_AUDIT_FAIL_LEVEL: high
+      ZAP_GENERATE_TEST_TOKEN: "true"
+      ZAP_FAIL_ON_WARNINGS: "false"
+      ZAP_MAX_WAIT_MINUTES: "5"
+
+    steps:
+      - name: Checkout backend
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: 1. perform vitest unit testing
+        run: npx vitest run tests/unit
+
+      - name: 2. perform vitest integration testing
+        run: npx vitest run tests/integration
+
+      - name: Checkout frontend for Playwright E2E
+        uses: actions/checkout@v4
+        with:
+          repository: JoseZum/sistema-electoral-frontend
+          path: sistema-electoral-frontend
+          fetch-depth: 1
+          token: ${{ secrets.CI_FRONTEND_REPO_TOKEN || github.token }}
+
+      - name: Install frontend dependencies
+        working-directory: sistema-electoral-frontend
+        run: npm ci
+
+      - name: 3. playwright e2e testing
+        run: |
+          set -euo pipefail
+
+          FRONTEND_PID=""
+          cleanup() {
+            if [ -n "$FRONTEND_PID" ]; then
+              kill "$FRONTEND_PID" 2>/dev/null || true
+            fi
+            docker compose -p tee-e2e-ci -f docker-compose.security.yml logs postgres backend > e2e-docker.log 2>&1 || true
+            docker compose -p tee-e2e-ci -f docker-compose.security.yml down -v --remove-orphans
+            rm -rf sistema-electoral-frontend
+          }
+          trap cleanup EXIT
+
+          docker compose -p tee-e2e-ci -f docker-compose.security.yml up --build -d postgres backend
+
+          pushd sistema-electoral-frontend
+          npm run build
+          npm run start -- --hostname 0.0.0.0 > ../frontend-e2e.log 2>&1 &
+          FRONTEND_PID=$!
+          popd
+
+          for url in "$E2E_BACKEND_URL/api/health" "$E2E_FRONTEND_URL"; do
+            for attempt in {1..60}; do
+              if curl -fsS "$url" >/dev/null; then
+                break
+              fi
+
+              if [ "$attempt" -eq 60 ]; then
+                echo "Timed out waiting for $url"
+                exit 1
+              fi
+
+              sleep 2
+            done
+          done
+
+          npx playwright test tests/e2e
+
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-e2e-artifacts
+          path: |
+            playwright-report/
+            test-results/
+            frontend-e2e.log
+            e2e-docker.log
+          if-no-files-found: warn
+
+      - name: 4. vulnerability audit
+        run: npm run test:security:vulnerabilities
+
+      - name: 5. concurrency testing
+        run: |
+          set -euo pipefail
+
+          cleanup() {
+            docker compose -f docker-compose.concurrency.yml down -v --remove-orphans
+          }
+          trap cleanup EXIT
+
+          npm run test:concurrency:docker
+
+      - name: 6. gitleaks secret scanning
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/repo" \
+            ghcr.io/gitleaks/gitleaks:v8.30.1 \
+            git --verbose --redact --exit-code 1 /repo
+
+      - name: 7. codeql initialize
+        uses: github/codeql-action/init@v4
+        with:
+          languages: javascript-typescript
+          build-mode: none
+          queries: security-extended
+
+      - name: 7. codeql analyze
+        uses: github/codeql-action/analyze@v4
+
+      - name: 8. owaspzap
+        run: |
+          set -euo pipefail
+
+          mkdir -p tests/security/.zap tests/security/reports
+          chmod -R 777 tests/security/.zap tests/security/reports
+
+          cleanup() {
+            docker compose -p tee-zap-ci -f docker-compose.security.yml down -v --remove-orphans
+          }
+          trap cleanup EXIT
+
+          docker compose -p tee-zap-ci -f docker-compose.security.yml up \
+            --build \
+            --abort-on-container-exit \
+            --exit-code-from zap-api-scan \
+            zap-api-scan
+
+      - name: Upload OWASP ZAP reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-api-reports
+          path: tests/security/reports/
+          if-no-files-found: warn
