@@ -1,0 +1,64 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-tee_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tee_local_password}
+      POSTGRES_DB: ${POSTGRES_DB:-tee_voting}
+    volumes:
+      - ./supabase/schema/01-schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./supabase/schema/02-storedprocedures.sql:/docker-entrypoint-initdb.d/02-storedprocedures.sql:ro
+      - ./supabase/schema/03-seed.sql:/docker-entrypoint-initdb.d/03-seed.sql:ro
+      - ./supabase/schema/04-triggers.sql:/docker-entrypoint-initdb.d/04-triggers.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tee_admin} -d ${POSTGRES_DB:-tee_voting}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: .
+    ports:
+      - "${BACKEND_PORT:-3001}:3001"
+    environment:
+      PORT: 3001
+      NODE_ENV: test
+      AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-aa4e880b-a43f-49d9-b0f2-98bbd86f2dec}
+      AZURE_TENANT_ID: ${AZURE_TENANT_ID:-common}
+      JWT_SECRET: ${JWT_SECRET:-e2e_ci_jwt_secret_change_in_prod}
+      VOTE_TOKEN_SECRET: ${VOTE_TOKEN_SECRET:-e2e_ci_vote_token_secret_change_in_prod}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tee_admin}:${POSTGRES_PASSWORD:-tee_local_password}@postgres:5432/${POSTGRES_DB:-tee_voting}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/api/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  frontend:
+    build: ./sistema-electoral-frontend
+    command: sh -c "npm run build && npm run start -- -H 0.0.0.0 -p 3000"
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
+      NEXT_PUBLIC_AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-aa4e880b-a43f-49d9-b0f2-98bbd86f2dec}
+      NEXT_PUBLIC_AZURE_TENANT_ID: ${AZURE_TENANT_ID:-common}
+      NEXT_PUBLIC_REDIRECT_URI: ${NEXT_PUBLIC_REDIRECT_URI:-http://localhost:3000}
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 60s

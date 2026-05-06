@@ -112,31 +112,17 @@ jobs:
           fetch-depth: 1
           token: ${{ secrets.CI_FRONTEND_REPO_TOKEN || github.token }}
 
-      - name: Install frontend dependencies
-        working-directory: sistema-electoral-frontend
-        run: npm ci
-
       - name: Run Playwright E2E tests
         run: |
           set -euo pipefail
 
-          FRONTEND_PID=""
           cleanup() {
-            if [ -n "$FRONTEND_PID" ]; then
-              kill "$FRONTEND_PID" 2>/dev/null || true
-            fi
-            docker compose -p tee-e2e-ci -f docker-compose.security.yml logs postgres backend > e2e-docker.log 2>&1 || true
-            docker compose -p tee-e2e-ci -f docker-compose.security.yml down -v --remove-orphans
+            docker compose -p tee-e2e-ci -f docker-compose.e2e.yml logs > e2e-docker.log 2>&1 || true
+            docker compose -p tee-e2e-ci -f docker-compose.e2e.yml down -v --remove-orphans
           }
           trap cleanup EXIT
 
-          docker compose -p tee-e2e-ci -f docker-compose.security.yml up --build -d postgres backend
-
-          pushd sistema-electoral-frontend
-          npm run build
-          npm run start -- --hostname 0.0.0.0 > ../frontend-e2e.log 2>&1 &
-          FRONTEND_PID=$!
-          popd
+          docker compose -p tee-e2e-ci -f docker-compose.e2e.yml up --build -d postgres backend frontend
 
           for url in "$E2E_BACKEND_URL/api/health" "$E2E_FRONTEND_URL"; do
             for attempt in {1..60}; do
@@ -144,8 +130,15 @@ jobs:
                 break
               fi
 
+              if [ "$url" = "$E2E_FRONTEND_URL" ] && ! docker compose -p tee-e2e-ci -f docker-compose.e2e.yml ps --status running | grep -q tee-e2e-ci-frontend; then
+                echo "Frontend container stopped before becoming ready"
+                docker compose -p tee-e2e-ci -f docker-compose.e2e.yml logs frontend
+                exit 1
+              fi
+
               if [ "$attempt" -eq 60 ]; then
                 echo "Timed out waiting for $url"
+                docker compose -p tee-e2e-ci -f docker-compose.e2e.yml logs
                 exit 1
               fi
 
@@ -163,7 +156,6 @@ jobs:
           path: |
             playwright-report/
             test-results/
-            frontend-e2e.log
             e2e-docker.log
           if-no-files-found: warn
 
