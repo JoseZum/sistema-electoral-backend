@@ -371,10 +371,24 @@ test.describe('padron e2e', () => {
     await expect(page.getByRole('cell', { name: padronFixture.full_name, exact: true })).toBeVisible();
 
     await page.getByRole('button', { name: `Editar estudiante ${padronFixture.full_name}` }).click();
-    await page.getByRole('row').filter({ hasText: padronFixture.carnet }).locator('input').first().fill(updatedName);
-    await page.getByRole('button', { name: 'OK' }).click();
+    const editingRow = page.getByRole('row').filter({ hasText: padronFixture.carnet });
+    await editingRow.locator('input').first().fill(updatedName);
 
-    await expect(page.getByRole('cell', { name: updatedName })).toBeVisible();
+    const saveResponse = page.waitForResponse(
+      (response) =>
+        response.url().startsWith(`${BACKEND_URL}/api/users/students/`) &&
+        response.request().method() === 'PUT' &&
+        response.status() === 200
+    );
+    await editingRow.getByRole('button', { name: 'OK' }).click({ force: true });
+    await saveResponse;
+
+    await expect(
+      page
+        .getByRole('row')
+        .filter({ hasText: padronFixture.carnet })
+        .getByRole('cell', { name: updatedName, exact: true })
+    ).toBeVisible();
 
     const student = await findFixtureThroughApi(request);
     expect(student.full_name).toBe(updatedName);
