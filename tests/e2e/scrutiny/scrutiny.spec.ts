@@ -537,7 +537,7 @@ test.describe('scrutiny e2e', () => {
     await expect(page.getByRole('heading', { name: /Escrutinio de resultados/i })).toBeVisible();
     await expect(page.getByText(electionFixture.title)).toBeVisible();
     await expect(page.getByText(/0 de 1 requeridas/i)).toBeVisible();
-    await expect(page.getByText(adminUser.fullName)).toBeVisible();
+    await expect(page.getByRole('main').getByText(adminUser.fullName)).toBeVisible();
 
     await page.getByLabel(/Llave de escrutinio/i).fill(key);
     await page.getByRole('button', { name: /^Canjear$/i }).click();
@@ -555,7 +555,6 @@ test.describe('scrutiny e2e', () => {
     await seedStoredSession(page, voterUser);
     await page.goto(`${FRONTEND_URL}/escrutinio`);
 
-    await expect(page).toHaveURL(escapedFrontendUrl());
-    await expect(page.getByRole('button', { name: /Continuar con Microsoft/i })).toBeVisible();
+    await expect(page).toHaveURL(/\/votaciones$/);
   });
 });

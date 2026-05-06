@@ -40,7 +40,7 @@ env:
 
 jobs:
   vitest-unit-testing:
-    name: Vitest Unit Testing
+    name: 1) Vitest Unit Testing
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -61,7 +61,7 @@ jobs:
         run: npx vitest run tests/unit
 
   vitest-integration-testing:
-    name: Vitest Integration Testing
+    name: 2) Vitest Integration Testing
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: vitest-unit-testing
@@ -83,7 +83,7 @@ jobs:
         run: npx vitest run tests/integration
 
   playwright-e2e-testing:
-    name: Playwright E2E Testing
+    name: 3) Playwright E2E Testing
     runs-on: ubuntu-latest
     timeout-minutes: 35
     needs: vitest-integration-testing
@@ -160,7 +160,7 @@ jobs:
           if-no-files-found: warn
 
   vulnerability-audit:
-    name: Vulnerability Audit
+    name: 4) Vulnerability Audit
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: playwright-e2e-testing
@@ -182,7 +182,7 @@ jobs:
         run: npm run test:security:vulnerabilities
 
   concurrency-testing:
-    name: Concurrency Testing
+    name: 5) Concurrency Testing
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: vulnerability-audit
@@ -207,7 +207,7 @@ jobs:
           npm run test:concurrency:docker
 
   gitleaks-secret-scanning:
-    name: Gitleaks Secret Scanning
+    name: 6) Gitleaks Secret Scanning
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: concurrency-testing
@@ -225,7 +225,7 @@ jobs:
             git --verbose --redact --exit-code 1 /repo
 
   codeql:
-    name: CodeQL
+    name: 7) CodeQL
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: gitleaks-secret-scanning
@@ -244,7 +244,7 @@ jobs:
         uses: github/codeql-action/analyze@v4
 
   owasp-zap:
-    name: OWASP ZAP
+    name: 8) OWASP ZAP
     runs-on: ubuntu-latest
     timeout-minutes: 25
     needs: codeql

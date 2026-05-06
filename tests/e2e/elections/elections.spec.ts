@@ -766,7 +766,6 @@ test.describe('elections e2e', () => {
     await seedStoredSession(page, voterUser);
     await page.goto(frontendUrl('/elecciones'));
 
-    await expect(page).toHaveURL(frontendRootRegex());
-    await expect(page.getByRole('button', { name: /Continuar con Microsoft/i })).toBeVisible();
+    await expect(page).toHaveURL(/\/votaciones$/);
   });
 });

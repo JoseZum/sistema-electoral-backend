@@ -331,7 +331,7 @@ test.describe('padron e2e', () => {
     await page.getByLabel(/Buscar estudiantes por carnet o nombre/i).fill(padronFixture.carnet);
 
     await expect(page.getByRole('cell', { name: padronFixture.carnet })).toBeVisible();
-    await expect(page.getByRole('cell', { name: padronFixture.full_name })).toBeVisible();
+    await expect(page.getByRole('cell', { name: padronFixture.full_name, exact: true })).toBeVisible();
     await expect(page.getByRole('cell', { name: padronFixture.sede })).toBeVisible();
   });
 
@@ -346,7 +346,7 @@ test.describe('padron e2e', () => {
     await page.getByLabel(/Filtrar por carrera/i).selectOption(padronFixture.career);
     await page.getByLabel(/Buscar estudiantes por carnet o nombre/i).fill(padronFixture.carnet);
 
-    await expect(page.getByRole('cell', { name: padronFixture.full_name })).toBeVisible();
+    await expect(page.getByRole('cell', { name: padronFixture.full_name, exact: true })).toBeVisible();
 
     await page.getByLabel(/Buscar estudiantes por carnet o nombre/i).fill('E2E_PADRON_NO_EXISTE');
     await expect(page.getByText(/No se encontraron estudiantes/i)).toBeVisible();
@@ -361,7 +361,7 @@ test.describe('padron e2e', () => {
     await seedStoredSession(page, adminUser);
     await page.goto(`${FRONTEND_URL}/padron`);
     await page.getByLabel(/Buscar estudiantes por carnet o nombre/i).fill(padronFixture.carnet);
-    await expect(page.getByRole('cell', { name: padronFixture.full_name })).toBeVisible();
+    await expect(page.getByRole('cell', { name: padronFixture.full_name, exact: true })).toBeVisible();
 
     await page.getByRole('button', { name: `Editar estudiante ${padronFixture.full_name}` }).click();
     await page.getByRole('row').filter({ hasText: padronFixture.carnet }).locator('input').first().fill(updatedName);

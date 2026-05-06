@@ -350,7 +350,6 @@ test.describe('dashboard e2e', () => {
     await seedStoredSession(page, voterUser);
     await page.goto(`${FRONTEND_URL}/dashboard`);
 
-    await expect(page).toHaveURL(new RegExp(`${FRONTEND_URL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/?$`));
-    await expect(page.getByRole('button', { name: /Continuar con Microsoft/i })).toBeVisible();
+    await expect(page).toHaveURL(/\/votaciones$/);
   });
 });

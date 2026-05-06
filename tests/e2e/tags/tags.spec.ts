@@ -453,7 +453,7 @@ test.describe('tags e2e', () => {
     await page.getByRole('button', { name: /^Buscar$/ }).click();
     await expect(page.getByText(seededStudents[0].full_name)).toBeVisible();
     await page.getByRole('button', { name: /^Agregar$/ }).first().click();
-    await expect(page.getByText(seededStudents[0].carnet)).toBeVisible();
+    await expect(page.getByText(seededStudents[0].carnet, { exact: true })).toBeVisible();
 
     await page.getByRole('button', { name: /^Crear tag$/ }).click();
 
