@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:concurrency": "vitest run tests/concurrency --fileParallelism=false",
+    "test:concurrency:docker": "docker compose -f docker-compose.concurrency.yml up --abort-on-container-exit --exit-code-from concurrency-tests concurrency-tests",
     "test:security": "npm run test:security:vulnerabilities",
     "test:security:vulnerabilities": "node tests/security/vulnerabilityAudit.mjs",
     "test:security:zap": "docker compose -f docker-compose.security.yml up --build --abort-on-container-exit --exit-code-from zap-api-scan zap-api-scan",

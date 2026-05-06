@@ -1,0 +1,39 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-tee_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tee_local_password}
+      POSTGRES_DB: ${POSTGRES_DB:-tee_voting}
+    volumes:
+      - ./supabase/schema/01-schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./supabase/schema/02-storedprocedures.sql:/docker-entrypoint-initdb.d/02-storedprocedures.sql:ro
+      - ./supabase/schema/03-seed.sql:/docker-entrypoint-initdb.d/03-seed.sql:ro
+      - ./supabase/schema/04-triggers.sql:/docker-entrypoint-initdb.d/04-triggers.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tee_admin} -d ${POSTGRES_DB:-tee_voting}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  concurrency-tests:
+    image: node:20-alpine
+    working_dir: /app
+    environment:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tee_admin}:${POSTGRES_PASSWORD:-tee_local_password}@postgres:5432/${POSTGRES_DB:-tee_voting}
+      AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-aa4e880b-a43f-49d9-b0f2-98bbd86f2dec}
+      AZURE_TENANT_ID: ${AZURE_TENANT_ID:-common}
+      JWT_SECRET: ${JWT_SECRET:-concurrency_ci_jwt_secret_change_in_prod}
+      VOTE_TOKEN_SECRET: ${VOTE_TOKEN_SECRET:-concurrency_ci_vote_token_secret_change_in_prod}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+    volumes:
+      - .:/app
+      - concurrency_node_modules:/app/node_modules
+    command: sh -c "npm ci && npm run test:concurrency"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  concurrency_node_modules:
