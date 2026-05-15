@@ -9,6 +9,7 @@ import {
   CreateOptionDto,
   UpdateOptionDto,
   ElectionResults,
+  ElectionResultOption,
   VotesByHour,
   MonitoringData
 } from '../models/electionModel';
@@ -26,6 +27,42 @@ function withOptionMetadata(
   }
 
   return Object.keys(nextMetadata).length > 0 ? nextMetadata : null;
+}
+
+function nestElectionOptions<T extends ElectionOption>(rows: T[]): T[] {
+  const parents = rows
+    .filter((option) => !option.parent_option_id)
+    .map((option) => ({ ...option, suboptions: [] as T[] }));
+  const parentMap = new Map(parents.map((option) => [option.id, option]));
+
+  rows
+    .filter((option) => option.parent_option_id)
+    .forEach((option) => {
+      const parent = option.parent_option_id ? parentMap.get(option.parent_option_id) : undefined;
+      if (parent) {
+        parent.suboptions?.push({ ...option, suboptions: [] as T[] });
+      }
+    });
+
+  return parents as T[];
+}
+
+function nestResultOptions(rows: ElectionResultOption[]): ElectionResultOption[] {
+  const parents = rows
+    .filter((option) => !option.parent_option_id)
+    .map((option) => ({ ...option, suboptions: [] as ElectionResultOption[] }));
+  const parentMap = new Map(parents.map((option) => [option.id, option]));
+
+  rows
+    .filter((option) => option.parent_option_id)
+    .forEach((option) => {
+      const parent = option.parent_option_id ? parentMap.get(option.parent_option_id) : undefined;
+      if (parent) {
+        parent.suboptions?.push({ ...option, suboptions: [] });
+      }
+    });
+
+  return parents;
 }
 
 export async function syncAutomaticStatuses(db: Queryable = pool): Promise<void> {
@@ -73,6 +110,7 @@ export async function findAllElections(): Promise<ElectionWithStats[]> {
     LEFT JOIN (
       SELECT election_id, COUNT(*) AS options_count
       FROM election_options
+      WHERE parent_option_id IS NULL
       GROUP BY election_id
     ) eo ON eo.election_id = e.id
     ORDER BY e.created_at DESC
@@ -127,6 +165,7 @@ export async function findElectionWithStats(id: string): Promise<ElectionWithSta
     LEFT JOIN (
       SELECT election_id, COUNT(*) AS options_count
       FROM election_options
+      WHERE parent_option_id IS NULL
       GROUP BY election_id
     ) eo ON eo.election_id = e.id
     WHERE e.id = $1
@@ -141,14 +180,15 @@ export async function createElection(
 ): Promise<Election> {
   const status = data.status || 'DRAFT';
   const result = await db.query<Election>(
-    `INSERT INTO elections (title, description, status, is_anonymous, auth_method, voter_source, voter_filter, tag_id, starts_immediately, immediate_minutes, requires_keys, min_keys, start_time, end_time, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+    `INSERT INTO elections (title, description, status, is_anonymous, allow_suboptions, auth_method, voter_source, voter_filter, tag_id, starts_immediately, immediate_minutes, requires_keys, min_keys, start_time, end_time, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
      RETURNING *`,
     [
       data.title,
       data.description || null,
       status,
       data.is_anonymous,
+      data.allow_suboptions ?? false,
       data.auth_method || 'MICROSOFT',
       data.voter_source,
       data.voter_filter ? JSON.stringify(data.voter_filter) : null,
@@ -173,6 +213,7 @@ export async function updateElection(id: string, data: UpdateElectionDto, db: Qu
   if (data.title !== undefined) { fields.push(`title = $${idx++}`); params.push(data.title); }
   if (data.description !== undefined) { fields.push(`description = $${idx++}`); params.push(data.description); }
   if (data.is_anonymous !== undefined) { fields.push(`is_anonymous = $${idx++}`); params.push(data.is_anonymous); }
+  if (data.allow_suboptions !== undefined) { fields.push(`allow_suboptions = $${idx++}`); params.push(data.allow_suboptions); }
   if (data.auth_method !== undefined) { fields.push(`auth_method = $${idx++}`); params.push(data.auth_method); }
   if (data.voter_source !== undefined) { fields.push(`voter_source = $${idx++}`); params.push(data.voter_source); }
   if (data.voter_filter !== undefined) { fields.push(`voter_filter = $${idx++}`); params.push(JSON.stringify(data.voter_filter)); }
@@ -227,10 +268,16 @@ export async function updateElectionStatus(id: string, status: Election['status'
 
 export async function findOptionsByElection(electionId: string): Promise<ElectionOption[]> {
   const result = await pool.query<ElectionOption>(
-    'SELECT * FROM election_options WHERE election_id = $1 ORDER BY display_order ASC',
+    `SELECT eo.*
+     FROM election_options eo
+     LEFT JOIN election_options parent ON parent.id = eo.parent_option_id
+     WHERE eo.election_id = $1
+     ORDER BY COALESCE(parent.display_order, eo.display_order) ASC,
+       CASE WHEN eo.parent_option_id IS NULL THEN 0 ELSE 1 END ASC,
+       eo.display_order ASC`,
     [electionId]
   );
-  return result.rows;
+  return nestElectionOptions(result.rows);
 }
 
 export async function createOption(
@@ -240,10 +287,18 @@ export async function createOption(
 ): Promise<ElectionOption> {
   const metadata = withOptionMetadata(data.description, data.metadata);
   const result = await db.query<ElectionOption>(
-    `INSERT INTO election_options (election_id, label, option_type, display_order, metadata)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO election_options (election_id, parent_option_id, label, option_type, image_url, display_order, metadata)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING *`,
-    [electionId, data.label, data.option_type, data.display_order || 0, metadata ? JSON.stringify(metadata) : null]
+    [
+      electionId,
+      data.parent_option_id || null,
+      data.label,
+      data.option_type,
+      data.image_url || null,
+      data.display_order || 0,
+      metadata ? JSON.stringify(metadata) : null,
+    ]
   );
   return result.rows[0];
 }
@@ -260,6 +315,7 @@ export async function updateOption(
 
   if (data.label !== undefined) { fields.push(`label = $${idx++}`); params.push(data.label); }
   if (data.option_type !== undefined) { fields.push(`option_type = $${idx++}`); params.push(data.option_type); }
+  if (data.image_url !== undefined) { fields.push(`image_url = $${idx++}`); params.push(data.image_url); }
   if (data.display_order !== undefined) { fields.push(`display_order = $${idx++}`); params.push(data.display_order); }
   if (data.metadata !== undefined || data.description !== undefined) {
     fields.push(`metadata = $${idx++}`);
@@ -393,19 +449,60 @@ export async function getElectionResults(electionId: string): Promise<ElectionRe
     id: string;
     label: string;
     option_type: string;
-    vote_count: string;
+    parent_option_id: string | null;
+    image_url: string | null;
+    metadata: Record<string, unknown> | null;
+    vote_count: number | string;
   }>(`
-    SELECT eo.id, eo.label, eo.option_type,
-      COUNT(v.id)::text AS vote_count
+    SELECT eo.id, eo.label, eo.option_type, eo.parent_option_id, eo.image_url, eo.metadata,
+      COUNT(v.id)::int AS vote_count
     FROM election_options eo
+    LEFT JOIN election_options parent ON parent.id = eo.parent_option_id
     LEFT JOIN votes v ON v.option_id = eo.id AND v.election_id = eo.election_id
     WHERE eo.election_id = $1
-    GROUP BY eo.id, eo.label, eo.option_type, eo.display_order
-    ORDER BY eo.display_order ASC
+    GROUP BY eo.id, eo.label, eo.option_type, eo.parent_option_id, eo.image_url, eo.metadata,
+      eo.display_order, parent.display_order
+    ORDER BY COALESCE(parent.display_order, eo.display_order) ASC,
+      CASE WHEN eo.parent_option_id IS NULL THEN 0 ELSE 1 END ASC,
+      eo.display_order ASC
   `, [electionId]);
 
   const voterStats = await getVoterCount(electionId);
-  const totalVotes = optionsResult.rows.reduce((acc, r) => acc + parseInt(r.vote_count, 10), 0);
+  const flatOptions: ElectionResultOption[] = optionsResult.rows.map((row) => ({
+    id: row.id,
+    label: row.label,
+    option_type: row.option_type,
+    parent_option_id: row.parent_option_id,
+    image_url: row.image_url,
+    metadata: row.metadata,
+    vote_count: Number(row.vote_count),
+    percentage: 0,
+  }));
+  const totalVotes = election.allow_suboptions
+    ? voterStats.voted
+    : flatOptions
+        .filter((option) => !option.parent_option_id)
+        .reduce((acc, option) => acc + option.vote_count, 0);
+  const resultOptions = election.allow_suboptions
+    ? nestResultOptions(flatOptions).map((parent) => {
+        const suboptions = parent.suboptions ?? [];
+        const parentTotal = suboptions.reduce((acc, option) => acc + option.vote_count, 0);
+        return {
+          ...parent,
+          vote_count: parentTotal,
+          percentage: totalVotes > 0 ? (parentTotal / totalVotes) * 100 : 0,
+          suboptions: suboptions.map((option) => ({
+            ...option,
+            percentage: parentTotal > 0 ? (option.vote_count / parentTotal) * 100 : 0,
+          })),
+        };
+      })
+    : flatOptions
+        .filter((option) => !option.parent_option_id)
+        .map((option) => ({
+          ...option,
+          percentage: totalVotes > 0 ? (option.vote_count / totalVotes) * 100 : 0,
+        }));
 
   const votersResult = await pool.query<{
     full_name: string;
@@ -413,26 +510,33 @@ export async function getElectionResults(electionId: string): Promise<ElectionRe
     has_voted: boolean;
     selected_option_label: string | null;
   }>(`
-    SELECT s.full_name, s.carnet, ev.token_used AS has_voted, eo.label AS selected_option_label
+    SELECT
+      s.full_name,
+      s.carnet,
+      ev.token_used AS has_voted,
+      string_agg(
+        CASE
+          WHEN selected.id IS NULL THEN NULL
+          WHEN parent.id IS NULL THEN selected.label
+          ELSE parent.label || ': ' || selected.label
+        END,
+        ', ' ORDER BY COALESCE(parent.display_order, selected.display_order), selected.display_order
+      ) AS selected_option_label
     FROM election_voters ev
     INNER JOIN students s ON s.id = ev.student_id
     LEFT JOIN votes v
       ON v.election_id = ev.election_id
      AND v.student_id = ev.student_id
-    LEFT JOIN election_options eo ON eo.id = v.option_id
+    LEFT JOIN election_options selected ON selected.id = v.option_id
+    LEFT JOIN election_options parent ON parent.id = v.parent_option_id
     WHERE ev.election_id = $1
+    GROUP BY s.full_name, s.carnet, ev.token_used
     ORDER BY s.full_name ASC
   `, [electionId]);
 
   return {
     election,
-    options: optionsResult.rows.map(r => ({
-      id: r.id,
-      label: r.label,
-      option_type: r.option_type,
-      vote_count: parseInt(r.vote_count, 10),
-      percentage: totalVotes > 0 ? (parseInt(r.vote_count, 10) / totalVotes) * 100 : 0,
-    })),
+    options: resultOptions,
     total_votes: totalVotes,
     total_eligible: voterStats.total,
     participation_rate: voterStats.total > 0 ? (voterStats.voted / voterStats.total) * 100 : 0,
@@ -449,7 +553,7 @@ export async function getVotesByHour(electionId: string): Promise<VotesByHour[]>
   const result = await pool.query<{ hour: Date; count: number }>(
     `SELECT 
         date_trunc('hour', created_at) as hour,
-        COUNT(*)::int as count
+        COUNT(DISTINCT COALESCE(student_id::text, token_hash))::int as count
      FROM votes
      WHERE election_id = $1
      GROUP BY hour

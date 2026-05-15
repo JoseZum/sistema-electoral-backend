@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  castAnonymousSuboptionVotes,
   castAnonymousVote,
+  castNamedSuboptionVotes,
   castNamedVote,
   findElectionForVoting,
   findElectionOptions,
@@ -23,6 +25,7 @@ const mockElection: VoterElection = {
   description: 'General student election',
   status: 'OPEN',
   is_anonymous: true,
+  allow_suboptions: false,
   tag_name: 'Engineering',
   tag_color: '#2563EB',
   start_time: new Date('2026-05-01T10:00:00.000Z'),
@@ -37,6 +40,7 @@ const mockElectionDetail = {
   description: 'General student election',
   status: 'OPEN',
   is_anonymous: true,
+  allow_suboptions: false,
   tag_name: 'Engineering',
   tag_color: '#2563EB',
   start_time: new Date('2026-05-01T10:00:00.000Z'),
@@ -46,9 +50,13 @@ const mockElectionDetail = {
 
 const mockOption: VoteOption = {
   id: 'option-1',
+  election_id: 'election-1',
+  parent_option_id: null,
   label: 'Alice',
   option_type: 'ticket',
+  image_url: null,
   display_order: 1,
+  metadata: null,
 };
 
 const mockIdentity = {
@@ -145,11 +153,41 @@ describe('votingRepository', () => {
 
       const result = await findElectionOptions('election-1');
 
-      expect(result).toEqual([mockOption]);
+      expect(result).toEqual([{ ...mockOption, suboptions: [] }]);
       expect(mockPool.query).toHaveBeenCalledWith(
         expect.stringContaining('FROM election_options'),
         ['election-1']
       );
+    });
+
+    it('nests suboptions under their parent option', async () => {
+      const suboptionA = {
+        ...mockOption,
+        id: 'suboption-1',
+        parent_option_id: 'option-1',
+        label: 'Ana Perez',
+        display_order: 1,
+      };
+      const suboptionB = {
+        ...mockOption,
+        id: 'suboption-2',
+        parent_option_id: 'option-1',
+        label: 'Luis Mora',
+        display_order: 2,
+      };
+      mockPool.query.mockResolvedValue({ rows: [mockOption, suboptionA, suboptionB] });
+
+      const result = await findElectionOptions('election-1');
+
+      expect(result).toEqual([
+        {
+          ...mockOption,
+          suboptions: [
+            { ...suboptionA, suboptions: [] },
+            { ...suboptionB, suboptions: [] },
+          ],
+        },
+      ]);
     });
 
     it('returns an empty array when the election has no options', async () => {
@@ -307,6 +345,23 @@ describe('votingRepository', () => {
     });
   });
 
+  describe('castAnonymousSuboptionVotes', () => {
+    it('calls the anonymous suboption voting function with serialized selections', async () => {
+      mockPool.query.mockResolvedValue({ rows: [] });
+      const selections = [
+        { parentOptionId: 'position-1', optionId: 'candidate-1' },
+        { parentOptionId: 'position-2', optionId: 'candidate-3' },
+      ];
+
+      await castAnonymousSuboptionVotes('election-1', selections, 'hash-1');
+
+      expect(mockPool.query).toHaveBeenCalledWith(
+        'SELECT fn_cast_suboption_votes_anonymous($1, $2::jsonb, $3)',
+        ['election-1', JSON.stringify(selections), 'hash-1']
+      );
+    });
+  });
+
   describe('castNamedVote', () => {
     it('calls the named voting function in the database', async () => {
       mockPool.query.mockResolvedValue({ rows: [] });
@@ -316,6 +371,23 @@ describe('votingRepository', () => {
       expect(mockPool.query).toHaveBeenCalledWith(
         'SELECT fn_cast_vote_named($1, $2, $3)',
         ['election-1', 'option-1', 'student-1']
+      );
+    });
+  });
+
+  describe('castNamedSuboptionVotes', () => {
+    it('calls the named suboption voting function with serialized selections', async () => {
+      mockPool.query.mockResolvedValue({ rows: [] });
+      const selections = [
+        { parentOptionId: 'position-1', optionId: 'candidate-1' },
+        { parentOptionId: 'position-2', optionId: 'candidate-3' },
+      ];
+
+      await castNamedSuboptionVotes('election-1', selections, 'student-1');
+
+      expect(mockPool.query).toHaveBeenCalledWith(
+        'SELECT fn_cast_suboption_votes_named($1, $2::jsonb, $3)',
+        ['election-1', JSON.stringify(selections), 'student-1']
       );
     });
   });
@@ -331,7 +403,9 @@ describe('votingRepository', () => {
     });
 
     it('returns null when the election is not yet public', async () => {
-      mockPool.query.mockResolvedValueOnce({ rows: [{ title: 'Draft Election', status: 'OPEN' }] });
+      mockPool.query.mockResolvedValueOnce({
+        rows: [{ title: 'Draft Election', status: 'OPEN', allow_suboptions: false }],
+      });
 
       const result = await getPublicResults('election-1');
 
@@ -341,11 +415,29 @@ describe('votingRepository', () => {
 
     it('returns parsed public results for closed elections', async () => {
       mockPool.query
-        .mockResolvedValueOnce({ rows: [{ title: 'Student Council 2026', status: 'SCRUTINIZED' }] })
+        .mockResolvedValueOnce({
+          rows: [{ title: 'Student Council 2026', status: 'SCRUTINIZED', allow_suboptions: false }],
+        })
         .mockResolvedValueOnce({
           rows: [
-            { label: 'Alice', option_type: 'ticket', vote_count: '15' },
-            { label: 'Bob', option_type: 'ticket', vote_count: '9' },
+            {
+              id: 'option-1',
+              label: 'Alice',
+              option_type: 'ticket',
+              parent_option_id: null,
+              image_url: null,
+              metadata: null,
+              vote_count: '15',
+            },
+            {
+              id: 'option-2',
+              label: 'Bob',
+              option_type: 'ticket',
+              parent_option_id: null,
+              image_url: null,
+              metadata: null,
+              vote_count: '9',
+            },
           ],
         })
         .mockResolvedValueOnce({ rows: [{ total: '30', voted: '24' }] });
@@ -354,9 +446,26 @@ describe('votingRepository', () => {
 
       expect(result).toEqual({
         title: 'Student Council 2026',
+        allow_suboptions: false,
         options: [
-          { label: 'Alice', option_type: 'ticket', vote_count: 15 },
-          { label: 'Bob', option_type: 'ticket', vote_count: 9 },
+          {
+            id: 'option-1',
+            label: 'Alice',
+            option_type: 'ticket',
+            parent_option_id: null,
+            image_url: null,
+            metadata: null,
+            vote_count: 15,
+          },
+          {
+            id: 'option-2',
+            label: 'Bob',
+            option_type: 'ticket',
+            parent_option_id: null,
+            image_url: null,
+            metadata: null,
+            vote_count: 9,
+          },
         ],
         total_eligible: 30,
         total_voted: 24,
@@ -364,6 +473,89 @@ describe('votingRepository', () => {
       expect(mockPool.query).toHaveBeenCalledTimes(3);
       expect(mockPool.query.mock.calls[1]?.[0]).toContain('LEFT JOIN votes v');
       expect(mockPool.query.mock.calls[2]?.[0]).toContain('COUNT(*) FILTER');
+    });
+
+    it('returns nested public results when the election allows suboptions', async () => {
+      mockPool.query
+        .mockResolvedValueOnce({
+          rows: [{ title: 'Student Council 2026', status: 'SCRUTINIZED', allow_suboptions: true }],
+        })
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: 'position-1',
+              label: 'Presidency',
+              option_type: 'position',
+              parent_option_id: null,
+              image_url: null,
+              metadata: null,
+              vote_count: '0',
+            },
+            {
+              id: 'candidate-1',
+              label: 'Ana Perez',
+              option_type: 'candidate',
+              parent_option_id: 'position-1',
+              image_url: 'https://cdn.example.com/ana.png',
+              metadata: null,
+              vote_count: '2',
+            },
+            {
+              id: 'candidate-2',
+              label: 'Luis Mora',
+              option_type: 'candidate',
+              parent_option_id: 'position-1',
+              image_url: null,
+              metadata: null,
+              vote_count: '1',
+            },
+          ],
+        })
+        .mockResolvedValueOnce({ rows: [{ total: '5', voted: '3' }] });
+
+      const result = await getPublicResults('election-1');
+
+      expect(result).toEqual({
+        title: 'Student Council 2026',
+        allow_suboptions: true,
+        options: [
+          {
+            id: 'position-1',
+            label: 'Presidency',
+            option_type: 'position',
+            parent_option_id: null,
+            image_url: null,
+            metadata: null,
+            vote_count: 3,
+            suboptions: [
+              {
+                id: 'candidate-1',
+                label: 'Ana Perez',
+                option_type: 'candidate',
+                parent_option_id: 'position-1',
+                image_url: 'https://cdn.example.com/ana.png',
+                metadata: null,
+                vote_count: 2,
+                percentage: 66.66666666666666,
+                suboptions: [],
+              },
+              {
+                id: 'candidate-2',
+                label: 'Luis Mora',
+                option_type: 'candidate',
+                parent_option_id: 'position-1',
+                image_url: null,
+                metadata: null,
+                vote_count: 1,
+                percentage: 33.33333333333333,
+                suboptions: [],
+              },
+            ],
+          },
+        ],
+        total_eligible: 5,
+        total_voted: 3,
+      });
     });
   });
 });

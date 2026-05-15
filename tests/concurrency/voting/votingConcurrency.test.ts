@@ -744,10 +744,16 @@ describe('voting concurrency', () => {
     ).replace(/\s+/g, ' ');
 
     expect(schemaSql).toContain(
-      'CREATE UNIQUE INDEX uniq_votes_student ON votes(election_id, student_id) WHERE student_id IS NOT NULL'
+      'CREATE UNIQUE INDEX uniq_votes_student_single ON votes(election_id, student_id) WHERE student_id IS NOT NULL AND parent_option_id IS NULL'
     );
     expect(schemaSql).toContain(
-      'CREATE UNIQUE INDEX uniq_votes_token ON votes(token_hash) WHERE token_hash IS NOT NULL'
+      'CREATE UNIQUE INDEX uniq_votes_student_suboption ON votes(election_id, student_id, parent_option_id) WHERE student_id IS NOT NULL AND parent_option_id IS NOT NULL'
+    );
+    expect(schemaSql).toContain(
+      'CREATE UNIQUE INDEX uniq_votes_token_single ON votes(election_id, token_hash) WHERE token_hash IS NOT NULL AND parent_option_id IS NULL'
+    );
+    expect(schemaSql).toContain(
+      'CREATE UNIQUE INDEX uniq_votes_token_suboption ON votes(election_id, token_hash, parent_option_id) WHERE token_hash IS NOT NULL AND parent_option_id IS NOT NULL'
     );
     expect(schemaSql).toContain('CREATE UNIQUE INDEX uniq_voting_tokens_hash');
     expect(storedProcedureSql).toContain('FROM voting_tokens WHERE election_id = p_election_id');

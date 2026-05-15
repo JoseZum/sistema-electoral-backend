@@ -52,6 +52,7 @@ const draftElection: Election = {
   description: 'General election',
   status: 'DRAFT',
   is_anonymous: true,
+  allow_suboptions: false,
   auth_method: 'MICROSOFT',
   voter_source: 'FULL_PADRON',
   voter_filter: null,
@@ -105,8 +106,10 @@ const electionWithStats: ElectionWithStats = {
 const optionA: ElectionOption = {
   id: 'option-1',
   election_id: 'election-1',
+  parent_option_id: null,
   label: 'Alice',
   option_type: 'ticket',
+  image_url: null,
   display_order: 1,
   metadata: null,
 };
@@ -121,8 +124,26 @@ const optionB: ElectionOption = {
 const mockResults = {
   election: scrutinizedElection,
   options: [
-    { id: 'option-1', label: 'Alice', option_type: 'ticket', vote_count: 18, percentage: 60 },
-    { id: 'option-2', label: 'Bob', option_type: 'ticket', vote_count: 12, percentage: 40 },
+    {
+      id: 'option-1',
+      label: 'Alice',
+      option_type: 'ticket',
+      parent_option_id: null,
+      image_url: null,
+      metadata: null,
+      vote_count: 18,
+      percentage: 60,
+    },
+    {
+      id: 'option-2',
+      label: 'Bob',
+      option_type: 'ticket',
+      parent_option_id: null,
+      image_url: null,
+      metadata: null,
+      vote_count: 12,
+      percentage: 40,
+    },
   ],
   total_votes: 30,
   total_eligible: 40,
@@ -296,6 +317,120 @@ describe('electionService', () => {
         mockClient
       );
       expect(prepareAnonymousVotingTokensForElection).toHaveBeenCalledWith('election-1');
+      expect(mockClient.query).toHaveBeenCalledWith('COMMIT');
+    });
+
+    it('creates an election with suboptions and links each suboption to its parent option', async () => {
+      const parentOption: ElectionOption = {
+        ...optionA,
+        id: 'parent-1',
+        label: 'Presidency',
+      };
+      const suboptionA: ElectionOption = {
+        ...optionA,
+        id: 'suboption-1',
+        parent_option_id: 'parent-1',
+        label: 'Ana Perez',
+        image_url: 'https://cdn.example.com/ana.png',
+      };
+      const suboptionB: ElectionOption = {
+        ...optionA,
+        id: 'suboption-2',
+        parent_option_id: 'parent-1',
+        label: 'Luis Mora',
+        image_url: 'https://cdn.example.com/luis.png',
+      };
+
+      vi.mocked(electionRepo.createElection).mockResolvedValue({
+        ...openElection,
+        is_anonymous: false,
+        allow_suboptions: true,
+      });
+      vi.mocked(electionRepo.createOption)
+        .mockResolvedValueOnce(parentOption)
+        .mockResolvedValueOnce(suboptionA)
+        .mockResolvedValueOnce(suboptionB);
+
+      const result = await createElection({
+        title: 'Federation Election',
+        is_anonymous: false,
+        allow_suboptions: true,
+        voter_source: 'FULL_PADRON',
+        status: 'OPEN',
+        options: [
+          {
+            label: '  Presidency  ',
+            option_type: 'position',
+            suboptions: [
+              {
+                label: '  Ana Perez ',
+                option_type: 'candidate',
+                image_url: ' https://cdn.example.com/ana.png ',
+              },
+              {
+                label: 'Luis   Mora',
+                option_type: 'candidate',
+                image_url: 'https://cdn.example.com/luis.png',
+              },
+            ],
+          },
+        ],
+      });
+
+      expect(result).toEqual({
+        ...openElection,
+        is_anonymous: false,
+        allow_suboptions: true,
+      });
+      expect(electionRepo.createElection).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Federation Election',
+          status: 'OPEN',
+          allow_suboptions: true,
+        }),
+        undefined,
+        mockClient
+      );
+      expect(electionRepo.createOption).toHaveBeenNthCalledWith(
+        1,
+        'election-1',
+        expect.objectContaining({
+          label: 'Presidency',
+          option_type: 'position',
+          display_order: 1,
+        }),
+        mockClient
+      );
+      expect(electionRepo.createOption).toHaveBeenNthCalledWith(
+        2,
+        'election-1',
+        expect.objectContaining({
+          parent_option_id: 'parent-1',
+          label: 'Ana Perez',
+          option_type: 'candidate',
+          image_url: 'https://cdn.example.com/ana.png',
+          display_order: 1,
+        }),
+        mockClient
+      );
+      expect(electionRepo.createOption).toHaveBeenNthCalledWith(
+        3,
+        'election-1',
+        expect.objectContaining({
+          parent_option_id: 'parent-1',
+          label: 'Luis Mora',
+          option_type: 'candidate',
+          image_url: 'https://cdn.example.com/luis.png',
+          display_order: 2,
+        }),
+        mockClient
+      );
+      expect(electionRepo.populateVotersFromPadron).toHaveBeenCalledWith(
+        'election-1',
+        undefined,
+        mockClient
+      );
+      expect(prepareAnonymousVotingTokensForElection).not.toHaveBeenCalled();
       expect(mockClient.query).toHaveBeenCalledWith('COMMIT');
     });
 
@@ -537,8 +672,12 @@ describe('electionService', () => {
 
       const result = await addOption('election-1', { label: 'Alice', option_type: 'ticket' });
 
-      expect(result).toEqual(optionA);
-      expect(electionRepo.createOption).toHaveBeenCalledWith('election-1', { label: 'Alice', option_type: 'ticket' });
+      expect(result).toEqual({ ...optionA, suboptions: [] });
+      expect(electionRepo.createOption).toHaveBeenCalledWith(
+        'election-1',
+        { label: 'Alice', option_type: 'ticket', suboptions: [] },
+        mockClient
+      );
     });
 
     it('blocks structural option edits after publication', async () => {

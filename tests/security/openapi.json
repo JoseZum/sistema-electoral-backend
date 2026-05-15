@@ -937,6 +937,7 @@
           "start_date": { "type": "string", "format": "date-time", "example": "2026-06-01T08:00:00.000Z" },
           "end_date": { "type": "string", "format": "date-time", "example": "2026-06-01T18:00:00.000Z" },
           "is_anonymous": { "type": "boolean", "example": true },
+          "allow_suboptions": { "type": "boolean", "example": false },
           "allow_blank_vote": { "type": "boolean", "example": true },
           "requires_key_ceremony": { "type": "boolean", "example": false },
           "key_threshold": { "type": "integer", "minimum": 1, "example": 2 }
@@ -958,7 +959,23 @@
         "properties": {
           "label": { "type": "string", "example": "Opcion A" },
           "description": { "type": "string", "example": "Descripcion de opcion" },
-          "display_order": { "type": "integer", "minimum": 1, "example": 1 }
+          "option_type": { "type": "string", "example": "ticket" },
+          "parent_option_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "example": "00000000-0000-0000-0000-000000000002"
+          },
+          "image_url": {
+            "type": "string",
+            "nullable": true,
+            "example": "https://cdn.example.com/candidate.png"
+          },
+          "display_order": { "type": "integer", "minimum": 1, "example": 1 },
+          "suboptions": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/ElectionOptionInput" }
+          }
         }
       },
       "PopulateVotersRequest": {
@@ -993,7 +1010,7 @@
       },
       "CastVoteRequest": {
         "type": "object",
-        "required": ["electionId", "optionId"],
+        "required": ["electionId"],
         "properties": {
           "electionId": {
             "type": "string",
@@ -1004,6 +1021,32 @@
             "type": "string",
             "format": "uuid",
             "example": "00000000-0000-0000-0000-000000000002"
+          },
+          "selections": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/VoteSelection" },
+            "example": [
+              {
+                "parentOptionId": "00000000-0000-0000-0000-000000000002",
+                "optionId": "00000000-0000-0000-0000-000000000003"
+              }
+            ]
+          }
+        }
+      },
+      "VoteSelection": {
+        "type": "object",
+        "required": ["parentOptionId", "optionId"],
+        "properties": {
+          "parentOptionId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "00000000-0000-0000-0000-000000000002"
+          },
+          "optionId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "00000000-0000-0000-0000-000000000003"
           }
         }
       },

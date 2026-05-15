@@ -6,6 +6,7 @@ import {
   CreateOptionDto,
   UpdateOptionDto,
   Election,
+  ElectionOption,
   PopulateVotersDto,
   VotesByHour,       // Necesario para procesar la estadística de monitoreo
   MonitoringData     // El "wrapper" que devuelve el servicio al controlador
@@ -212,10 +213,12 @@ function normalizeCreateOptions(options: CreateOptionDto[] | undefined): CreateO
     ...option,
     label: normalizeOptionLabel(option.label || ''),
     description: option.description?.trim() || undefined,
+    image_url: option.image_url?.trim() || undefined,
+    suboptions: normalizeCreateOptions(option.suboptions),
   }));
 }
 
-function validateCreateOptions(options: CreateOptionDto[]) {
+function validateCreateOptions(options: CreateOptionDto[], allowSuboptions = false) {
   const emptyOption = options.find((option) => !option.label);
   if (emptyOption) {
     throw new AppError({
@@ -233,6 +236,70 @@ function validateCreateOptions(options: CreateOptionDto[]) {
       message: 'Las opciones de la votación no pueden repetirse',
     });
   }
+  if (!allowSuboptions) {
+    return;
+  }
+
+  const optionWithoutEnoughSuboptions = options.find((option) => (option.suboptions || []).length < 2);
+  if (optionWithoutEnoughSuboptions) {
+    throw badRequest(
+      'ELECTION_SUBOPTIONS_REQUIRED',
+      `Se necesitan al menos 2 subopciones para ${optionWithoutEnoughSuboptions.label}`
+    );
+  }
+
+  for (const option of options) {
+    const suboptions = option.suboptions || [];
+    const emptySuboption = suboptions.find((suboption) => !suboption.label);
+    if (emptySuboption) {
+      throw badRequest(
+        'ELECTION_SUBOPTIONS_EMPTY_LABEL',
+        `Todas las subopciones de ${option.label} deben tener nombre`
+      );
+    }
+
+    const uniqueSuboptionLabels = new Set(suboptions.map((suboption) => suboption.label.toLowerCase()));
+    if (uniqueSuboptionLabels.size !== suboptions.length) {
+      throw badRequest(
+        'ELECTION_SUBOPTIONS_DUPLICATE',
+        `Las subopciones de ${option.label} no pueden repetirse`
+      );
+    }
+  }
+}
+
+function validateOptionsReadyForPublication(
+  allowSuboptions: boolean,
+  options: Array<CreateOptionDto | ElectionOption>
+) {
+  if (!allowSuboptions) {
+    if (options.length < 2) {
+      throw badRequest(
+        'ELECTION_OPTIONS_REQUIRED_FOR_PUBLICATION',
+        'Se necesitan al menos 2 opciones para publicar la votacion'
+      );
+    }
+    return;
+  }
+
+  if (options.length < 1) {
+    throw badRequest(
+      'ELECTION_OPTIONS_REQUIRED_FOR_PUBLICATION',
+      'Se necesita al menos 1 grupo con subopciones para publicar la votacion'
+    );
+  }
+
+  const incompleteGroup = options.find((option) => (option.suboptions || []).length < 2);
+  if (incompleteGroup) {
+    throw badRequest(
+      'ELECTION_SUBOPTIONS_REQUIRED_FOR_PUBLICATION',
+      'Cada grupo debe tener al menos 2 subopciones antes de publicar la votacion'
+    );
+  }
+}
+
+function countBallotChoices(options: CreateOptionDto[]) {
+  return options.reduce((total, option) => total + 1 + (option.suboptions || []).length, 0);
 }
 
 function getPublicationModeLabel(status: Election['status']): string {
@@ -298,8 +365,13 @@ function buildCreationAuditSummary(params: {
   const { data, options, eligibleCount, tagName, finalStatus } = params;
 
   return {
-    option_count: options.length,
-    options_summary: options.map((option) => option.label).join(', '),
+    option_count: data.allow_suboptions ? countBallotChoices(options) : options.length,
+    options_summary: options.map((option) => (
+      option.suboptions?.length
+        ? `${option.label} (${option.suboptions.map((suboption) => suboption.label).join(', ')})`
+        : option.label
+    )).join(', '),
+    allow_suboptions: data.allow_suboptions ?? false,
     eligible_count: eligibleCount,
     voter_scope: describeVoterScope(data.voter_source, data.populate, data.voter_filter, tagName),
     privacy_mode: data.is_anonymous ? 'Sufragio por papeleta' : 'Sufragio publico',
@@ -378,9 +450,10 @@ export async function createElection(data: CreateElectionRequestDto, actor?: Aud
     validateSchedule(scheduleWindow.startTime, scheduleWindow.endTime);
   }
 
+  const allowSuboptions = data.allow_suboptions ?? false;
   const options = normalizeCreateOptions(data.options);
   if (options.length > 0) {
-    validateCreateOptions(options);
+    validateCreateOptions(options, allowSuboptions);
   }
 
   const populateInput: PopulateVotersDto | undefined = data.populate ?? (
@@ -399,11 +472,8 @@ export async function createElection(data: CreateElectionRequestDto, actor?: Aud
     ? deriveAutomaticStatus(scheduleWindow.startTime, scheduleWindow.endTime)
     : (data.status || 'DRAFT');
 
-  if (finalStatus !== 'DRAFT' && options.length < 2) {
-    throw badRequest(
-      'ELECTION_OPTIONS_REQUIRED_FOR_PUBLICATION',
-      'Se necesitan al menos 2 opciones para publicar la votacion'
-    );
+  if (finalStatus !== 'DRAFT') {
+    validateOptionsReadyForPublication(allowSuboptions, options);
   }
 
   const createdElection = await withOptionalAudit(actor, async (client) => {
@@ -421,6 +491,7 @@ export async function createElection(data: CreateElectionRequestDto, actor?: Aud
     const created = await electionRepo.createElection({
       ...data,
       status: finalStatus,
+      allow_suboptions: allowSuboptions,
       requires_keys: scrutinyConfig.requiresKeys,
       min_keys: scrutinyConfig.minKeys,
       start_time: scheduleWindow.startTime,
@@ -428,10 +499,19 @@ export async function createElection(data: CreateElectionRequestDto, actor?: Aud
     }, actor?.id, client);
 
     for (let index = 0; index < options.length; index += 1) {
-      await electionRepo.createOption(created.id, {
+      const createdOption = await electionRepo.createOption(created.id, {
         ...options[index],
         display_order: options[index].display_order ?? index + 1,
       }, client);
+
+      const suboptions = options[index].suboptions || [];
+      for (let suboptionIndex = 0; suboptionIndex < suboptions.length; suboptionIndex += 1) {
+        await electionRepo.createOption(created.id, {
+          ...suboptions[suboptionIndex],
+          parent_option_id: createdOption.id,
+          display_order: suboptions[suboptionIndex].display_order ?? suboptionIndex + 1,
+        }, client);
+      }
     }
 
     if (isCompoundCreation) {
@@ -616,7 +696,8 @@ export async function changeStatus(id: string, newStatus: Election['status'] | '
 
   if (targetStatus === 'OPEN' || targetStatus === 'SCHEDULED') {
     const options = await electionRepo.findOptionsByElection(id);
-    if (options.length < 2) {
+    validateOptionsReadyForPublication(election.allow_suboptions, options);
+    if (!election.allow_suboptions && options.length < 2) {
       throw badRequest(
         'ELECTION_OPTIONS_REQUIRED_FOR_PUBLICATION',
         'Se necesitan al menos 2 opciones para publicar la votación'
@@ -663,7 +744,33 @@ export async function addOption(electionId: string, data: CreateOptionDto) {
       'Solo se pueden agregar opciones a elecciones en borrador o programadas'
     );
   }
-  return electionRepo.createOption(electionId, data);
+  const [option] = normalizeCreateOptions([data]);
+  validateCreateOptions([option], election.allow_suboptions);
+  if (!election.allow_suboptions && (option.suboptions || []).length > 0) {
+    throw badRequest(
+      'ELECTION_SUBOPTIONS_NOT_ALLOWED',
+      'Esta votacion no permite subopciones'
+    );
+  }
+
+  return withOptionalAudit(undefined, async (client) => {
+    if (!client) {
+      throw internalError('ELECTION_OPTION_ADD_TRANSACTION_FAILED', 'No se pudo iniciar la transaccion');
+    }
+
+    const createdOption = await electionRepo.createOption(electionId, option, client);
+    const createdSuboptions: ElectionOption[] = [];
+    const suboptions = option.suboptions || [];
+    for (let index = 0; index < suboptions.length; index += 1) {
+      createdSuboptions.push(await electionRepo.createOption(electionId, {
+        ...suboptions[index],
+        parent_option_id: createdOption.id,
+        display_order: suboptions[index].display_order ?? index + 1,
+      }, client));
+    }
+
+    return { ...createdOption, suboptions: createdSuboptions };
+  });
 }
 
 export async function updateOption(electionId: string, optionId: string, data: UpdateOptionDto, actor?: AuditActor) {

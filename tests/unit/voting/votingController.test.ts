@@ -17,6 +17,7 @@ const mockElection = {
   description: 'General student election',
   status: 'OPEN',
   is_anonymous: true,
+  allow_suboptions: false,
   tag_name: 'Engineering',
   tag_color: '#2563EB',
   start_time: new Date('2026-05-01T10:00:00.000Z'),
@@ -28,8 +29,26 @@ const mockElection = {
 const mockElectionDetail = {
   ...mockElection,
   options: [
-    { id: 'option-1', label: 'Alice', option_type: 'ticket', display_order: 1 },
-    { id: 'option-2', label: 'Bob', option_type: 'ticket', display_order: 2 },
+    {
+      id: 'option-1',
+      election_id: 'election-1',
+      parent_option_id: null,
+      label: 'Alice',
+      option_type: 'ticket',
+      image_url: null,
+      display_order: 1,
+      metadata: null,
+    },
+    {
+      id: 'option-2',
+      election_id: 'election-1',
+      parent_option_id: null,
+      label: 'Bob',
+      option_type: 'ticket',
+      image_url: null,
+      display_order: 2,
+      metadata: null,
+    },
   ],
 };
 
@@ -174,6 +193,36 @@ describe('votingController', () => {
 
       expect(votingService.castVote).toHaveBeenCalledWith(
         { electionId: 'election-1', optionId: 'option-1' },
+        'ana@estudiantec.cr'
+      );
+      expect(res.json).toHaveBeenCalledWith({
+        success: true,
+        message: 'Voto emitido exitosamente',
+      });
+    });
+
+    it('forwards suboption selections to the voting service', async () => {
+      vi.mocked(votingService.castVote).mockResolvedValue({
+        success: true,
+        message: 'Voto emitido exitosamente',
+      });
+      const selections = [
+        { parentOptionId: 'position-1', optionId: 'candidate-1' },
+        { parentOptionId: 'position-2', optionId: 'candidate-3' },
+      ];
+      const res = makeRes();
+
+      await castVote(
+        makeReq({
+          body: { electionId: 'election-1', selections, ignored: 'value' },
+          user: { email: 'ana@estudiantec.cr' } as any,
+        }),
+        res,
+        makeNext()
+      );
+
+      expect(votingService.castVote).toHaveBeenCalledWith(
+        { electionId: 'election-1', optionId: undefined, selections },
         'ana@estudiantec.cr'
       );
       expect(res.json).toHaveBeenCalledWith({

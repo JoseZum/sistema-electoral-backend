@@ -8,7 +8,7 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
-    "test": "vitest",
+    "test": "vitest --exclude tests/e2e/** --exclude tests/concurrency/postgres-voting/** --exclude tests/concurrency/scrutiny/** --exclude tests/concurrency/election-state/**",
     "test:concurrency": "vitest run tests/concurrency --fileParallelism=false",
     "test:concurrency:docker": "docker compose -f docker-compose.concurrency.yml up --abort-on-container-exit --exit-code-from concurrency-tests concurrency-tests",
     "test:security": "npm run test:security:vulnerabilities",

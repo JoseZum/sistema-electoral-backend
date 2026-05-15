@@ -24,11 +24,11 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
     v_token_record RECORD;
-    v_election_status election_status;
+    v_election_record RECORD;
     v_now TIMESTAMPTZ := now();
 BEGIN
     -- Bloquea contra cambios de estado concurrentes sin serializar votos entre si.
-    SELECT status INTO v_election_status
+    SELECT status, allow_suboptions INTO v_election_record
     FROM elections
     WHERE id = p_election_id
     FOR SHARE;
@@ -37,8 +37,12 @@ BEGIN
         RAISE EXCEPTION 'Eleccion no encontrada';
     END IF;
 
-    IF v_election_status <> 'OPEN' THEN
+    IF v_election_record.status <> 'OPEN' THEN
         RAISE EXCEPTION 'La votacion no esta abierta';
+    END IF;
+
+    IF v_election_record.allow_suboptions THEN
+        RAISE EXCEPTION 'La eleccion requiere votos por subopciones';
     END IF;
 
     -- Verifica que el token exista, pertenezca a la eleccion y no haya sido usado.
@@ -56,7 +60,9 @@ BEGIN
     -- Verifica que la opcion seleccionada pertenece a la eleccion.
     IF NOT EXISTS (
         SELECT 1 FROM election_options
-        WHERE id = p_option_id AND election_id = p_election_id
+        WHERE id = p_option_id
+          AND election_id = p_election_id
+          AND parent_option_id IS NULL
     ) THEN
         RAISE EXCEPTION 'Opción no pertenece a esta elección';
     END IF;
@@ -101,10 +107,10 @@ RETURNS VOID
 LANGUAGE plpgsql
 AS $$
 DECLARE
-    v_election_status election_status;
+    v_election_record RECORD;
 BEGIN
     -- Bloquea contra cambios de estado concurrentes sin serializar votos entre si.
-    SELECT status INTO v_election_status
+    SELECT status, allow_suboptions INTO v_election_record
     FROM elections
     WHERE id = p_election_id
     FOR SHARE;
@@ -113,8 +119,12 @@ BEGIN
         RAISE EXCEPTION 'Eleccion no encontrada';
     END IF;
 
-    IF v_election_status <> 'OPEN' THEN
+    IF v_election_record.status <> 'OPEN' THEN
         RAISE EXCEPTION 'La votacion no esta abierta';
+    END IF;
+
+    IF v_election_record.allow_suboptions THEN
+        RAISE EXCEPTION 'La eleccion requiere votos por subopciones';
     END IF;
 
     -- Verifica que el estudiante este habilitado para votar en la eleccion.
@@ -129,7 +139,9 @@ BEGIN
     -- Verifica que la opcion seleccionada pertenece a la eleccion.
     IF NOT EXISTS (
         SELECT 1 FROM election_options
-        WHERE id = p_option_id AND election_id = p_election_id
+        WHERE id = p_option_id
+          AND election_id = p_election_id
+          AND parent_option_id IS NULL
     ) THEN
         RAISE EXCEPTION 'Opción no pertenece a esta elección';
     END IF;
@@ -140,6 +152,245 @@ BEGIN
     VALUES (p_election_id, p_option_id, p_student_id);
 
     -- Marca al votante como participante en election_voters.
+    UPDATE election_voters
+    SET token_used = true, token_used_at = now()
+    WHERE election_id = p_election_id
+      AND student_id = p_student_id;
+END;
+$$;
+
+-- ------------------------------------------------------------
+-- 2.1) Registrar votos anonimos por subopciones
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION fn_cast_suboption_votes_anonymous(
+    p_election_id UUID,
+    p_votes JSONB,
+    p_token_hash TEXT
+)
+RETURNS VOID
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_token_record RECORD;
+    v_election_record RECORD;
+    v_now TIMESTAMPTZ := now();
+    v_expected_parent_count INT;
+    v_payload_count INT;
+    v_distinct_parent_count INT;
+    v_invalid_selection BOOLEAN;
+BEGIN
+    SELECT status, allow_suboptions INTO v_election_record
+    FROM elections
+    WHERE id = p_election_id
+    FOR SHARE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Eleccion no encontrada';
+    END IF;
+
+    IF v_election_record.status <> 'OPEN' THEN
+        RAISE EXCEPTION 'La votacion no esta abierta';
+    END IF;
+
+    IF NOT v_election_record.allow_suboptions THEN
+        RAISE EXCEPTION 'La eleccion no permite subopciones';
+    END IF;
+
+    IF p_votes IS NULL OR jsonb_typeof(p_votes) <> 'array' THEN
+        RAISE EXCEPTION 'Selecciones de subopciones invalidas';
+    END IF;
+
+    SELECT * INTO v_token_record
+    FROM voting_tokens
+    WHERE election_id = p_election_id
+      AND token_hash = p_token_hash
+      AND used = false
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Token invÃ¡lido o ya utilizado';
+    END IF;
+
+    SELECT COUNT(*) INTO v_expected_parent_count
+    FROM election_options
+    WHERE election_id = p_election_id
+      AND parent_option_id IS NULL;
+
+    WITH payload AS (
+        SELECT
+            NULLIF(item->>'parentOptionId', '')::uuid AS parent_option_id,
+            NULLIF(item->>'optionId', '')::uuid AS option_id
+        FROM jsonb_array_elements(p_votes) item
+    )
+    SELECT COUNT(*), COUNT(DISTINCT parent_option_id)
+    INTO v_payload_count, v_distinct_parent_count
+    FROM payload;
+
+    IF v_expected_parent_count = 0
+       OR v_payload_count <> v_expected_parent_count
+       OR v_distinct_parent_count <> v_expected_parent_count THEN
+        RAISE EXCEPTION 'Debe seleccionar una subopcion por cada opcion';
+    END IF;
+
+    WITH payload AS (
+        SELECT
+            NULLIF(item->>'parentOptionId', '')::uuid AS parent_option_id,
+            NULLIF(item->>'optionId', '')::uuid AS option_id
+        FROM jsonb_array_elements(p_votes) item
+    )
+    SELECT EXISTS (
+        SELECT 1
+        FROM payload p
+        LEFT JOIN election_options parent
+          ON parent.id = p.parent_option_id
+         AND parent.election_id = p_election_id
+         AND parent.parent_option_id IS NULL
+        LEFT JOIN election_options child
+          ON child.id = p.option_id
+         AND child.election_id = p_election_id
+         AND child.parent_option_id = p.parent_option_id
+        WHERE parent.id IS NULL OR child.id IS NULL
+    )
+    INTO v_invalid_selection;
+
+    IF v_invalid_selection THEN
+        RAISE EXCEPTION 'Subopcion no pertenece a esta eleccion';
+    END IF;
+
+    WITH payload AS (
+        SELECT
+            NULLIF(item->>'parentOptionId', '')::uuid AS parent_option_id,
+            NULLIF(item->>'optionId', '')::uuid AS option_id
+        FROM jsonb_array_elements(p_votes) item
+    )
+    INSERT INTO votes(election_id, parent_option_id, option_id, token_hash)
+    SELECT p_election_id, parent_option_id, option_id, p_token_hash
+    FROM payload;
+
+    UPDATE voting_tokens
+    SET used = true,
+        used_at = v_now
+    WHERE election_id = p_election_id
+      AND student_id = v_token_record.student_id;
+
+    UPDATE election_voters
+    SET token_used = true,
+        token_used_at = v_now
+    WHERE election_id = p_election_id
+      AND student_id = v_token_record.student_id;
+
+    UPDATE voting_tokens
+    SET token_hash = NULL,
+        token_encrypted = NULL
+    WHERE election_id = p_election_id
+      AND student_id = v_token_record.student_id;
+END;
+$$;
+
+-- ------------------------------------------------------------
+-- 2.2) Registrar votos no anonimos por subopciones
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION fn_cast_suboption_votes_named(
+    p_election_id UUID,
+    p_votes JSONB,
+    p_student_id UUID
+)
+RETURNS VOID
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_election_record RECORD;
+    v_expected_parent_count INT;
+    v_payload_count INT;
+    v_distinct_parent_count INT;
+    v_invalid_selection BOOLEAN;
+BEGIN
+    SELECT status, allow_suboptions INTO v_election_record
+    FROM elections
+    WHERE id = p_election_id
+    FOR SHARE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Eleccion no encontrada';
+    END IF;
+
+    IF v_election_record.status <> 'OPEN' THEN
+        RAISE EXCEPTION 'La votacion no esta abierta';
+    END IF;
+
+    IF NOT v_election_record.allow_suboptions THEN
+        RAISE EXCEPTION 'La eleccion no permite subopciones';
+    END IF;
+
+    IF p_votes IS NULL OR jsonb_typeof(p_votes) <> 'array' THEN
+        RAISE EXCEPTION 'Selecciones de subopciones invalidas';
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM election_voters
+        WHERE election_id = p_election_id
+          AND student_id = p_student_id
+          AND token_used = false
+    ) THEN
+        RAISE EXCEPTION 'Votante no es elegible para esta elecciÃ³n';
+    END IF;
+
+    SELECT COUNT(*) INTO v_expected_parent_count
+    FROM election_options
+    WHERE election_id = p_election_id
+      AND parent_option_id IS NULL;
+
+    WITH payload AS (
+        SELECT
+            NULLIF(item->>'parentOptionId', '')::uuid AS parent_option_id,
+            NULLIF(item->>'optionId', '')::uuid AS option_id
+        FROM jsonb_array_elements(p_votes) item
+    )
+    SELECT COUNT(*), COUNT(DISTINCT parent_option_id)
+    INTO v_payload_count, v_distinct_parent_count
+    FROM payload;
+
+    IF v_expected_parent_count = 0
+       OR v_payload_count <> v_expected_parent_count
+       OR v_distinct_parent_count <> v_expected_parent_count THEN
+        RAISE EXCEPTION 'Debe seleccionar una subopcion por cada opcion';
+    END IF;
+
+    WITH payload AS (
+        SELECT
+            NULLIF(item->>'parentOptionId', '')::uuid AS parent_option_id,
+            NULLIF(item->>'optionId', '')::uuid AS option_id
+        FROM jsonb_array_elements(p_votes) item
+    )
+    SELECT EXISTS (
+        SELECT 1
+        FROM payload p
+        LEFT JOIN election_options parent
+          ON parent.id = p.parent_option_id
+         AND parent.election_id = p_election_id
+         AND parent.parent_option_id IS NULL
+        LEFT JOIN election_options child
+          ON child.id = p.option_id
+         AND child.election_id = p_election_id
+         AND child.parent_option_id = p.parent_option_id
+        WHERE parent.id IS NULL OR child.id IS NULL
+    )
+    INTO v_invalid_selection;
+
+    IF v_invalid_selection THEN
+        RAISE EXCEPTION 'Subopcion no pertenece a esta eleccion';
+    END IF;
+
+    WITH payload AS (
+        SELECT
+            NULLIF(item->>'parentOptionId', '')::uuid AS parent_option_id,
+            NULLIF(item->>'optionId', '')::uuid AS option_id
+        FROM jsonb_array_elements(p_votes) item
+    )
+    INSERT INTO votes(election_id, parent_option_id, option_id, student_id)
+    SELECT p_election_id, parent_option_id, option_id, p_student_id
+    FROM payload;
+
     UPDATE election_voters
     SET token_used = true, token_used_at = now()
     WHERE election_id = p_election_id

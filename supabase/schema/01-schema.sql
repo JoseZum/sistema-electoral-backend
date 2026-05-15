@@ -82,6 +82,7 @@ CREATE TABLE elections (
     description     TEXT,
     status          election_status NOT NULL DEFAULT 'DRAFT',
     is_anonymous    BOOLEAN NOT NULL DEFAULT true,
+    allow_suboptions BOOLEAN NOT NULL DEFAULT false,
     auth_method     auth_method_type NOT NULL DEFAULT 'MICROSOFT',
     voter_source    voter_source_type NOT NULL,
     voter_filter    JSONB,
@@ -110,11 +111,19 @@ CREATE INDEX idx_elections_tag_id ON elections(tag_id);
 CREATE TABLE election_options (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     election_id     UUID NOT NULL REFERENCES elections(id) ON DELETE CASCADE,
+    parent_option_id UUID REFERENCES election_options(id) ON DELETE CASCADE,
     label           TEXT NOT NULL,
     option_type     TEXT NOT NULL,
+    image_url       TEXT,
     display_order   INT NOT NULL DEFAULT 0,
-    metadata        JSONB
+    metadata        JSONB,
+    CONSTRAINT chk_election_options_parent_not_self CHECK (
+        parent_option_id IS NULL OR parent_option_id <> id
+    )
 );
+
+CREATE INDEX idx_election_options_election ON election_options(election_id);
+CREATE INDEX idx_election_options_parent ON election_options(parent_option_id);
 
 -- ============================================
 -- VOTANTES ELEGIBLES POR ELECCIÓN
@@ -157,6 +166,7 @@ CREATE UNIQUE INDEX uniq_voting_tokens_hash ON voting_tokens(token_hash) WHERE t
 CREATE TABLE votes (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     election_id     UUID NOT NULL REFERENCES elections(id),
+    parent_option_id UUID REFERENCES election_options(id),
     option_id       UUID NOT NULL REFERENCES election_options(id),
     token_hash      TEXT,
     student_id      UUID REFERENCES students(id),
@@ -169,8 +179,19 @@ CREATE TABLE votes (
 
 CREATE INDEX idx_votes_election ON votes(election_id);
 CREATE INDEX idx_votes_election_option ON votes(election_id, option_id);
-CREATE UNIQUE INDEX uniq_votes_token ON votes(token_hash) WHERE token_hash IS NOT NULL;
-CREATE UNIQUE INDEX uniq_votes_student ON votes(election_id, student_id) WHERE student_id IS NOT NULL;
+CREATE INDEX idx_votes_election_parent ON votes(election_id, parent_option_id);
+CREATE UNIQUE INDEX uniq_votes_token_single
+    ON votes(election_id, token_hash)
+    WHERE token_hash IS NOT NULL AND parent_option_id IS NULL;
+CREATE UNIQUE INDEX uniq_votes_token_suboption
+    ON votes(election_id, token_hash, parent_option_id)
+    WHERE token_hash IS NOT NULL AND parent_option_id IS NOT NULL;
+CREATE UNIQUE INDEX uniq_votes_student_single
+    ON votes(election_id, student_id)
+    WHERE student_id IS NOT NULL AND parent_option_id IS NULL;
+CREATE UNIQUE INDEX uniq_votes_student_suboption
+    ON votes(election_id, student_id, parent_option_id)
+    WHERE student_id IS NOT NULL AND parent_option_id IS NOT NULL;
 
 -- ============================================
 -- LLAVES DE ESCRUTINIO

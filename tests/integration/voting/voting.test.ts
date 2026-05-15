@@ -38,6 +38,7 @@ const mockDb = vi.hoisted(() => {
     description: string | null;
     status: string;
     is_anonymous: boolean;
+    allow_suboptions: boolean;
     tag_name: string | null;
     tag_color: string | null;
     start_time: Date | null;
@@ -53,9 +54,12 @@ const mockDb = vi.hoisted(() => {
   type ElectionOption = {
     id: string;
     election_id: string;
+    parent_option_id: string | null;
     label: string;
     option_type: string;
+    image_url: string | null;
     display_order: number;
+    metadata: Record<string, unknown> | null;
   };
 
   type VotingToken = {
@@ -70,6 +74,7 @@ const mockDb = vi.hoisted(() => {
     id: string;
     election_id: string;
     option_id: string;
+    parent_option_id: string | null;
     student_id: string | null;
     token_hash: string | null;
   };
@@ -115,6 +120,7 @@ const mockDb = vi.hoisted(() => {
         description: 'Votacion anonima de prueba',
         status: 'OPEN',
         is_anonymous: true,
+        allow_suboptions: false,
         tag_name: 'Computacion',
         tag_color: '#283593',
         start_time: startTime,
@@ -126,6 +132,7 @@ const mockDb = vi.hoisted(() => {
         description: 'Votacion no anonima de prueba',
         status: 'OPEN',
         is_anonymous: false,
+        allow_suboptions: false,
         tag_name: null,
         tag_color: null,
         start_time: startTime,
@@ -137,6 +144,7 @@ const mockDb = vi.hoisted(() => {
         description: null,
         status: 'CLOSED',
         is_anonymous: false,
+        allow_suboptions: false,
         tag_name: null,
         tag_color: null,
         start_time: new Date('2026-05-01T12:00:00.000Z'),
@@ -148,6 +156,7 @@ const mockDb = vi.hoisted(() => {
         description: null,
         status: 'SCHEDULED',
         is_anonymous: false,
+        allow_suboptions: false,
         tag_name: null,
         tag_color: null,
         start_time: new Date('2026-05-10T12:00:00.000Z'),
@@ -159,6 +168,7 @@ const mockDb = vi.hoisted(() => {
         description: null,
         status: 'OPEN',
         is_anonymous: false,
+        allow_suboptions: false,
         tag_name: null,
         tag_color: null,
         start_time: startTime,
@@ -180,51 +190,72 @@ const mockDb = vi.hoisted(() => {
       {
         id: anonymousOptionOneId,
         election_id: anonymousElectionId,
+        parent_option_id: null,
         label: 'Formula Azul',
         option_type: 'ticket',
+        image_url: null,
         display_order: 1,
+        metadata: null,
       },
       {
         id: anonymousOptionTwoId,
         election_id: anonymousElectionId,
+        parent_option_id: null,
         label: 'Formula Verde',
         option_type: 'ticket',
+        image_url: null,
         display_order: 2,
+        metadata: null,
       },
       {
         id: namedOptionOneId,
         election_id: namedElectionId,
+        parent_option_id: null,
         label: 'Aprobar',
         option_type: 'yes_no',
+        image_url: null,
         display_order: 1,
+        metadata: null,
       },
       {
         id: namedOptionTwoId,
         election_id: namedElectionId,
+        parent_option_id: null,
         label: 'Rechazar',
         option_type: 'yes_no',
+        image_url: null,
         display_order: 2,
+        metadata: null,
       },
       {
         id: closedOptionOneId,
         election_id: closedElectionId,
+        parent_option_id: null,
         label: 'Lista Uno',
         option_type: 'ticket',
+        image_url: null,
         display_order: 1,
+        metadata: null,
       },
       {
         id: closedOptionTwoId,
         election_id: closedElectionId,
+        parent_option_id: null,
         label: 'Lista Dos',
         option_type: 'ticket',
+        image_url: null,
         display_order: 2,
+        metadata: null,
       },
       {
         id: scheduledOptionId,
         election_id: scheduledElectionId,
+        parent_option_id: null,
         label: 'Opcion futura',
         option_type: 'ticket',
+        image_url: null,
         display_order: 1,
+        metadata: null,
       },
     ];
 
@@ -234,6 +265,7 @@ const mockDb = vi.hoisted(() => {
         id: 'vote-closed-1',
         election_id: closedElectionId,
         option_id: closedOptionOneId,
+        parent_option_id: null,
         student_id: voterStudentId,
         token_hash: null,
       },
@@ -270,7 +302,9 @@ const mockDb = vi.hoisted(() => {
     return {
       ...election,
       has_voted: voter?.token_used ?? false,
-      total_options: options.filter((option) => option.election_id === election.id).length,
+      total_options: options.filter(
+        (option) => option.election_id === election.id && !option.parent_option_id
+      ).length,
     };
   }
 
@@ -285,8 +319,21 @@ const mockDb = vi.hoisted(() => {
   function sortedOptionsForElection(electionId: string) {
     return options
       .filter((option) => option.election_id === electionId)
-      .sort((left, right) => left.display_order - right.display_order)
-      .map(({ election_id: _electionId, ...option }) => option);
+      .sort((left, right) => {
+        const leftParent = left.parent_option_id
+          ? options.find((option) => option.id === left.parent_option_id)
+          : null;
+        const rightParent = right.parent_option_id
+          ? options.find((option) => option.id === right.parent_option_id)
+          : null;
+        const parentDiff =
+          (leftParent?.display_order ?? left.display_order) -
+          (rightParent?.display_order ?? right.display_order);
+        if (parentDiff !== 0) return parentDiff;
+        if (!left.parent_option_id && right.parent_option_id) return -1;
+        if (left.parent_option_id && !right.parent_option_id) return 1;
+        return left.display_order - right.display_order;
+      });
   }
 
   function statusRank(status: string) {
@@ -322,6 +369,7 @@ const mockDb = vi.hoisted(() => {
       id: nextVoteId(),
       election_id: electionId,
       option_id: optionId,
+      parent_option_id: null,
       student_id: null,
       token_hash: tokenHash,
     });
@@ -343,6 +391,7 @@ const mockDb = vi.hoisted(() => {
       id: nextVoteId(),
       election_id: electionId,
       option_id: optionId,
+      parent_option_id: null,
       student_id: studentId,
       token_hash: null,
     });
@@ -394,7 +443,7 @@ const mockDb = vi.hoisted(() => {
       return { rows: row ? [row] : [], rowCount: row ? 1 : 0 };
     }
 
-    if (sql.startsWith('SELECT id, label, option_type, display_order FROM election_options')) {
+    if (sql.startsWith('SELECT eo.id') && sql.includes('FROM election_options eo') && !sql.includes('LEFT JOIN votes v')) {
       const rows = sortedOptionsForElection(String(params[0]));
       return { rows, rowCount: rows.length };
     }
@@ -460,19 +509,29 @@ const mockDb = vi.hoisted(() => {
       return { rows: [], rowCount: 1 };
     }
 
-    if (sql.startsWith('SELECT title, status FROM elections WHERE id = $1')) {
+    if (sql.startsWith('SELECT title, status, allow_suboptions FROM elections WHERE id = $1')) {
       const election = electionById(params[0]);
       return {
-        rows: election ? [{ title: election.title, status: election.status }] : [],
+        rows: election
+          ? [{
+              title: election.title,
+              status: election.status,
+              allow_suboptions: election.allow_suboptions,
+            }]
+          : [],
         rowCount: election ? 1 : 0,
       };
     }
 
-    if (sql.startsWith('SELECT eo.label') && sql.includes('LEFT JOIN votes v')) {
+    if (sql.startsWith('SELECT eo.id') && sql.includes('LEFT JOIN votes v')) {
       const electionId = String(params[0]);
       const rows = sortedOptionsForElection(electionId).map((option) => ({
+        id: option.id,
         label: option.label,
         option_type: option.option_type,
+        parent_option_id: option.parent_option_id,
+        image_url: option.image_url,
+        metadata: option.metadata,
         vote_count: String(
           votes.filter(
             (vote) => vote.election_id === electionId && vote.option_id === option.id
@@ -859,14 +918,22 @@ describe('voting integration', () => {
       participation_rate: 50,
       options: [
         {
+          id: mockDb.ids.closedOptionOneId,
           label: 'Lista Uno',
           option_type: 'ticket',
+          parent_option_id: null,
+          image_url: null,
+          metadata: null,
           vote_count: 1,
           percentage: 100,
         },
         {
+          id: '06060606-0606-4606-8606-060606060606',
           label: 'Lista Dos',
           option_type: 'ticket',
+          parent_option_id: null,
+          image_url: null,
+          metadata: null,
           vote_count: 0,
           percentage: 0,
         },

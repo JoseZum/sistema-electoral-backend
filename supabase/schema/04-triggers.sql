@@ -134,8 +134,9 @@ BEGIN
         v_ballots_count BIGINT;
       BEGIN
         SELECT count(*) INTO v_ballots_count
-        FROM votes
-        WHERE election_id::TEXT = v_resource ->> 'id';
+        FROM election_voters
+        WHERE election_id::TEXT = v_resource ->> 'id'
+          AND token_used = true;
 
         v_details := v_details || jsonb_build_object('ballots_count', v_ballots_count);
       END;

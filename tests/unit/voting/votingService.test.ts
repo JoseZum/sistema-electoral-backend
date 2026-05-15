@@ -30,6 +30,7 @@ const mockElectionListItem = {
   description: 'General student election',
   status: 'OPEN',
   is_anonymous: true,
+  allow_suboptions: false,
   tag_name: 'Engineering',
   tag_color: '#2563EB',
   start_time: new Date('2026-05-01T10:00:00.000Z'),
@@ -44,6 +45,7 @@ const mockElectionAccess = {
   description: 'General student election',
   status: 'OPEN',
   is_anonymous: true,
+  allow_suboptions: false,
   tag_name: 'Engineering',
   tag_color: '#2563EB',
   start_time: new Date('2026-05-01T10:00:00.000Z'),
@@ -52,8 +54,26 @@ const mockElectionAccess = {
 };
 
 const mockOptions = [
-  { id: 'option-1', label: 'Alice', option_type: 'ticket', display_order: 1 },
-  { id: 'option-2', label: 'Bob', option_type: 'ticket', display_order: 2 },
+  {
+    id: 'option-1',
+    election_id: 'election-1',
+    parent_option_id: null,
+    label: 'Alice',
+    option_type: 'ticket',
+    image_url: null,
+    display_order: 1,
+    metadata: null,
+  },
+  {
+    id: 'option-2',
+    election_id: 'election-1',
+    parent_option_id: null,
+    label: 'Bob',
+    option_type: 'ticket',
+    image_url: null,
+    display_order: 2,
+    metadata: null,
+  },
 ];
 
 const pendingVoters = [
@@ -285,6 +305,39 @@ describe('votingService', () => {
       );
     });
 
+    it('casts an anonymous vote with one selected suboption per parent option', async () => {
+      const token = 'known-anonymous-token';
+      const encryptedToken = encryptVoteTokenForTest(token, '11223344556677889900aabb');
+      const expectedHash = hashVoteTokenForTest(token);
+      const selections = [
+        { parentOptionId: 'position-1', optionId: 'candidate-1' },
+        { parentOptionId: 'position-2', optionId: 'candidate-4' },
+      ];
+
+      vi.mocked(votingRepo.findElectionForVoting).mockResolvedValue({
+        ...mockElectionAccess,
+        allow_suboptions: true,
+      });
+      vi.mocked(votingRepo.listPendingAnonymousVoters).mockResolvedValue([]);
+      vi.mocked(votingRepo.findVotingTokenByStudent).mockResolvedValue({
+        token_encrypted: encryptedToken,
+      });
+      vi.mocked(votingRepo.castAnonymousSuboptionVotes).mockResolvedValue(undefined);
+
+      const result = await castVote(
+        { electionId: 'election-1', selections },
+        'ana@estudiantec.cr'
+      );
+
+      expect(result).toEqual({ success: true, message: 'Voto emitido exitosamente' });
+      expect(votingRepo.castAnonymousSuboptionVotes).toHaveBeenCalledWith(
+        'election-1',
+        selections,
+        expectedHash
+      );
+      expect(votingRepo.castAnonymousVote).not.toHaveBeenCalled();
+    });
+
     it('throws not found when an anonymous election has no available token', async () => {
       vi.mocked(votingRepo.findElectionForVoting).mockResolvedValue(mockElectionAccess);
       vi.mocked(votingRepo.listPendingAnonymousVoters).mockResolvedValue([]);
@@ -332,6 +385,33 @@ describe('votingService', () => {
       expect(votingRepo.findVotingTokenByStudent).not.toHaveBeenCalled();
     });
 
+    it('casts a named vote with suboption selections and the resolved student id', async () => {
+      const selections = [
+        { parentOptionId: 'position-1', optionId: 'candidate-1' },
+        { parentOptionId: 'position-2', optionId: 'candidate-4' },
+      ];
+      vi.mocked(votingRepo.findElectionForVoting).mockResolvedValue({
+        ...mockElectionAccess,
+        is_anonymous: false,
+        allow_suboptions: true,
+      });
+      vi.mocked(votingRepo.castNamedSuboptionVotes).mockResolvedValue(undefined);
+
+      const result = await castVote(
+        { electionId: 'election-1', selections },
+        'ana@estudiantec.cr'
+      );
+
+      expect(result).toEqual({ success: true, message: 'Voto emitido exitosamente' });
+      expect(votingRepo.castNamedSuboptionVotes).toHaveBeenCalledWith(
+        'election-1',
+        selections,
+        'student-1'
+      );
+      expect(votingRepo.castNamedVote).not.toHaveBeenCalled();
+      expect(votingRepo.findVotingTokenByStudent).not.toHaveBeenCalled();
+    });
+
     it('maps duplicate named vote errors to a conflict', async () => {
       vi.mocked(votingRepo.findElectionForVoting).mockResolvedValue({
         ...mockElectionAccess,
@@ -372,6 +452,7 @@ describe('votingService', () => {
       vi.mocked(votingRepo.findElectionForVoting).mockResolvedValue(mockElectionAccess);
       vi.mocked(votingRepo.getPublicResults).mockResolvedValue({
         title: 'Student Council 2026',
+        allow_suboptions: false,
         options: [
           { label: 'Alice', option_type: 'ticket', vote_count: 15 },
           { label: 'Bob', option_type: 'ticket', vote_count: 9 },
@@ -400,6 +481,7 @@ describe('votingService', () => {
       vi.mocked(votingRepo.findElectionForVoting).mockResolvedValue(mockElectionAccess);
       vi.mocked(votingRepo.getPublicResults).mockResolvedValue({
         title: 'Student Council 2026',
+        allow_suboptions: false,
         options: [
           { label: 'Alice', option_type: 'ticket', vote_count: 0 },
           { label: 'Bob', option_type: 'ticket', vote_count: 0 },

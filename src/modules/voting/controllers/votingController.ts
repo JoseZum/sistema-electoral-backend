@@ -30,6 +30,7 @@ export async function castVote(req: Request, res: Response, next: NextFunction) 
     const result = await votingService.castVote({
       electionId: req.body.electionId,
       optionId: req.body.optionId,
+      selections: req.body.selections,
     }, email);
     res.json(result);
   } catch (error) {

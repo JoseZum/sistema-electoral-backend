@@ -56,6 +56,7 @@ const mockDb = vi.hoisted(() => {
     description: string | null;
     status: 'DRAFT' | 'SCHEDULED' | 'OPEN' | 'CLOSED' | 'SCRUTINIZED' | 'ARCHIVED';
     is_anonymous: boolean;
+    allow_suboptions: boolean;
     auth_method: 'MICROSOFT';
     voter_source: 'FULL_PADRON' | 'FILTERED' | 'MANUAL' | 'TAG';
     voter_filter: Record<string, unknown> | null;
@@ -75,8 +76,10 @@ const mockDb = vi.hoisted(() => {
   type ElectionOption = {
     id: string;
     election_id: string;
+    parent_option_id: string | null;
     label: string;
     option_type: string;
+    image_url: string | null;
     display_order: number;
     metadata: Record<string, unknown> | null;
   };
@@ -91,6 +94,7 @@ const mockDb = vi.hoisted(() => {
     id: string;
     election_id: string;
     option_id: string;
+    parent_option_id: string | null;
     student_id: string | null;
     created_at: Date;
   };
@@ -139,6 +143,7 @@ const mockDb = vi.hoisted(() => {
       description: null,
       status: 'DRAFT',
       is_anonymous: false,
+      allow_suboptions: false,
       auth_method: 'MICROSOFT',
       voter_source: 'FULL_PADRON',
       voter_filter: null,
@@ -161,8 +166,10 @@ const mockDb = vi.hoisted(() => {
     return {
       id: '',
       election_id: '',
+      parent_option_id: null,
       label: '',
       option_type: 'ticket',
+      image_url: null,
       display_order: 1,
       metadata: null,
       ...overrides,
@@ -329,6 +336,7 @@ const mockDb = vi.hoisted(() => {
         id: nextVoteId(),
         election_id: openElectionId,
         option_id: 'option-open-b',
+        parent_option_id: null,
         student_id: secondVoterStudentId,
         created_at: new Date('2026-05-04T11:20:00.000Z'),
       },
@@ -336,6 +344,7 @@ const mockDb = vi.hoisted(() => {
         id: nextVoteId(),
         election_id: closedElectionId,
         option_id: 'option-closed-a',
+        parent_option_id: null,
         student_id: voterStudentId,
         created_at: new Date('2026-05-01T11:05:00.000Z'),
       },
@@ -343,6 +352,7 @@ const mockDb = vi.hoisted(() => {
         id: nextVoteId(),
         election_id: anonymousClosedElectionId,
         option_id: 'option-anon-closed-a',
+        parent_option_id: null,
         student_id: null,
         created_at: new Date('2026-05-01T11:15:00.000Z'),
       },
@@ -394,14 +404,30 @@ const mockDb = vi.hoisted(() => {
       ...enrichElection(election),
       total_voters: voters.length,
       votes_cast: voters.filter((voter) => voter.token_used).length,
-      options_count: options.filter((option) => option.election_id === election.id).length,
+      options_count: options.filter(
+        (option) => option.election_id === election.id && !option.parent_option_id
+      ).length,
     };
   }
 
   function sortedOptions(electionId: string) {
     return options
       .filter((option) => option.election_id === electionId)
-      .sort((left, right) => left.display_order - right.display_order);
+      .sort((left, right) => {
+        const leftParent = left.parent_option_id
+          ? options.find((option) => option.id === left.parent_option_id)
+          : null;
+        const rightParent = right.parent_option_id
+          ? options.find((option) => option.id === right.parent_option_id)
+          : null;
+        const parentDiff =
+          (leftParent?.display_order ?? left.display_order) -
+          (rightParent?.display_order ?? right.display_order);
+        if (parentDiff !== 0) return parentDiff;
+        if (!left.parent_option_id && right.parent_option_id) return -1;
+        if (left.parent_option_id && !right.parent_option_id) return 1;
+        return left.display_order - right.display_order;
+      });
   }
 
   function addVoter(electionId: string, studentId: string) {
@@ -424,6 +450,9 @@ const mockDb = vi.hoisted(() => {
       id: option.id,
       label: option.label,
       option_type: option.option_type,
+      parent_option_id: option.parent_option_id,
+      image_url: option.image_url,
+      metadata: option.metadata,
       vote_count: String(
         votes.filter((vote) => vote.election_id === electionId && vote.option_id === option.id).length
       ),
@@ -477,17 +506,18 @@ const mockDb = vi.hoisted(() => {
         description: (params[1] as string | null) || null,
         status: params[2] as Election['status'],
         is_anonymous: Boolean(params[3]),
+        allow_suboptions: Boolean(params[4]),
         auth_method: 'MICROSOFT',
-        voter_source: params[5] as Election['voter_source'],
-        voter_filter: parseJsonParam(params[6]),
-        tag_id: (params[7] as string | null) || null,
-        starts_immediately: Boolean(params[8]),
-        immediate_minutes: params[9] === null ? null : Number(params[9]),
-        requires_keys: Boolean(params[10]),
-        min_keys: Number(params[11]),
-        start_time: params[12] ? new Date(String(params[12])) : null,
-        end_time: params[13] ? new Date(String(params[13])) : null,
-        created_by: (params[14] as string | null) || null,
+        voter_source: params[6] as Election['voter_source'],
+        voter_filter: parseJsonParam(params[7]),
+        tag_id: (params[8] as string | null) || null,
+        starts_immediately: Boolean(params[9]),
+        immediate_minutes: params[10] === null ? null : Number(params[10]),
+        requires_keys: Boolean(params[11]),
+        min_keys: Number(params[12]),
+        start_time: params[13] ? new Date(String(params[13])) : null,
+        end_time: params[14] ? new Date(String(params[14])) : null,
+        created_by: (params[15] as string | null) || null,
       });
       elections.push(election);
       return { rows: [election], rowCount: 1 };
@@ -502,6 +532,7 @@ const mockDb = vi.hoisted(() => {
       if (sql.includes('title = $')) election.title = String(params[paramIndex++]);
       if (sql.includes('description = $')) election.description = (params[paramIndex++] as string | null) || null;
       if (sql.includes('is_anonymous = $')) election.is_anonymous = Boolean(params[paramIndex++]);
+      if (sql.includes('allow_suboptions = $')) election.allow_suboptions = Boolean(params[paramIndex++]);
       if (sql.includes('auth_method = $')) {
         params[paramIndex++];
         election.auth_method = 'MICROSOFT';
@@ -545,7 +576,7 @@ const mockDb = vi.hoisted(() => {
       return { rows: [], rowCount: before - elections.length };
     }
 
-    if (sql === 'SELECT * FROM election_options WHERE election_id = $1 ORDER BY display_order ASC') {
+    if (sql.startsWith('SELECT eo.*') && sql.includes('FROM election_options eo')) {
       const rows = sortedOptions(String(params[0]));
       return { rows, rowCount: rows.length };
     }
@@ -554,10 +585,12 @@ const mockDb = vi.hoisted(() => {
       const option = baseOption({
         id: nextOptionId(),
         election_id: String(params[0]),
-        label: String(params[1]),
-        option_type: String(params[2]),
-        display_order: Number(params[3]),
-        metadata: parseJsonParam(params[4]),
+        parent_option_id: (params[1] as string | null) || null,
+        label: String(params[2]),
+        option_type: String(params[3]),
+        image_url: (params[4] as string | null) || null,
+        display_order: Number(params[5]),
+        metadata: parseJsonParam(params[6]),
       });
       options.push(option);
       return { rows: [option], rowCount: 1 };
@@ -572,6 +605,7 @@ const mockDb = vi.hoisted(() => {
       let paramIndex = 0;
       if (sql.includes('label = $')) option.label = String(params[paramIndex++]);
       if (sql.includes('option_type = $')) option.option_type = String(params[paramIndex++]);
+      if (sql.includes('image_url = $')) option.image_url = (params[paramIndex++] as string | null) || null;
       if (sql.includes('display_order = $')) option.display_order = Number(params[paramIndex++]);
       if (sql.includes('metadata = $')) option.metadata = parseJsonParam(params[paramIndex++]);
 
@@ -580,7 +614,12 @@ const mockDb = vi.hoisted(() => {
 
     if (sql === 'DELETE FROM election_options WHERE id = $1 AND election_id = $2') {
       const before = options.length;
-      options = options.filter((option) => option.id !== params[0] || option.election_id !== params[1]);
+      const deletedId = params[0];
+      options = options.filter(
+        (option) =>
+          (option.id !== deletedId && option.parent_option_id !== deletedId) ||
+          option.election_id !== params[1]
+      );
       return { rows: [], rowCount: before - options.length };
     }
 

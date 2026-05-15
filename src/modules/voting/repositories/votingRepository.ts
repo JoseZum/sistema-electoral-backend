@@ -1,16 +1,52 @@
 import { Pool, PoolClient } from 'pg';
 import { pool } from '../../../config/database';
-import { VoterElection, VoteOption } from '../models/votingModel';
+import { PublicResultOption, VoterElection, VoteOption, VoteSelectionDto } from '../models/votingModel';
 
 type Queryable = Pool | PoolClient;
+
+function nestVoteOptions<T extends VoteOption>(rows: T[]): T[] {
+  const parents = rows
+    .filter((option) => !option.parent_option_id)
+    .map((option) => ({ ...option, suboptions: [] as T[] }));
+  const parentMap = new Map(parents.map((option) => [option.id, option]));
+
+  rows
+    .filter((option) => option.parent_option_id)
+    .forEach((option) => {
+      const parent = option.parent_option_id ? parentMap.get(option.parent_option_id) : undefined;
+      if (parent) {
+        parent.suboptions?.push({ ...option, suboptions: [] as T[] });
+      }
+    });
+
+  return parents as T[];
+}
+
+function nestPublicResultOptions(rows: PublicResultOption[]): PublicResultOption[] {
+  const parents = rows
+    .filter((option) => !option.parent_option_id)
+    .map((option) => ({ ...option, suboptions: [] as PublicResultOption[] }));
+  const parentMap = new Map(parents.map((option) => [option.id, option]));
+
+  rows
+    .filter((option) => option.parent_option_id)
+    .forEach((option) => {
+      const parent = option.parent_option_id ? parentMap.get(option.parent_option_id) : undefined;
+      if (parent) {
+        parent.suboptions?.push({ ...option, suboptions: [] });
+      }
+    });
+
+  return parents;
+}
 
 export async function findElectionsForVoter(studentId: string): Promise<VoterElection[]> {
   const result = await pool.query<VoterElection>(`
     SELECT
       e.id, e.title, e.description, e.status,
-      e.is_anonymous, t.name AS tag_name, t.color AS tag_color, e.start_time, e.end_time,
+      e.is_anonymous, e.allow_suboptions, t.name AS tag_name, t.color AS tag_color, e.start_time, e.end_time,
       ev.token_used AS has_voted,
-      (SELECT COUNT(*)::int FROM election_options eo WHERE eo.election_id = e.id) AS total_options
+      (SELECT COUNT(*)::int FROM election_options eo WHERE eo.election_id = e.id AND eo.parent_option_id IS NULL) AS total_options
     FROM elections e
     LEFT JOIN tags t ON t.id = e.tag_id
     INNER JOIN election_voters ev ON ev.election_id = e.id AND ev.student_id = $1
@@ -38,11 +74,12 @@ export async function findElectionForVoting(electionId: string, studentId: strin
   start_time: Date | null;
   end_time: Date | null;
   has_voted: boolean;
+  allow_suboptions: boolean;
 } | null> {
   const result = await pool.query(`
     SELECT
       e.id, e.title, e.description, e.status,
-      e.is_anonymous, t.name AS tag_name, t.color AS tag_color, e.start_time, e.end_time,
+      e.is_anonymous, e.allow_suboptions, t.name AS tag_name, t.color AS tag_color, e.start_time, e.end_time,
       ev.token_used AS has_voted
     FROM elections e
     LEFT JOIN tags t ON t.id = e.tag_id
@@ -54,10 +91,16 @@ export async function findElectionForVoting(electionId: string, studentId: strin
 
 export async function findElectionOptions(electionId: string): Promise<VoteOption[]> {
   const result = await pool.query<VoteOption>(
-    'SELECT id, label, option_type, display_order FROM election_options WHERE election_id = $1 ORDER BY display_order ASC',
+    `SELECT eo.id, eo.election_id, eo.parent_option_id, eo.label, eo.option_type, eo.image_url, eo.display_order, eo.metadata
+     FROM election_options eo
+     LEFT JOIN election_options parent ON parent.id = eo.parent_option_id
+     WHERE eo.election_id = $1
+     ORDER BY COALESCE(parent.display_order, eo.display_order) ASC,
+       CASE WHEN eo.parent_option_id IS NULL THEN 0 ELSE 1 END ASC,
+       eo.display_order ASC`,
     [electionId]
   );
-  return result.rows;
+  return nestVoteOptions(result.rows);
 }
 
 export async function findStudentIdentityByEmail(email: string): Promise<{
@@ -200,27 +243,63 @@ export async function castNamedVote(electionId: string, optionId: string, studen
   );
 }
 
+export async function castAnonymousSuboptionVotes(
+  electionId: string,
+  selections: VoteSelectionDto[],
+  tokenHash: string
+): Promise<void> {
+  await pool.query(
+    'SELECT fn_cast_suboption_votes_anonymous($1, $2::jsonb, $3)',
+    [electionId, JSON.stringify(selections), tokenHash]
+  );
+}
+
+export async function castNamedSuboptionVotes(
+  electionId: string,
+  selections: VoteSelectionDto[],
+  studentId: string
+): Promise<void> {
+  await pool.query(
+    'SELECT fn_cast_suboption_votes_named($1, $2::jsonb, $3)',
+    [electionId, JSON.stringify(selections), studentId]
+  );
+}
+
 // Get results for voter view
 export async function getPublicResults(electionId: string): Promise<{
   title: string;
-  options: Array<{ label: string; option_type: string; vote_count: number }>;
+  allow_suboptions: boolean;
+  options: PublicResultOption[];
   total_eligible: number;
   total_voted: number;
 } | null> {
-  const electionResult = await pool.query<{ title: string; status: string }>(
-    'SELECT title, status FROM elections WHERE id = $1',
+  const electionResult = await pool.query<{ title: string; status: string; allow_suboptions: boolean }>(
+    'SELECT title, status, allow_suboptions FROM elections WHERE id = $1',
     [electionId]
   );
   if (!electionResult.rows[0]) return null;
   if (!['CLOSED', 'SCRUTINIZED', 'ARCHIVED'].includes(electionResult.rows[0].status)) return null;
 
-  const optionsResult = await pool.query<{ label: string; option_type: string; vote_count: string }>(`
-    SELECT eo.label, eo.option_type, COUNT(v.id)::text AS vote_count
+  const optionsResult = await pool.query<{
+    id: string;
+    label: string;
+    option_type: string;
+    parent_option_id: string | null;
+    image_url: string | null;
+    metadata: Record<string, unknown> | null;
+    vote_count: number | string;
+  }>(`
+    SELECT eo.id, eo.label, eo.option_type, eo.parent_option_id, eo.image_url, eo.metadata,
+      COUNT(v.id)::int AS vote_count
     FROM election_options eo
+    LEFT JOIN election_options parent ON parent.id = eo.parent_option_id
     LEFT JOIN votes v ON v.option_id = eo.id AND v.election_id = eo.election_id
     WHERE eo.election_id = $1
-    GROUP BY eo.id, eo.label, eo.option_type, eo.display_order
-    ORDER BY eo.display_order ASC
+    GROUP BY eo.id, eo.label, eo.option_type, eo.parent_option_id, eo.image_url, eo.metadata,
+      eo.display_order, parent.display_order
+    ORDER BY COALESCE(parent.display_order, eo.display_order) ASC,
+      CASE WHEN eo.parent_option_id IS NULL THEN 0 ELSE 1 END ASC,
+      eo.display_order ASC
   `, [electionId]);
 
   const voterResult = await pool.query<{ total: string; voted: string }>(`
@@ -228,13 +307,34 @@ export async function getPublicResults(electionId: string): Promise<{
     FROM election_voters WHERE election_id = $1
   `, [electionId]);
 
+  const flatOptions: PublicResultOption[] = optionsResult.rows.map((row) => ({
+    id: row.id,
+    label: row.label,
+    option_type: row.option_type,
+    parent_option_id: row.parent_option_id,
+    image_url: row.image_url,
+    metadata: row.metadata,
+    vote_count: Number(row.vote_count),
+  }));
+  const options = electionResult.rows[0].allow_suboptions
+    ? nestPublicResultOptions(flatOptions).map((parent) => {
+        const suboptions = parent.suboptions ?? [];
+        const parentTotal = suboptions.reduce((acc, option) => acc + option.vote_count, 0);
+        return {
+          ...parent,
+          vote_count: parentTotal,
+          suboptions: suboptions.map((option) => ({
+            ...option,
+            percentage: parentTotal > 0 ? (option.vote_count / parentTotal) * 100 : 0,
+          })),
+        };
+      })
+    : flatOptions.filter((option) => !option.parent_option_id);
+
   return {
     title: electionResult.rows[0].title,
-    options: optionsResult.rows.map(r => ({
-      label: r.label,
-      option_type: r.option_type,
-      vote_count: parseInt(r.vote_count, 10),
-    })),
+    allow_suboptions: electionResult.rows[0].allow_suboptions,
+    options,
     total_eligible: parseInt(voterResult.rows[0].total, 10),
     total_voted: parseInt(voterResult.rows[0].voted, 10),
   };

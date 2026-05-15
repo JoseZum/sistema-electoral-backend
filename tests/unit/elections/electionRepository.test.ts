@@ -38,6 +38,7 @@ const mockElection: Election = {
   description: 'General student election',
   status: 'OPEN',
   is_anonymous: true,
+  allow_suboptions: false,
   auth_method: 'MICROSOFT',
   voter_source: 'FULL_PADRON',
   voter_filter: null,
@@ -67,8 +68,10 @@ const mockElectionWithStats: ElectionWithStats = {
 const mockOption: ElectionOption = {
   id: 'option-1',
   election_id: 'election-1',
+  parent_option_id: null,
   label: 'Alice',
   option_type: 'ticket',
+  image_url: null,
   display_order: 1,
   metadata: { description: 'Lead candidate', slate: 'Unity' },
 };
@@ -162,6 +165,7 @@ describe('electionRepository', () => {
           null,
           'DRAFT',
           true,
+          false,
           'MICROSOFT',
           'FULL_PADRON',
           null,
@@ -183,6 +187,7 @@ describe('electionRepository', () => {
         title: 'Engineering Election',
         description: 'Vote for your representatives',
         is_anonymous: false,
+        allow_suboptions: true,
         status: 'SCHEDULED',
         auth_method: 'MICROSOFT',
         voter_source: 'FILTERED',
@@ -205,6 +210,7 @@ describe('electionRepository', () => {
           'Vote for your representatives',
           'SCHEDULED',
           false,
+          true,
           'MICROSOFT',
           'FILTERED',
           JSON.stringify({ sede: 'Central', career: 'Computacion' }),
@@ -306,9 +312,9 @@ describe('electionRepository', () => {
 
       const result = await findOptionsByElection('election-1');
 
-      expect(result).toEqual([mockOption]);
+      expect(result).toEqual([{ ...mockOption, suboptions: [] }]);
       expect(mockPool.query).toHaveBeenCalledWith(
-        'SELECT * FROM election_options WHERE election_id = $1 ORDER BY display_order ASC',
+        expect.stringContaining('FROM election_options eo'),
         ['election-1']
       );
     });
@@ -333,7 +339,15 @@ describe('electionRepository', () => {
       expect(result).toEqual(mockOption);
       expect(db.query).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO election_options'),
-        ['election-1', 'Alice', 'ticket', 2, JSON.stringify({ slate: 'Unity', description: 'Lead candidate' })]
+        [
+          'election-1',
+          null,
+          'Alice',
+          'ticket',
+          null,
+          2,
+          JSON.stringify({ slate: 'Unity', description: 'Lead candidate' }),
+        ]
       );
     });
 
@@ -351,7 +365,7 @@ describe('electionRepository', () => {
 
       expect(db.query).toHaveBeenCalledWith(
         expect.any(String),
-        ['election-1', 'Abstain', 'blank', 0, null]
+        ['election-1', null, 'Abstain', 'blank', null, 0, null]
       );
     });
   });
@@ -545,8 +559,24 @@ describe('electionRepository', () => {
         .mockResolvedValueOnce({ rows: [mockElection] })
         .mockResolvedValueOnce({
           rows: [
-            { id: 'option-1', label: 'Alice', option_type: 'ticket', vote_count: '3' },
-            { id: 'option-2', label: 'Bob', option_type: 'ticket', vote_count: '1' },
+            {
+              id: 'option-1',
+              label: 'Alice',
+              option_type: 'ticket',
+              parent_option_id: null,
+              image_url: null,
+              metadata: null,
+              vote_count: '3',
+            },
+            {
+              id: 'option-2',
+              label: 'Bob',
+              option_type: 'ticket',
+              parent_option_id: null,
+              image_url: null,
+              metadata: null,
+              vote_count: '1',
+            },
           ],
         })
         .mockResolvedValueOnce({ rows: [{ total: '10', voted: '4' }] })
@@ -572,8 +602,26 @@ describe('electionRepository', () => {
       expect(result).toEqual({
         election: mockElection,
         options: [
-          { id: 'option-1', label: 'Alice', option_type: 'ticket', vote_count: 3, percentage: 75 },
-          { id: 'option-2', label: 'Bob', option_type: 'ticket', vote_count: 1, percentage: 25 },
+          {
+            id: 'option-1',
+            label: 'Alice',
+            option_type: 'ticket',
+            parent_option_id: null,
+            image_url: null,
+            metadata: null,
+            vote_count: 3,
+            percentage: 75,
+          },
+          {
+            id: 'option-2',
+            label: 'Bob',
+            option_type: 'ticket',
+            parent_option_id: null,
+            image_url: null,
+            metadata: null,
+            vote_count: 1,
+            percentage: 25,
+          },
         ],
         total_votes: 4,
         total_eligible: 10,
@@ -600,7 +648,17 @@ describe('electionRepository', () => {
       mockPool.query
         .mockResolvedValueOnce({ rows: [{ ...mockElection, is_anonymous: false }] })
         .mockResolvedValueOnce({
-          rows: [{ id: 'option-1', label: 'Alice', option_type: 'ticket', vote_count: '2' }],
+          rows: [
+            {
+              id: 'option-1',
+              label: 'Alice',
+              option_type: 'ticket',
+              parent_option_id: null,
+              image_url: null,
+              metadata: null,
+              vote_count: '2',
+            },
+          ],
         })
         .mockResolvedValueOnce({ rows: [{ total: '5', voted: '2' }] })
         .mockResolvedValueOnce({
@@ -625,7 +683,16 @@ describe('electionRepository', () => {
       expect(result).toEqual({
         election: { ...mockElection, is_anonymous: false },
         options: [
-          { id: 'option-1', label: 'Alice', option_type: 'ticket', vote_count: 2, percentage: 100 },
+          {
+            id: 'option-1',
+            label: 'Alice',
+            option_type: 'ticket',
+            parent_option_id: null,
+            image_url: null,
+            metadata: null,
+            vote_count: 2,
+            percentage: 100,
+          },
         ],
         total_votes: 2,
         total_eligible: 5,

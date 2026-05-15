@@ -4,6 +4,7 @@ export interface Election {
   description: string | null;
   status: 'DRAFT' | 'SCHEDULED' | 'OPEN' | 'CLOSED' | 'SCRUTINIZED' | 'ARCHIVED';
   is_anonymous: boolean;
+  allow_suboptions: boolean;
   auth_method: 'MICROSOFT';
   voter_source: 'FULL_PADRON' | 'FILTERED' | 'MANUAL' | 'TAG';
   voter_filter: Record<string, unknown> | null;
@@ -34,10 +35,13 @@ export interface ElectionTagSummary {
 export interface ElectionOption {
   id: string;
   election_id: string;
+  parent_option_id: string | null;
   label: string;
   option_type: string;
+  image_url: string | null;
   display_order: number;
   metadata: Record<string, unknown> | null;
+  suboptions?: ElectionOption[];
 }
 
 export interface ElectionVoter {
@@ -57,6 +61,7 @@ export interface CreateElectionDto {
   title: string;
   description?: string;
   is_anonymous: boolean;
+  allow_suboptions?: boolean;
   auth_method?: Election['auth_method'];
   status?: Election['status'] | 'AUTO';
   voter_source: Election['voter_source'];
@@ -79,6 +84,7 @@ export interface UpdateElectionDto {
   title?: string;
   description?: string;
   is_anonymous?: boolean;
+  allow_suboptions?: boolean;
   auth_method?: Election['auth_method'];
   status?: Election['status'];
   voter_source?: Election['voter_source'];
@@ -96,14 +102,18 @@ export interface CreateOptionDto {
   label: string;
   description?: string;
   option_type: ElectionOption['option_type'];
+  parent_option_id?: string | null;
+  image_url?: string | null;
   display_order?: number;
   metadata?: Record<string, unknown>;
+  suboptions?: CreateOptionDto[];
 }
 
 export interface UpdateOptionDto {
   label?: string;
   description?: string;
   option_type?: ElectionOption['option_type'];
+  image_url?: string | null;
   display_order?: number;
   metadata?: Record<string, unknown>;
 }
@@ -122,15 +132,21 @@ export interface ElectionResultVoter {
   selected_option_label: string | null;
 }
 
+export interface ElectionResultOption {
+  id: string;
+  label: string;
+  option_type: string;
+  parent_option_id: string | null;
+  image_url: string | null;
+  metadata: Record<string, unknown> | null;
+  vote_count: number;
+  percentage: number;
+  suboptions?: ElectionResultOption[];
+}
+
 export interface ElectionResults {
   election: Election;
-  options: Array<{
-    id: string;
-    label: string;
-    option_type: string;
-    vote_count: number;
-    percentage: number;
-  }>;
+  options: ElectionResultOption[];
   total_votes: number;
   total_eligible: number;
   participation_rate: number;

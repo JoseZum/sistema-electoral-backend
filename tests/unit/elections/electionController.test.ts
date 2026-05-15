@@ -27,6 +27,7 @@ const mockElection: ElectionWithStats = {
   description: 'General election',
   status: 'OPEN',
   is_anonymous: true,
+  allow_suboptions: false,
   auth_method: 'MICROSOFT',
   voter_source: 'FULL_PADRON',
   voter_filter: null,
@@ -52,8 +53,10 @@ const mockElection: ElectionWithStats = {
 const mockOption: ElectionOption = {
   id: 'option-1',
   election_id: 'election-1',
+  parent_option_id: null,
   label: 'Alice',
   option_type: 'ticket',
+  image_url: null,
   display_order: 1,
   metadata: null,
 };
@@ -61,7 +64,16 @@ const mockOption: ElectionOption = {
 const mockResults = {
   election: mockElection,
   options: [
-    { id: 'option-1', label: 'Alice', option_type: 'ticket', vote_count: 18, percentage: 60 },
+    {
+      id: 'option-1',
+      label: 'Alice',
+      option_type: 'ticket',
+      parent_option_id: null,
+      image_url: null,
+      metadata: null,
+      vote_count: 18,
+      percentage: 60,
+    },
   ],
   total_votes: 18,
   total_eligible: 30,

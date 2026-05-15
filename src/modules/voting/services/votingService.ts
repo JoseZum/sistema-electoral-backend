@@ -1,12 +1,12 @@
 import crypto from 'crypto';
 import { env } from '../../../config/env';
 import * as votingRepo from '../repositories/votingRepository';
-import { VoterElectionDetail, PublicResults } from '../models/votingModel';
+import { CastVoteDto, PublicResultOption, VoterElectionDetail, PublicResults, VoteSelectionDto } from '../models/votingModel';
 import {
   syncAutomaticStatuses,
   findElectionById,
 } from '../../elections/repositories/electionRepository';
-import { conflict, forbidden, internalError, notFound } from '../../../errors/httpErrors';
+import { badRequest, conflict, forbidden, internalError, notFound } from '../../../errors/httpErrors';
 
 const tokenEncryptionKey = crypto
   .createHash('sha256')
@@ -57,6 +57,67 @@ function errorMessage(error: unknown): string {
 
 function isVoteNotOpenError(error: unknown): boolean {
   return errorMessage(error).includes('votacion no esta abierta');
+}
+
+function isSuboptionValidationError(error: unknown): boolean {
+  const msg = errorMessage(error);
+  return msg.includes('subopcion')
+    || msg.includes('subopciones')
+    || msg.includes('Seleccione')
+    || msg.includes('seleccionar');
+}
+
+function normalizeSelections(selections: VoteSelectionDto[] | undefined): VoteSelectionDto[] {
+  if (!Array.isArray(selections) || selections.length === 0) {
+    throw badRequest(
+      'VOTING_SUBOPTION_SELECTIONS_REQUIRED',
+      'Debe seleccionar una subopcion por cada grupo de la votacion'
+    );
+  }
+
+  const normalized = selections.map((selection) => ({
+    parentOptionId: String(selection.parentOptionId || '').trim(),
+    optionId: String(selection.optionId || '').trim(),
+  }));
+
+  if (normalized.some((selection) => !selection.parentOptionId || !selection.optionId)) {
+    throw badRequest(
+      'VOTING_SUBOPTION_SELECTIONS_INVALID',
+      'Cada seleccion debe incluir el grupo y la subopcion elegida'
+    );
+  }
+
+  return normalized;
+}
+
+function assertOptionId(optionId: string | undefined): string {
+  const normalized = String(optionId || '').trim();
+  if (!normalized) {
+    throw badRequest('VOTING_OPTION_REQUIRED', 'Debe seleccionar una opcion para votar');
+  }
+  return normalized;
+}
+
+function withResultPercentages(
+  options: PublicResultOption[],
+  totalVotes: number,
+  allowSuboptions: boolean
+): PublicResultOption[] {
+  if (!allowSuboptions) {
+    return options.map((option) => ({
+      ...option,
+      percentage: totalVotes > 0 ? (option.vote_count / totalVotes) * 100 : 0,
+    }));
+  }
+
+  return options.map((option) => ({
+    ...option,
+    percentage: totalVotes > 0 ? (option.vote_count / totalVotes) * 100 : 0,
+    suboptions: (option.suboptions || []).map((suboption) => ({
+      ...suboption,
+      percentage: option.vote_count > 0 ? (suboption.vote_count / option.vote_count) * 100 : 0,
+    })),
+  }));
 }
 
 async function resolveStudent(email: string) {
@@ -125,7 +186,7 @@ export async function getElectionForVoting(electionId: string, email: string): P
   return { ...election, options };
 }
 
-export async function castVote(data: { electionId: string; optionId: string }, email: string) {
+export async function castVote(data: CastVoteDto, email: string) {
   await syncAutomaticStatuses();
   const student = await resolveStudent(email);
 
@@ -134,6 +195,9 @@ export async function castVote(data: { electionId: string; optionId: string }, e
   if (election.status !== 'OPEN') throw conflict('VOTING_NOT_OPEN', 'La votacion no esta abierta');
 
   if (election.has_voted) throw conflict('VOTING_ALREADY_VOTED', 'Ya ha emitido su voto en esta eleccion');
+
+  const selections = election.allow_suboptions ? normalizeSelections(data.selections) : [];
+  const optionId = election.allow_suboptions ? undefined : assertOptionId(data.optionId);
 
   if (election.is_anonymous) {
     await prepareAnonymousVotingTokensForElection(data.electionId);
@@ -144,7 +208,11 @@ export async function castVote(data: { electionId: string; optionId: string }, e
     const tokenHash = hashVoteToken(decryptVoteToken(tokenRecord.token_encrypted));
 
     try {
-      await votingRepo.castAnonymousVote(data.electionId, data.optionId, tokenHash);
+      if (election.allow_suboptions) {
+        await votingRepo.castAnonymousSuboptionVotes(data.electionId, selections, tokenHash);
+      } else {
+        await votingRepo.castAnonymousVote(data.electionId, optionId as string, tokenHash);
+      }
     } catch (err: unknown) {
       if (isVoteNotOpenError(err)) {
         throw conflict('VOTING_NOT_OPEN', 'La votacion no esta abierta');
@@ -153,11 +221,18 @@ export async function castVote(data: { electionId: string; optionId: string }, e
       if (msg.includes('invalido') || msg.includes('utilizado')) {
         throw conflict('VOTING_TOKEN_INVALID_OR_USED', 'Token invalido o ya utilizado');
       }
+      if (isSuboptionValidationError(err)) {
+        throw badRequest('VOTING_SUBOPTION_SELECTIONS_INVALID', 'Las subopciones seleccionadas no son validas');
+      }
       throw err;
     }
   } else {
     try {
-      await votingRepo.castNamedVote(data.electionId, data.optionId, student.id);
+      if (election.allow_suboptions) {
+        await votingRepo.castNamedSuboptionVotes(data.electionId, selections, student.id);
+      } else {
+        await votingRepo.castNamedVote(data.electionId, optionId as string, student.id);
+      }
     } catch (err: unknown) {
       if (isVoteNotOpenError(err)) {
         throw conflict('VOTING_NOT_OPEN', 'La votacion no esta abierta');
@@ -165,6 +240,9 @@ export async function castVote(data: { electionId: string; optionId: string }, e
       const msg = errorMessage(err);
       if (msg.includes('duplicate') || msg.includes('unique')) {
         throw conflict('VOTING_ALREADY_VOTED', 'Ya ha emitido su voto en esta eleccion');
+      }
+      if (isSuboptionValidationError(err)) {
+        throw badRequest('VOTING_SUBOPTION_SELECTIONS_INVALID', 'Las subopciones seleccionadas no son validas');
       }
       throw err;
     }
@@ -183,15 +261,14 @@ export async function getResults(electionId: string, email: string): Promise<Pub
   const data = await votingRepo.getPublicResults(electionId);
   if (!data) throw conflict('VOTING_RESULTS_UNAVAILABLE', 'Los resultados aun no estan disponibles');
 
-  const totalVotes = data.options.reduce((acc, o) => acc + o.vote_count, 0);
+  const totalVotes = data.allow_suboptions
+    ? data.total_voted
+    : data.options.reduce((acc, option) => acc + option.vote_count, 0);
 
   return {
     election_id: electionId,
     title: data.title,
-    options: data.options.map((o) => ({
-      ...o,
-      percentage: totalVotes > 0 ? (o.vote_count / totalVotes) * 100 : 0,
-    })),
+    options: withResultPercentages(data.options, totalVotes, data.allow_suboptions),
     total_votes: totalVotes,
     participation_rate: data.total_eligible > 0 ? (data.total_voted / data.total_eligible) * 100 : 0,
   };
