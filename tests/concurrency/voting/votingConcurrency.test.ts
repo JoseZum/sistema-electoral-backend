@@ -522,7 +522,11 @@ function hashVoteTokenForTest(token: string): string {
   return crypto.createHash('sha256').update(`${token}${env.voteTokenSecret}`).digest('hex');
 }
 
-function encryptVoteTokenForTest(token: string, ivHex = '00112233445566778899aabb'): string {
+function testIvHex() {
+  return Buffer.from(Array.from({ length: 12 }, (_, index) => index)).toString('hex');
+}
+
+function encryptVoteTokenForTest(token: string, ivHex = testIvHex()): string {
   const key = crypto
     .createHash('sha256')
     .update(`${env.voteTokenSecret}:encrypt`)

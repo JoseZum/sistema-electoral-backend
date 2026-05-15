@@ -81,7 +81,15 @@ const pendingVoters = [
   { student_id: 'student-2', carnet: '202400002', full_name: 'Luis Mora' },
 ];
 
-function encryptVoteTokenForTest(token: string, ivHex = '00112233445566778899aabb'): string {
+function testIvHex() {
+  return Buffer.from(Array.from({ length: 12 }, (_, index) => index)).toString('hex');
+}
+
+function ivHexFromBytes(bytes: number[]) {
+  return Buffer.from(bytes).toString('hex');
+}
+
+function encryptVoteTokenForTest(token: string, ivHex = testIvHex()): string {
   const key = crypto
     .createHash('sha256')
     .update(`${env.voteTokenSecret}:encrypt`)
@@ -307,7 +315,10 @@ describe('votingService', () => {
 
     it('casts an anonymous vote with one selected suboption per parent option', async () => {
       const token = 'known-anonymous-token';
-      const encryptedToken = encryptVoteTokenForTest(token, '11223344556677889900aabb');
+      const encryptedToken = encryptVoteTokenForTest(
+        token,
+        ivHexFromBytes([17, 34, 51, 68, 85, 102, 119, 136, 153, 0, 170, 187])
+      );
       const expectedHash = hashVoteTokenForTest(token);
       const selections = [
         { parentOptionId: 'position-1', optionId: 'candidate-1' },
@@ -356,7 +367,10 @@ describe('votingService', () => {
       vi.mocked(votingRepo.findElectionForVoting).mockResolvedValue(mockElectionAccess);
       vi.mocked(votingRepo.listPendingAnonymousVoters).mockResolvedValue([]);
       vi.mocked(votingRepo.findVotingTokenByStudent).mockResolvedValue({
-        token_encrypted: encryptVoteTokenForTest(token, 'ffeeddccbbaa998877665544'),
+        token_encrypted: encryptVoteTokenForTest(
+          token,
+          ivHexFromBytes([255, 238, 221, 204, 187, 170, 153, 136, 119, 102, 85, 68])
+        ),
       });
       vi.mocked(votingRepo.castAnonymousVote).mockRejectedValue(new Error('token invalido'));
 
