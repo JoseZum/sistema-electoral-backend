@@ -302,7 +302,7 @@ function buildCreationAuditSummary(params: {
     options_summary: options.map((option) => option.label).join(', '),
     eligible_count: eligibleCount,
     voter_scope: describeVoterScope(data.voter_source, data.populate, data.voter_filter, tagName),
-    privacy_mode: data.is_anonymous ? 'Voto anonimo' : 'Voto nominal',
+    privacy_mode: data.is_anonymous ? 'Sufragio por papeleta' : 'Sufragio publico',
     publication_mode: getPublicationModeLabel(finalStatus),
   };
 }

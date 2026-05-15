@@ -540,7 +540,7 @@ describe('electionRepository', () => {
       expect(mockPool.query).toHaveBeenCalledTimes(1);
     });
 
-    it('returns aggregated results for anonymous elections without voter details', async () => {
+    it('returns aggregated results for anonymous elections with participation detail but without selected options', async () => {
       mockPool.query
         .mockResolvedValueOnce({ rows: [mockElection] })
         .mockResolvedValueOnce({
@@ -549,7 +549,23 @@ describe('electionRepository', () => {
             { id: 'option-2', label: 'Bob', option_type: 'ticket', vote_count: '1' },
           ],
         })
-        .mockResolvedValueOnce({ rows: [{ total: '10', voted: '4' }] });
+        .mockResolvedValueOnce({ rows: [{ total: '10', voted: '4' }] })
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              full_name: 'Ana Perez',
+              carnet: '202400001',
+              has_voted: true,
+              selected_option_label: 'Alice',
+            },
+            {
+              full_name: 'Bruno Mora',
+              carnet: '202400002',
+              has_voted: false,
+              selected_option_label: null,
+            },
+          ],
+        });
 
       const result = await getElectionResults('election-1');
 
@@ -562,12 +578,25 @@ describe('electionRepository', () => {
         total_votes: 4,
         total_eligible: 10,
         participation_rate: 40,
-        voters: undefined,
+        voters: [
+          {
+            full_name: 'Ana Perez',
+            carnet: '202400001',
+            has_voted: true,
+            selected_option_label: null,
+          },
+          {
+            full_name: 'Bruno Mora',
+            carnet: '202400002',
+            has_voted: false,
+            selected_option_label: null,
+          },
+        ],
       });
-      expect(mockPool.query).toHaveBeenCalledTimes(3);
+      expect(mockPool.query).toHaveBeenCalledTimes(4);
     });
 
-    it('includes voter identities for non-anonymous elections', async () => {
+    it('includes voter identities, participation, and selected options for public elections', async () => {
       mockPool.query
         .mockResolvedValueOnce({ rows: [{ ...mockElection, is_anonymous: false }] })
         .mockResolvedValueOnce({
@@ -575,7 +604,20 @@ describe('electionRepository', () => {
         })
         .mockResolvedValueOnce({ rows: [{ total: '5', voted: '2' }] })
         .mockResolvedValueOnce({
-          rows: [{ full_name: 'Ana Perez', carnet: '202400001' }],
+          rows: [
+            {
+              full_name: 'Ana Perez',
+              carnet: '202400001',
+              has_voted: true,
+              selected_option_label: 'Alice',
+            },
+            {
+              full_name: 'Bruno Mora',
+              carnet: '202400002',
+              has_voted: false,
+              selected_option_label: null,
+            },
+          ],
         });
 
       const result = await getElectionResults('election-1');
@@ -588,10 +630,23 @@ describe('electionRepository', () => {
         total_votes: 2,
         total_eligible: 5,
         participation_rate: 40,
-        voters: [{ full_name: 'Ana Perez', carnet: '202400001' }],
+        voters: [
+          {
+            full_name: 'Ana Perez',
+            carnet: '202400001',
+            has_voted: true,
+            selected_option_label: 'Alice',
+          },
+          {
+            full_name: 'Bruno Mora',
+            carnet: '202400002',
+            has_voted: false,
+            selected_option_label: null,
+          },
+        ],
       });
       expect(mockPool.query).toHaveBeenCalledTimes(4);
-      expect(mockPool.query.mock.calls[3]?.[0]).toContain('SELECT DISTINCT s.full_name, s.carnet');
+      expect(mockPool.query.mock.calls[3]?.[0]).toContain('ev.token_used AS has_voted');
     });
   });
 

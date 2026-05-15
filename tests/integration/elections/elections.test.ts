@@ -15,6 +15,7 @@ const mockDb = vi.hoisted(() => {
   const scheduledElectionId = '22222222-2222-4222-8222-222222222222';
   const openElectionId = '33333333-3333-4333-8333-333333333333';
   const closedElectionId = '44444444-4444-4444-8444-444444444444';
+  const anonymousClosedElectionId = '55555555-5555-4555-8555-555555555555';
   const createdAt = new Date('2026-05-04T12:00:00.000Z');
   const updatedAt = new Date('2026-05-04T12:15:00.000Z');
 
@@ -287,6 +288,16 @@ const mockDb = vi.hoisted(() => {
         end_time: new Date('2026-05-02T10:00:00.000Z'),
         created_by: adminStudentId,
       }),
+      baseElection({
+        id: anonymousClosedElectionId,
+        title: 'Eleccion cerrada por papeleta',
+        status: 'CLOSED',
+        is_anonymous: true,
+        voter_source: 'FULL_PADRON',
+        start_time: new Date('2026-05-01T10:00:00.000Z'),
+        end_time: new Date('2026-05-02T10:00:00.000Z'),
+        created_by: adminStudentId,
+      }),
     ];
 
     options = [
@@ -298,6 +309,8 @@ const mockDb = vi.hoisted(() => {
       baseOption({ id: 'option-open-b', election_id: openElectionId, label: 'Rechazar', option_type: 'yes_no', display_order: 2 }),
       baseOption({ id: 'option-closed-a', election_id: closedElectionId, label: 'Lista Uno', display_order: 1 }),
       baseOption({ id: 'option-closed-b', election_id: closedElectionId, label: 'Lista Dos', display_order: 2 }),
+      baseOption({ id: 'option-anon-closed-a', election_id: anonymousClosedElectionId, label: 'Plan Horizonte', display_order: 1 }),
+      baseOption({ id: 'option-anon-closed-b', election_id: anonymousClosedElectionId, label: 'Plan Raices', display_order: 2 }),
     ];
 
     electionVoters = [
@@ -307,6 +320,8 @@ const mockDb = vi.hoisted(() => {
       { election_id: openElectionId, student_id: secondVoterStudentId, token_used: true },
       { election_id: closedElectionId, student_id: voterStudentId, token_used: true },
       { election_id: closedElectionId, student_id: secondVoterStudentId, token_used: false },
+      { election_id: anonymousClosedElectionId, student_id: voterStudentId, token_used: true },
+      { election_id: anonymousClosedElectionId, student_id: secondVoterStudentId, token_used: false },
     ];
 
     votes = [
@@ -323,6 +338,13 @@ const mockDb = vi.hoisted(() => {
         option_id: 'option-closed-a',
         student_id: voterStudentId,
         created_at: new Date('2026-05-01T11:05:00.000Z'),
+      },
+      {
+        id: nextVoteId(),
+        election_id: anonymousClosedElectionId,
+        option_id: 'option-anon-closed-a',
+        student_id: null,
+        created_at: new Date('2026-05-01T11:15:00.000Z'),
       },
     ];
 
@@ -632,19 +654,30 @@ const mockDb = vi.hoisted(() => {
       return { rows, rowCount: rows.length };
     }
 
-    if (sql.startsWith('SELECT DISTINCT s.full_name, s.carnet')) {
-      const voterIds = new Set([
-        ...votes
-          .filter((vote) => vote.election_id === params[0] && vote.student_id)
-          .map((vote) => vote.student_id as string),
-        ...electionVoters
-          .filter((voter) => voter.election_id === params[0] && voter.token_used)
-          .map((voter) => voter.student_id),
-      ]);
-      const rows = students
-        .filter((student) => voterIds.has(student.id))
-        .sort((left, right) => left.full_name.localeCompare(right.full_name))
-        .map((student) => ({ full_name: student.full_name, carnet: student.carnet }));
+    if (sql.startsWith('SELECT s.full_name, s.carnet, ev.token_used AS has_voted')) {
+      const currentElection = electionById(params[0]);
+      const rows = electionVoters
+        .filter((voter) => voter.election_id === params[0])
+        .map((voter) => {
+          const student = activeStudentById(voter.student_id);
+          if (!student) return null;
+
+          const selectedVote = votes.find(
+            (vote) => vote.election_id === voter.election_id && vote.student_id === voter.student_id
+          );
+          const selectedOption = selectedVote
+            ? options.find((option) => option.id === selectedVote.option_id)
+            : null;
+
+          return {
+            full_name: student.full_name,
+            carnet: student.carnet,
+            has_voted: voter.token_used,
+            selected_option_label: currentElection?.is_anonymous ? null : selectedOption?.label ?? null,
+          };
+        })
+        .filter(Boolean)
+        .sort((left, right) => left!.full_name.localeCompare(right!.full_name));
       return { rows, rowCount: rows.length };
     }
 
@@ -755,6 +788,7 @@ const mockDb = vi.hoisted(() => {
       scheduledElectionId,
       openElectionId,
       closedElectionId,
+      anonymousClosedElectionId,
     },
     query,
     connect,
@@ -1124,12 +1158,56 @@ describe('elections integration', () => {
         total_votes: 1,
         total_eligible: 2,
         participation_rate: 50,
-        voters: [{ full_name: 'Ana Garcia', carnet: '2021001234' }],
+        voters: [
+          {
+            full_name: 'Ana Garcia',
+            carnet: '2021001234',
+            has_voted: true,
+            selected_option_label: 'Lista Uno',
+          },
+          {
+            full_name: 'Bruno Mora',
+            carnet: '2021005678',
+            has_voted: false,
+            selected_option_label: null,
+          },
+        ],
       })
     );
     expect(body.options).toEqual([
       expect.objectContaining({ id: 'option-closed-a', vote_count: 1, percentage: 100 }),
       expect.objectContaining({ id: 'option-closed-b', vote_count: 0, percentage: 0 }),
+    ]);
+  });
+
+  it('returns results for a ballot election with participation detail and no selected option disclosure', async () => {
+    const { response, body } = await request('GET', `/api/elections/${mockDb.ids.anonymousClosedElectionId}/results`);
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual(
+      expect.objectContaining({
+        total_votes: 1,
+        total_eligible: 2,
+        participation_rate: 50,
+        voters: [
+          {
+            full_name: 'Ana Garcia',
+            carnet: '2021001234',
+            has_voted: true,
+            selected_option_label: null,
+          },
+          {
+            full_name: 'Bruno Mora',
+            carnet: '2021005678',
+            has_voted: false,
+            selected_option_label: null,
+          },
+        ],
+      })
+    );
+    expect(body.options).toEqual([
+      expect.objectContaining({ id: 'option-anon-closed-a', vote_count: 1, percentage: 100 }),
+      expect.objectContaining({ id: 'option-anon-closed-b', vote_count: 0, percentage: 0 }),
     ]);
   });
 

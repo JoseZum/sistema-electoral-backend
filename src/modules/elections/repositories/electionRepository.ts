@@ -407,22 +407,22 @@ export async function getElectionResults(electionId: string): Promise<ElectionRe
   const voterStats = await getVoterCount(electionId);
   const totalVotes = optionsResult.rows.reduce((acc, r) => acc + parseInt(r.vote_count, 10), 0);
 
-  let voters: Array<{ full_name: string; carnet: string }> | undefined;
-  if (!election.is_anonymous) {
-    const votersResult = await pool.query<{ full_name: string; carnet: string }>(`
-      SELECT DISTINCT s.full_name, s.carnet
-      FROM students s
-      WHERE s.id IN (
-        SELECT v.student_id FROM votes v
-        WHERE v.election_id = $1 AND v.student_id IS NOT NULL
-        UNION
-        SELECT ev.student_id FROM election_voters ev
-        WHERE ev.election_id = $1 AND ev.token_used = true
-      )
-      ORDER BY s.full_name ASC
-    `, [electionId]);
-    voters = votersResult.rows;
-  }
+  const votersResult = await pool.query<{
+    full_name: string;
+    carnet: string;
+    has_voted: boolean;
+    selected_option_label: string | null;
+  }>(`
+    SELECT s.full_name, s.carnet, ev.token_used AS has_voted, eo.label AS selected_option_label
+    FROM election_voters ev
+    INNER JOIN students s ON s.id = ev.student_id
+    LEFT JOIN votes v
+      ON v.election_id = ev.election_id
+     AND v.student_id = ev.student_id
+    LEFT JOIN election_options eo ON eo.id = v.option_id
+    WHERE ev.election_id = $1
+    ORDER BY s.full_name ASC
+  `, [electionId]);
 
   return {
     election,
@@ -436,7 +436,11 @@ export async function getElectionResults(electionId: string): Promise<ElectionRe
     total_votes: totalVotes,
     total_eligible: voterStats.total,
     participation_rate: voterStats.total > 0 ? (voterStats.voted / voterStats.total) * 100 : 0,
-    voters,
+    voters: votersResult.rows.map((voter) => ({
+      ...voter,
+      has_voted: Boolean(voter.has_voted),
+      selected_option_label: election.is_anonymous ? null : voter.selected_option_label,
+    })),
   };
 }
 
