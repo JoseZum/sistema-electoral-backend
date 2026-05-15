@@ -166,7 +166,7 @@ jobs:
             done
           done
 
-          npx playwright test tests/e2e
+          npx playwright test --config=playwright.config.ts
 
       - name: Upload Playwright artifacts
         if: always()
