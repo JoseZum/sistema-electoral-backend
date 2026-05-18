@@ -242,11 +242,26 @@ export async function updateElection(id: string, data: UpdateElectionDto, db: Qu
 }
 
 export async function deleteElection(id: string, db: Queryable = pool): Promise<boolean> {
-  const result = await db.query(
-    `DELETE FROM elections WHERE id = $1`,
+  const result = await db.query<{ deleted: boolean }>(
+    `WITH deleted_votes AS (
+       DELETE FROM votes
+       WHERE election_id = $1
+       RETURNING 1
+     ),
+     deleted_scrutiny_keys AS (
+       DELETE FROM scrutiny_keys
+       WHERE election_id = $1
+       RETURNING 1
+     ),
+     deleted_election AS (
+       DELETE FROM elections
+       WHERE id = $1
+       RETURNING 1
+     )
+     SELECT EXISTS (SELECT 1 FROM deleted_election) AS deleted`,
     [id]
   );
-  return (result.rowCount ?? 0) > 0;
+  return Boolean(result.rows[0]?.deleted);
 }
 
 export async function updateElectionStatus(id: string, status: Election['status'], db: Queryable = pool): Promise<Election | null> {

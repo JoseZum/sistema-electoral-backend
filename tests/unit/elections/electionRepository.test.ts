@@ -273,17 +273,24 @@ describe('electionRepository', () => {
   });
 
   describe('deleteElection', () => {
-    it('returns true when a row was deleted', async () => {
-      const db = makeDb([], 1);
+    it('deletes dependent votes and scrutiny keys before removing the election', async () => {
+      const db = makeDb([{ deleted: true }], 1);
 
       const result = await deleteElection('election-1', db as any);
 
       expect(result).toBe(true);
-      expect(db.query).toHaveBeenCalledWith(expect.stringContaining('DELETE FROM elections'), ['election-1']);
+      expect(db.query).toHaveBeenCalledOnce();
+      expect(db.query).toHaveBeenCalledWith(expect.stringContaining('DELETE FROM votes'), ['election-1']);
+
+      const sql = db.query.mock.calls[0][0] as string;
+      expect(sql).toContain('DELETE FROM scrutiny_keys');
+      expect(sql).toContain('DELETE FROM elections');
+      expect(sql.indexOf('DELETE FROM votes')).toBeLessThan(sql.indexOf('DELETE FROM scrutiny_keys'));
+      expect(sql.indexOf('DELETE FROM scrutiny_keys')).toBeLessThan(sql.indexOf('DELETE FROM elections'));
     });
 
     it('returns false when no election was deleted', async () => {
-      const db = makeDb([], 0);
+      const db = makeDb([{ deleted: false }], 1);
 
       const result = await deleteElection('missing-election', db as any);
 
