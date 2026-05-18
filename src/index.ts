@@ -28,7 +28,7 @@ const authLimiter = rateLimit({
 app.use('/api/auth', authLimiter);
 
 // Parseo del cuerpo de las peticiones
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '15mb' }));
 
 // Rutas de los módulos
 app.use('/api/auth', authRoutes);

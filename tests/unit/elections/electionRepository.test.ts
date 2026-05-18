@@ -16,6 +16,7 @@ import {
   populateVotersFromPadron,
   populateVotersFromTag,
   populateVotersManual,
+  purgeElectionOptionImages,
   syncAutomaticStatuses,
   updateElection,
   updateElectionStatus,
@@ -141,6 +142,36 @@ describe('electionRepository', () => {
       expect(result).toEqual(mockElectionWithStats);
       expect(mockPool.query).toHaveBeenCalledWith(
         expect.stringContaining('COALESCE(eo.options_count, 0)::int AS options_count'),
+        ['election-1']
+      );
+    });
+  });
+
+  describe('purgeElectionOptionImages', () => {
+    it('scrubs audit payloads and nulls stored option images for the archived election', async () => {
+      const db = {
+        query: vi.fn()
+          .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+          .mockResolvedValueOnce({ rows: [{ id: 'option-1' }], rowCount: 1 })
+          .mockResolvedValueOnce({ rows: [], rowCount: 0 }),
+      };
+
+      const result = await purgeElectionOptionImages('election-1', db as any);
+
+      expect(result).toBe(1);
+      expect(db.query).toHaveBeenNthCalledWith(
+        1,
+        expect.stringContaining("resource_type = 'election_option'"),
+        ['election-1']
+      );
+      expect(db.query).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining('SET image_url = NULL'),
+        ['election-1']
+      );
+      expect(db.query).toHaveBeenNthCalledWith(
+        3,
+        expect.stringContaining("#- '{previous,image_url}'"),
         ['election-1']
       );
     });

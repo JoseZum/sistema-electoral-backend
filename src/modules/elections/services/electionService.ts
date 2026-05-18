@@ -717,13 +717,19 @@ export async function changeStatus(id: string, newStatus: Election['status'] | '
     await validateScrutinyKeysReady(election);
   }
 
-  const updatedElection = await withOptionalAudit(actor, (client) =>
-    electionRepo.updateElection(id, {
+  const updatedElection = await withOptionalAudit(actor, async (client) => {
+    const updated = await electionRepo.updateElection(id, {
       status: targetStatus,
       start_time: immediateWindow?.startTime,
       end_time: immediateWindow?.endTime,
-    }, client)
-  );
+    }, client);
+
+    if (updated?.status === 'ARCHIVED') {
+      await electionRepo.purgeElectionOptionImages(id, client);
+    }
+
+    return updated;
+  });
 
   if (updatedElection?.status === 'OPEN' && updatedElection.is_anonymous) {
     await prepareAnonymousVotingTokensForElection(id);

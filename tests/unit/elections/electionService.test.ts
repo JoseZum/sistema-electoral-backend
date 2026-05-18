@@ -182,6 +182,7 @@ describe('electionService', () => {
     vi.mocked(electionRepo.getVoterCount).mockResolvedValue({ total: 10, voted: 0 });
     vi.mocked(electionRepo.getSubmittedScrutinyKeyCount).mockResolvedValue(2);
     vi.mocked(electionRepo.clearVoters).mockResolvedValue(undefined);
+    vi.mocked(electionRepo.purgeElectionOptionImages).mockResolvedValue(0);
     vi.mocked(electionRepo.getElectionResults).mockResolvedValue(mockResults);
     vi.mocked(electionRepo.getVotesByHour).mockResolvedValue([
       { hour: '2026-05-01T10:00:00.000Z', count: 5 },
@@ -663,6 +664,7 @@ describe('electionService', () => {
         expect.objectContaining({ status: 'ARCHIVED' }),
         mockClient
       );
+      expect(electionRepo.purgeElectionOptionImages).toHaveBeenCalledWith('election-1', mockClient);
     });
   });
 

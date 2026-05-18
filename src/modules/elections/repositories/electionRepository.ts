@@ -454,6 +454,52 @@ export async function clearVoters(electionId: string, db: Queryable = pool): Pro
   );
 }
 
+export async function purgeElectionOptionImages(electionId: string, db: Queryable = pool): Promise<number> {
+  const scrubImageAuditSql = `
+    UPDATE audit_logs al
+    SET details = (
+      (
+        (
+          (
+            COALESCE(al.details, '{}'::jsonb)
+            #- '{new,image_url}'
+          )
+          #- '{old,image_url}'
+        )
+        #- '{changes,image_url}'
+      )
+      #- '{previous,image_url}'
+    )
+    WHERE al.resource_type = 'election_option'
+      AND (
+        al.resource_id IN (
+          SELECT eo.id::text
+          FROM election_options eo
+          WHERE eo.election_id = $1
+        )
+        OR al.details -> 'new' ->> 'election_id' = $1
+        OR al.details -> 'old' ->> 'election_id' = $1
+      )
+  `;
+
+  await db.query(scrubImageAuditSql, [electionId]);
+
+  const result = await db.query<{ id: string }>(
+    `UPDATE election_options
+     SET image_url = NULL
+     WHERE election_id = $1
+       AND image_url IS NOT NULL
+     RETURNING id`,
+    [electionId]
+  );
+
+  if ((result.rowCount ?? 0) > 0) {
+    await db.query(scrubImageAuditSql, [electionId]);
+  }
+
+  return result.rowCount ?? 0;
+}
+
 // Resultados
 
 export async function getElectionResults(electionId: string): Promise<ElectionResults | null> {

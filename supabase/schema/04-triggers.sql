@@ -119,6 +119,28 @@ BEGIN
     );
   END IF;
 
+  IF TG_ARGV[0] = 'election_option' THEN
+    v_details := (
+      (
+        (
+          (
+            COALESCE(v_details, '{}'::jsonb)
+            #- '{new,image_url}'
+          )
+          #- '{old,image_url}'
+        )
+        #- '{changes,image_url}'
+      )
+      #- '{previous,image_url}'
+    );
+
+    IF TG_OP = 'UPDATE'
+       AND jsonb_typeof(COALESCE(v_details -> 'changes', '{}'::jsonb)) = 'object'
+       AND jsonb_object_length(COALESCE(v_details -> 'changes', '{}'::jsonb)) = 0 THEN
+      RETURN NEW;
+    END IF;
+  END IF;
+
   -- Enriquecimiento para ELECTIONS: incluir titulo legible y, al cerrar, el conteo agregado
   IF TG_ARGV[0] = 'election' THEN
     v_details := COALESCE(v_details, '{}'::jsonb) || jsonb_strip_nulls(
