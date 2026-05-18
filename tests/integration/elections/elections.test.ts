@@ -566,6 +566,20 @@ const mockDb = vi.hoisted(() => {
       return { rows: [election], rowCount: 1 };
     }
 
+    if (sql.startsWith('WITH deleted_votes AS') && sql.includes('DELETE FROM scrutiny_keys') && sql.includes('deleted_election')) {
+      const electionId = params[0];
+      const deleted = elections.some((election) => election.id === electionId);
+
+      elections = elections.filter((election) => election.id !== electionId);
+      options = options.filter((option) => option.election_id !== electionId);
+      electionVoters = electionVoters.filter((voter) => voter.election_id !== electionId);
+      votes = votes.filter((vote) => vote.election_id !== electionId);
+      votingTokens = votingTokens.filter((token) => token.election_id !== electionId);
+      scrutinyKeys = scrutinyKeys.filter((key) => key.election_id !== electionId);
+
+      return { rows: [{ deleted }], rowCount: 1 };
+    }
+
     if (sql.startsWith('DELETE FROM elections WHERE id = $1')) {
       const before = elections.length;
       elections = elections.filter((election) => election.id !== params[0]);
