@@ -136,7 +136,7 @@ BEGIN
 
     IF TG_OP = 'UPDATE'
        AND jsonb_typeof(COALESCE(v_details -> 'changes', '{}'::jsonb)) = 'object'
-       AND jsonb_object_length(COALESCE(v_details -> 'changes', '{}'::jsonb)) = 0 THEN
+       AND COALESCE(v_details -> 'changes', '{}'::jsonb) = '{}'::jsonb THEN
       RETURN NEW;
     END IF;
   END IF;
