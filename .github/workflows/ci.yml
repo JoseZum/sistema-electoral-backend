@@ -2,10 +2,12 @@ name: CI
 
 on:
   pull_request:
+    branches:
+      - dev
+      - main
   push:
     branches:
-      - main
-      - master
+      - dev
   workflow_dispatch:
 
 permissions:
@@ -39,10 +41,27 @@ env:
   ZAP_MAX_WAIT_MINUTES: "5"
 
 jobs:
+  branch-policy:
+    name: 0) Branch Policy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Allow only dev pull requests into main
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "pull_request" ] \
+            && [ "${{ github.base_ref }}" = "main" ] \
+            && [ "${{ github.head_ref }}" != "dev" ]; then
+            echo "::error::main only accepts pull requests coming from dev."
+            exit 1
+          fi
+
   vitest-unit-testing:
     name: 1) Vitest Unit Testing
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    needs: branch-policy
     steps:
       - name: Checkout backend
         uses: actions/checkout@v4
@@ -297,3 +316,39 @@ jobs:
           name: zap-api-reports
           path: tests/security/reports/
           if-no-files-found: warn
+
+  promote-dev-to-main:
+    name: 9) Promote Dev To Main
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: owasp-zap
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout backend
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fast-forward main to the tested dev commit
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git fetch origin main dev
+
+          if ! git merge-base --is-ancestor origin/main "$GITHUB_SHA"; then
+            echo "::error::main has commits that are not in dev. Sync dev with main before promoting."
+            exit 1
+          fi
+
+          if [ "$(git rev-parse origin/main)" = "$GITHUB_SHA" ]; then
+            echo "main is already aligned with the tested dev commit."
+            exit 0
+          fi
+
+          git push origin "$GITHUB_SHA:refs/heads/main"
