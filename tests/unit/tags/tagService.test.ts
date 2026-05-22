@@ -239,7 +239,7 @@ describe('tagService', () => {
       mockClient.query.mockResolvedValueOnce({ rows: [{ id: 'student-uuid-1' }], rowCount: 1 });
       await expect(
         createTag({ name: 'Ciencias', student_ids: ['student-uuid-1', 'bad-uuid'] }, actor)
-      ).rejects.toThrow('Estudiante no encontrado en el padron');
+      ).rejects.toThrow('Estudiante no encontrado en el padrón');
     });
 
     it('calls replaceTagMembers with validated student IDs', async () => {
@@ -344,7 +344,7 @@ describe('tagService', () => {
       mockClient.query.mockResolvedValueOnce({ rows: [{ id: 'student-uuid-1' }], rowCount: 1 });
       await expect(
         updateTag('tag-uuid-1', { student_ids: ['student-uuid-1', 'bad-uuid'] }, actor)
-      ).rejects.toThrow('Estudiante no encontrado en el padron');
+      ).rejects.toThrow('Estudiante no encontrado en el padrón');
     });
 
     it('throws when tag detail not found after update', async () => {
