@@ -588,7 +588,7 @@ describe('tags integration', () => {
     expect(response.status).toBe(404);
     expect(body).toEqual(expect.objectContaining({
       code: 'TAG_STUDENT_NOT_FOUND',
-      error: 'Estudiante no encontrado en el padron',
+      error: 'Estudiante no encontrado en el padrón',
     }));
   });
 });
