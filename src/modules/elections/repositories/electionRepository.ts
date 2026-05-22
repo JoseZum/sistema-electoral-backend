@@ -11,7 +11,9 @@ import {
   ElectionResults,
   ElectionResultOption,
   VotesByHour,
-  MonitoringData
+  MonitoringData,
+  SuboptionPreset,
+  CreateSuboptionPresetDto,
 } from '../models/electionModel';
 
 type Queryable = Pool | PoolClient;
@@ -315,6 +317,53 @@ export async function createOption(
       metadata ? JSON.stringify(metadata) : null,
     ]
   );
+  return result.rows[0];
+}
+
+export async function findSuboptionPresetsByCreator(
+  createdBy: string,
+  db: Queryable = pool
+): Promise<SuboptionPreset[]> {
+  const result = await db.query<SuboptionPreset>(
+    `SELECT id, name, items, created_by, created_at, updated_at
+     FROM suboption_presets
+     WHERE created_by = $1
+     ORDER BY LOWER(name) ASC, created_at ASC`,
+    [createdBy]
+  );
+
+  return result.rows;
+}
+
+export async function findSuboptionPresetByCreatorAndName(
+  createdBy: string,
+  name: string,
+  db: Queryable = pool
+): Promise<SuboptionPreset | null> {
+  const result = await db.query<SuboptionPreset>(
+    `SELECT id, name, items, created_by, created_at, updated_at
+     FROM suboption_presets
+     WHERE created_by = $1
+       AND LOWER(name) = LOWER($2)
+     LIMIT 1`,
+    [createdBy, name]
+  );
+
+  return result.rows[0] || null;
+}
+
+export async function createSuboptionPreset(
+  data: CreateSuboptionPresetDto,
+  createdBy: string,
+  db: Queryable = pool
+): Promise<SuboptionPreset> {
+  const result = await db.query<SuboptionPreset>(
+    `INSERT INTO suboption_presets (name, items, created_by)
+     VALUES ($1, $2, $3)
+     RETURNING id, name, items, created_by, created_at, updated_at`,
+    [data.name, JSON.stringify(data.items), createdBy]
+  );
+
   return result.rows[0];
 }
 

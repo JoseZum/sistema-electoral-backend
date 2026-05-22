@@ -7,6 +7,8 @@ import {
   UpdateOptionDto,
   Election,
   ElectionOption,
+  SuboptionPreset,
+  CreateSuboptionPresetDto,
   PopulateVotersDto,
   VotesByHour,       // Necesario para procesar la estadística de monitoreo
   MonitoringData     // El "wrapper" que devuelve el servicio al controlador
@@ -202,6 +204,12 @@ function hasOptionStructureChanges(data: UpdateOptionDto): boolean {
 
 function normalizeOptionLabel(label: string): string {
   return label.trim().replace(/\s+/g, ' ');
+}
+
+function normalizeSuboptionPresetItems(items: string[] | undefined): string[] {
+  return (items || [])
+    .map((item) => normalizeOptionLabel(item || ''))
+    .filter(Boolean);
 }
 
 function normalizeCreateOptions(options: CreateOptionDto[] | undefined): CreateOptionDto[] {
@@ -423,6 +431,68 @@ export async function getElectionById(id: string) {
   }
   const options = await electionRepo.findOptionsByElection(id);
   return { ...election, options };
+}
+
+export async function getSuboptionPresets(actorId?: string): Promise<SuboptionPreset[]> {
+  if (!actorId) {
+    throw new AppError({
+      status: 401,
+      code: 'AUTH_REQUIRED',
+      message: 'Se requiere una sesion valida para consultar presets',
+    });
+  }
+
+  return electionRepo.findSuboptionPresetsByCreator(actorId);
+}
+
+export async function createSuboptionPreset(
+  data: CreateSuboptionPresetDto,
+  actor?: AuditActor
+): Promise<SuboptionPreset> {
+  if (!actor?.id) {
+    throw new AppError({
+      status: 401,
+      code: 'AUTH_REQUIRED',
+      message: 'Se requiere una sesion valida para guardar presets',
+    });
+  }
+
+  const name = normalizeOptionLabel(data.name || '');
+  const items = normalizeSuboptionPresetItems(data.items);
+
+  if (!name) {
+    throw badRequest(
+      'SUBOPTION_PRESET_NAME_REQUIRED',
+      'Escribe un nombre para el preset de subopciones'
+    );
+  }
+
+  if (items.length < 2) {
+    throw badRequest(
+      'SUBOPTION_PRESET_ITEMS_REQUIRED',
+      'El preset debe tener al menos 2 subopciones con nombre'
+    );
+  }
+
+  const uniqueItems = new Set(items.map((item) => item.toLowerCase()));
+  if (uniqueItems.size !== items.length) {
+    throw badRequest(
+      'SUBOPTION_PRESET_ITEMS_DUPLICATE',
+      'Las subopciones del preset no pueden repetirse'
+    );
+  }
+
+  const existingPreset = await electionRepo.findSuboptionPresetByCreatorAndName(actor.id, name);
+  if (existingPreset) {
+    throw conflict(
+      'SUBOPTION_PRESET_NAME_TAKEN',
+      'Ya tienes un preset guardado con ese nombre'
+    );
+  }
+
+  return withOptionalAudit(actor, (client) =>
+    electionRepo.createSuboptionPreset({ name, items }, actor.id as string, client)
+  );
 }
 
 export async function createElection(data: CreateElectionRequestDto, actor?: AuditActor) {

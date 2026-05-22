@@ -79,7 +79,7 @@ async function validateStudentIds(studentIds: string[], client?: PoolClient): Pr
     : await tagRepo.findActiveStudentIdsByIds(studentIds);
 
   if (validStudentIds.length !== studentIds.length) {
-    throw notFound('TAG_STUDENT_NOT_FOUND', 'Estudiante no encontrado en el padron');
+    throw notFound('TAG_STUDENT_NOT_FOUND', 'Estudiante no encontrado en el padrón');
   }
 
   return validStudentIds;

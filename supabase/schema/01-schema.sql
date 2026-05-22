@@ -74,6 +74,24 @@ CREATE INDEX idx_tag_members_tag ON tag_members(tag_id);
 CREATE INDEX idx_tag_members_student ON tag_members(student_id);
 
 -- ============================================
+-- PRESETS PERSONALIZADOS DE SUBOPCIONES
+-- ============================================
+CREATE TABLE suboption_presets (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name            TEXT NOT NULL,
+    items           JSONB NOT NULL,
+    created_by      UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    created_at      TIMESTAMPTZ DEFAULT now(),
+    updated_at      TIMESTAMPTZ DEFAULT now(),
+    CONSTRAINT chk_suboption_presets_items_array CHECK (jsonb_typeof(items) = 'array'),
+    CONSTRAINT chk_suboption_presets_items_count CHECK (jsonb_array_length(items) >= 2)
+);
+
+CREATE INDEX idx_suboption_presets_created_by ON suboption_presets(created_by);
+CREATE UNIQUE INDEX uniq_suboption_presets_creator_name_lower
+    ON suboption_presets(created_by, LOWER(name));
+
+-- ============================================
 -- VOTACIONES / ELECCIONES
 -- ============================================
 CREATE TABLE elections (

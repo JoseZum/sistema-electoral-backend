@@ -311,6 +311,18 @@ CREATE TRIGGER trg_tags_delete
   AFTER DELETE ON tags
   FOR EACH ROW EXECUTE FUNCTION fn_audit_log('tag');
 
+CREATE TRIGGER trg_suboption_presets_insert
+  AFTER INSERT ON suboption_presets
+  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('suboption_preset');
+
+CREATE TRIGGER trg_suboption_presets_update
+  AFTER UPDATE ON suboption_presets
+  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('suboption_preset');
+
+CREATE TRIGGER trg_suboption_presets_delete
+  AFTER DELETE ON suboption_presets
+  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('suboption_preset');
+
 CREATE TRIGGER trg_tag_members_insert
   AFTER INSERT ON tag_members
   FOR EACH ROW EXECUTE FUNCTION fn_audit_log('tag_member');
@@ -387,4 +399,8 @@ CREATE TRIGGER trg_elections_updated_at
 
 CREATE TRIGGER trg_tags_updated_at
   BEFORE UPDATE ON tags
+  FOR EACH ROW EXECUTE FUNCTION fn_set_updated_at();
+
+CREATE TRIGGER trg_suboption_presets_updated_at
+  BEFORE UPDATE ON suboption_presets
   FOR EACH ROW EXECUTE FUNCTION fn_set_updated_at();

@@ -12,6 +12,8 @@ router.use(requireAdmin);
 // Elections CRUD
 router.get('/', electionController.getElections);
 router.post('/', electionController.createElection);
+router.get('/suboption-presets', electionController.getSuboptionPresets);
+router.post('/suboption-presets', electionController.createSuboptionPreset);
 router.get('/:id', electionController.getElectionById);
 router.put('/:id', electionController.updateElection);
 router.delete('/:id', electionController.deleteElection);

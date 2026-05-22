@@ -8,11 +8,13 @@ import {
   addOption,
   changeStatus,
   clearVoters,
+  createSuboptionPreset,
   createElection,
   deleteElection,
   deleteOption,
   getElectionById,
   getElections,
+  getSuboptionPresets,
   getMonitoringData,
   getResults,
   populateVoters,
@@ -59,6 +61,15 @@ const mockOption: ElectionOption = {
   image_url: null,
   display_order: 1,
   metadata: null,
+};
+
+const mockSuboptionPreset = {
+  id: 'preset-1',
+  name: 'Consulta base',
+  items: ['A favor', 'En contra'],
+  created_by: 'admin-1',
+  created_at: new Date('2026-05-01T10:00:00.000Z'),
+  updated_at: new Date('2026-05-01T10:00:00.000Z'),
 };
 
 const mockResults = {
@@ -149,6 +160,60 @@ describe('electionController', () => {
       const next = makeNext();
 
       await getElectionById(makeReq({ params: { id: 'missing-election' } }), makeRes(), next);
+
+      expect(next).toHaveBeenCalledWith(expect.any(Error));
+    });
+  });
+
+  describe('getSuboptionPresets', () => {
+    it('responds with the presets for the authenticated admin', async () => {
+      vi.mocked(electionService.getSuboptionPresets).mockResolvedValue([mockSuboptionPreset]);
+      const req = makeReq({
+        user: { studentId: 'admin-1' } as any,
+      });
+      const res = makeRes();
+
+      await getSuboptionPresets(req, res, makeNext());
+
+      expect(electionService.getSuboptionPresets).toHaveBeenCalledWith('admin-1');
+      expect(res.json).toHaveBeenCalledWith([mockSuboptionPreset]);
+    });
+
+    it('passes service errors to next', async () => {
+      vi.mocked(electionService.getSuboptionPresets).mockRejectedValue(new Error('Presets failed'));
+      const next = makeNext();
+
+      await getSuboptionPresets(makeReq(), makeRes(), next);
+
+      expect(next).toHaveBeenCalledWith(expect.any(Error));
+    });
+  });
+
+  describe('createSuboptionPreset', () => {
+    it('responds with 201 and forwards body plus actor data to the service', async () => {
+      vi.mocked(electionService.createSuboptionPreset).mockResolvedValue(mockSuboptionPreset);
+      const req = makeReq({
+        body: { name: 'Consulta base', items: ['A favor', 'En contra'] },
+        user: { studentId: 'admin-1', carnet: '202400001' } as any,
+        ip: '10.0.0.1',
+      });
+      const res = makeRes();
+
+      await createSuboptionPreset(req, res, makeNext());
+
+      expect(electionService.createSuboptionPreset).toHaveBeenCalledWith(
+        { name: 'Consulta base', items: ['A favor', 'En contra'] },
+        { id: 'admin-1', carnet: '202400001', ip: '10.0.0.1' }
+      );
+      expect(res.status).toHaveBeenCalledWith(201);
+      expect(res.json).toHaveBeenCalledWith(mockSuboptionPreset);
+    });
+
+    it('passes service errors to next', async () => {
+      vi.mocked(electionService.createSuboptionPreset).mockRejectedValue(new Error('Create preset failed'));
+      const next = makeNext();
+
+      await createSuboptionPreset(makeReq(), makeRes(), next);
 
       expect(next).toHaveBeenCalledWith(expect.any(Error));
     });

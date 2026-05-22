@@ -23,11 +23,13 @@ import {
   addOption,
   changeStatus,
   clearVoters,
+  createSuboptionPreset,
   createElection,
   deleteElection,
   deleteOption,
   getAllElections,
   getElectionById,
+  getSuboptionPresets,
   getMonitoringData,
   getResults,
   populateVoters,
@@ -121,6 +123,15 @@ const optionB: ElectionOption = {
   display_order: 2,
 };
 
+const savedSuboptionPreset = {
+  id: 'preset-1',
+  name: 'Consulta base',
+  items: ['A favor', 'En contra'],
+  created_by: 'admin-1',
+  created_at: new Date('2026-05-01T10:00:00.000Z'),
+  updated_at: new Date('2026-05-01T10:00:00.000Z'),
+};
+
 const mockResults = {
   election: scrutinizedElection,
   options: [
@@ -187,6 +198,9 @@ describe('electionService', () => {
     vi.mocked(electionRepo.getVotesByHour).mockResolvedValue([
       { hour: '2026-05-01T10:00:00.000Z', count: 5 },
     ]);
+    vi.mocked(electionRepo.findSuboptionPresetsByCreator).mockResolvedValue([savedSuboptionPreset]);
+    vi.mocked(electionRepo.findSuboptionPresetByCreatorAndName).mockResolvedValue(null);
+    vi.mocked(electionRepo.createSuboptionPreset).mockResolvedValue(savedSuboptionPreset);
 
     vi.mocked(getTagById).mockResolvedValue({
       id: 'tag-1',
@@ -224,6 +238,78 @@ describe('electionService', () => {
         status: 404,
         code: 'ELECTION_NOT_FOUND',
       });
+    });
+  });
+
+  describe('getSuboptionPresets', () => {
+    it('requires an authenticated actor id', async () => {
+      await expect(getSuboptionPresets()).rejects.toMatchObject({
+        status: 401,
+        code: 'AUTH_REQUIRED',
+      });
+    });
+
+    it('returns the presets created by the current actor', async () => {
+      const result = await getSuboptionPresets('admin-1');
+
+      expect(result).toEqual([savedSuboptionPreset]);
+      expect(electionRepo.findSuboptionPresetsByCreator).toHaveBeenCalledWith('admin-1');
+    });
+  });
+
+  describe('createSuboptionPreset', () => {
+    it('requires an authenticated actor', async () => {
+      await expect(
+        createSuboptionPreset({ name: 'Consulta base', items: ['A favor', 'En contra'] })
+      ).rejects.toMatchObject({
+        status: 401,
+        code: 'AUTH_REQUIRED',
+      });
+    });
+
+    it('rejects repeated suboptions inside the preset', async () => {
+      await expect(
+        createSuboptionPreset(
+          { name: 'Consulta base', items: ['A favor', 'a favor'] },
+          actor
+        )
+      ).rejects.toMatchObject({
+        status: 400,
+        code: 'SUBOPTION_PRESET_ITEMS_DUPLICATE',
+      });
+    });
+
+    it('rejects duplicate preset names for the same actor', async () => {
+      vi.mocked(electionRepo.findSuboptionPresetByCreatorAndName).mockResolvedValue(savedSuboptionPreset);
+
+      await expect(
+        createSuboptionPreset(
+          { name: '  Consulta base ', items: ['A favor', 'En contra'] },
+          actor
+        )
+      ).rejects.toMatchObject({
+        status: 409,
+        code: 'SUBOPTION_PRESET_NAME_TAKEN',
+      });
+    });
+
+    it('normalizes and stores the preset inside an audited transaction', async () => {
+      const result = await createSuboptionPreset(
+        { name: '  Consulta base ', items: ['  A favor ', 'En   contra'] },
+        actor
+      );
+
+      expect(result).toEqual(savedSuboptionPreset);
+      expect(withAuditContext).toHaveBeenCalledWith(
+        { id: actor.id, carnet: actor.carnet, ip: actor.ip },
+        expect.any(Function)
+      );
+      expect(electionRepo.findSuboptionPresetByCreatorAndName).toHaveBeenCalledWith('admin-1', 'Consulta base');
+      expect(electionRepo.createSuboptionPreset).toHaveBeenCalledWith(
+        { name: 'Consulta base', items: ['A favor', 'En contra'] },
+        'admin-1',
+        mockClient
+      );
     });
   });
 

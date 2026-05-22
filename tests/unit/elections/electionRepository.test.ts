@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearVoters,
+  createSuboptionPreset,
   createElection,
   createOption,
   deleteElection,
@@ -9,6 +10,8 @@ import {
   findElectionById,
   findElectionWithStats,
   findOptionsByElection,
+  findSuboptionPresetByCreatorAndName,
+  findSuboptionPresetsByCreator,
   getElectionResults,
   getSubmittedScrutinyKeyCount,
   getVoterCount,
@@ -75,6 +78,15 @@ const mockOption: ElectionOption = {
   image_url: null,
   display_order: 1,
   metadata: { description: 'Lead candidate', slate: 'Unity' },
+};
+
+const mockSuboptionPreset = {
+  id: 'preset-1',
+  name: 'Consulta base',
+  items: ['A favor', 'En contra'],
+  created_by: 'admin-1',
+  created_at: new Date('2026-05-01T10:00:00.000Z'),
+  updated_at: new Date('2026-05-01T10:00:00.000Z'),
 };
 
 function makeDb(rows: unknown[], rowCount = rows.length) {
@@ -254,6 +266,60 @@ describe('electionRepository', () => {
           '2026-05-02T18:00:00.000Z',
           'admin-1',
         ]
+      );
+    });
+  });
+
+  describe('findSuboptionPresetsByCreator', () => {
+    it('returns the saved presets for the creator ordered by name', async () => {
+      mockPool.query.mockResolvedValue({ rows: [mockSuboptionPreset] });
+
+      const result = await findSuboptionPresetsByCreator('admin-1');
+
+      expect(result).toEqual([mockSuboptionPreset]);
+      expect(mockPool.query).toHaveBeenCalledWith(
+        expect.stringContaining('FROM suboption_presets'),
+        ['admin-1']
+      );
+    });
+  });
+
+  describe('findSuboptionPresetByCreatorAndName', () => {
+    it('returns the matching preset when the creator already has that name', async () => {
+      mockPool.query.mockResolvedValue({ rows: [mockSuboptionPreset] });
+
+      const result = await findSuboptionPresetByCreatorAndName('admin-1', 'Consulta base');
+
+      expect(result).toEqual(mockSuboptionPreset);
+      expect(mockPool.query).toHaveBeenCalledWith(
+        expect.stringContaining('LOWER(name) = LOWER($2)'),
+        ['admin-1', 'Consulta base']
+      );
+    });
+
+    it('returns null when the preset name is still available', async () => {
+      mockPool.query.mockResolvedValue({ rows: [] });
+
+      const result = await findSuboptionPresetByCreatorAndName('admin-1', 'Disponible');
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('createSuboptionPreset', () => {
+    it('serializes the preset items before inserting the row', async () => {
+      const db = makeDb([mockSuboptionPreset]);
+
+      const result = await createSuboptionPreset(
+        { name: 'Consulta base', items: ['A favor', 'En contra'] },
+        'admin-1',
+        db as any
+      );
+
+      expect(result).toEqual(mockSuboptionPreset);
+      expect(db.query).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO suboption_presets'),
+        ['Consulta base', JSON.stringify(['A favor', 'En contra']), 'admin-1']
       );
     });
   });

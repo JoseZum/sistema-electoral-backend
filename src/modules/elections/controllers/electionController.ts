@@ -22,6 +22,28 @@ export async function getElectionById(req: Request<IdParam>, res: Response, next
   }
 }
 
+export async function getSuboptionPresets(req: Request, res: Response, next: NextFunction) {
+  try {
+    const presets = await electionService.getSuboptionPresets(req.user?.studentId);
+    res.json(presets);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function createSuboptionPreset(req: Request, res: Response, next: NextFunction) {
+  try {
+    const preset = await electionService.createSuboptionPreset(req.body, {
+      id: req.user?.studentId,
+      carnet: req.user?.carnet,
+      ip: req.ip || req.headers['x-forwarded-for'] as string || req.socket.remoteAddress,
+    });
+    res.status(201).json(preset);
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function createElection(req: Request, res: Response, next: NextFunction) {
   try {
     const election = await electionService.createElection(req.body, {

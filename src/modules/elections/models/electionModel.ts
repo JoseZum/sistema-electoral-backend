@@ -44,6 +44,15 @@ export interface ElectionOption {
   suboptions?: ElectionOption[];
 }
 
+export interface SuboptionPreset {
+  id: string;
+  name: string;
+  items: string[];
+  created_by: string;
+  created_at: Date;
+  updated_at: Date;
+}
+
 export interface ElectionVoter {
   election_id: string;
   student_id: string;
@@ -116,6 +125,11 @@ export interface UpdateOptionDto {
   image_url?: string | null;
   display_order?: number;
   metadata?: Record<string, unknown>;
+}
+
+export interface CreateSuboptionPresetDto {
+  name: string;
+  items: string[];
 }
 
 export interface PopulateVotersDto {
