@@ -685,7 +685,7 @@ test.describe('voting e2e', () => {
     await expect(page).toHaveURL(new RegExp(`/votaciones/${election.id}$`));
     await expect(page.getByRole('heading', { name: votingFixture.uiTitle })).toBeVisible();
 
-    await page.locator('.vote-card').filter({ hasText: votingFixture.optionA }).first().click();
+    await page.locator('.ballot-choice').filter({ hasText: votingFixture.optionA }).first().click();
 
     const castResponse = page.waitForResponse(
       (response) =>
