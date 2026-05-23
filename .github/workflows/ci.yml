@@ -129,7 +129,8 @@ jobs:
           repository: JoseZum/sistema-electoral-frontend
           path: sistema-electoral-frontend
           fetch-depth: 1
-          token: ${{ secrets.CI_FRONTEND_REPO_TOKEN || github.token }}
+          ref: main
+          persist-credentials: false
 
       - name: Run Playwright E2E tests
         run: |
