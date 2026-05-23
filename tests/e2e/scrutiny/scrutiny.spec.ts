@@ -542,7 +542,7 @@ test.describe('scrutiny e2e', () => {
     await page.getByLabel(/Llave de escrutinio/i).fill(key);
     await page.getByRole('button', { name: /^Canjear$/i }).click();
 
-    await expect(page.getByText(/Llave canjeada\. Se alcanzo el minimo/i)).toBeVisible();
+    await expect(page.getByText(/Llave canjeada\.\s+Se alcanz[oó] el m[ií]nimo/i)).toBeVisible();
     await expect(page.getByText(/Finalizada/i).first()).toBeVisible();
   });
 
