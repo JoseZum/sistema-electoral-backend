@@ -1,7 +1,7 @@
 import { CorsOptions } from 'cors';
 import { env } from './env';
 
-// Configuración de CORS para permitir solicitudes desde el frontend
+// Configuración de CORS para permitir solicitudes desde el frontend vercel
 export const corsOptions: CorsOptions = {
   origin: env.corsOrigin,
   credentials: true,
