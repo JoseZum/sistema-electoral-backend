@@ -14,6 +14,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+.vercel/
 tests/security/.zap/
 tests/security/reports/
 tests/e2e/artifacts/*
@@ -23,3 +24,5 @@ tests/e2e/artifacts/*
 *.swp
 *.swo
 *~
+
+.vercel

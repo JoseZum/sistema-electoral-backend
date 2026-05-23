@@ -1,75 +1,101 @@
 Backend - Sistema Electoral TEE
 
-API REST para gestión de votaciones y autenticación con Microsoft Azure AD.
+API REST para gestion de votaciones y autenticacion con Microsoft Azure AD.
 
 Stack:
 - Node.js 18+
 - Express.js
-- PostgreSQL
+- PostgreSQL / Supabase Postgres
 - JWT para sesiones
-- Azure AD para autenticación OAuth
+- Azure AD para autenticacion OAuth
 
-Configuración rápida
+## Modo local
 
-1. Instalar dependencias:
-   npm install
+El flujo local no cambia:
 
-2. Crear archivo .env basado en .env.example:
-   cp .env.example .env
+1. Desde la raiz del monorepo ejecuta `docker compose up -d`
+2. El backend queda disponible en `http://localhost:3001`
+3. La base local se inicializa con los scripts de `supabase/schema/`
 
-3. Configurar variables en .env:
+Si queres correr solo el backend fuera de Docker:
 
-   Puerto y ambiente:
-   PORT=3001
-   NODE_ENV=development
+1. `npm install`
+2. Crea `.env` a partir de `.env.example`
+3. Ejecuta `npm run dev`
 
-   Credenciales Azure AD:
-   AZURE_CLIENT_ID=tu-client-id
-   AZURE_TENANT_ID=tu-tenant-id
+## Modo Vercel serverless
 
-   Base de datos:
-   DATABASE_URL=postgresql://usuario:contraseña@localhost:5432/tee_voting
+La aplicacion Express sigue separada del arranque local:
 
-   Seguridad:
-   JWT_SECRET=generá-una-cadena-aleatoria-larga
-   CORS_ORIGIN=http://localhost:3000
+- `src/index.ts` configura y exporta la app
+- `src/server.ts` hace `listen()` para desarrollo local
+- `src/api/index.ts` reexporta la app para Vercel serverless
 
-4. Iniciar servidor:
-   npm run dev
+Variables requeridas en Vercel:
 
-El servidor estará disponible en http://localhost:3001
+- `AZURE_CLIENT_ID`
+- `AZURE_TENANT_ID`
+- `JWT_SECRET`
+- `VOTE_TOKEN_SECRET`
+- `DATABASE_URL`
+- `CORS_ORIGIN`
+- `DATABASE_POOL_MAX=1`
 
-Scripts disponibles
+Base de datos en Vercel:
 
-npm run dev - Inicia con nodemon (recarga automática)
-npm start - Inicia en modo producción
-npm run build - Compila TypeScript a JavaScript
+- Usa la `DATABASE_URL` del Transaction pooler de Supabase para trafico serverless
+- El backend detecta URLs de Supabase, activa SSL automaticamente y elimina `sslmode` de la URL para que `pg` aplique la configuracion TLS del pool
 
-Endpoints principales
+## Variables locales
 
-POST /api/auth/microsoft
-- Valida token de Microsoft y crea sesión
-- Body: { idToken: string }
-- Response: { token: string, user: { ... } }
+Ejemplo minimo para local:
 
-GET /api/auth/profile
+```env
+PORT=3001
+NODE_ENV=development
+AZURE_CLIENT_ID=<azure-app-client-id>
+AZURE_TENANT_ID=<azure-tenant-id>
+JWT_SECRET=<random-secret-for-session-jwt>
+VOTE_TOKEN_SECRET=<random-secret-for-vote-token-hashing-and-encryption>
+DATABASE_URL=postgresql://tee_admin:tee_local_password@localhost:5432/tee_voting
+DATABASE_SSL=false
+DATABASE_SSL_REJECT_UNAUTHORIZED=false
+DATABASE_POOL_MAX=10
+CORS_ORIGIN=http://localhost:3000
+```
+
+## Scripts disponibles
+
+- `npm run dev` - Inicia con nodemon
+- `npm start` - Inicia la version compilada
+- `npm run build` - Compila TypeScript
+- `npm run typecheck` - Valida tipos sin emitir archivos
+
+## Endpoints principales
+
+`POST /api/auth/microsoft`
+- Valida token de Microsoft y crea sesion
+- Body: `{ idToken: string }`
+- Response: `{ token: string, user: { ... } }`
+
+`GET /api/auth/profile`
 - Obtiene perfil del usuario autenticado
-- Headers: Authorization: Bearer {token}
+- Headers: `Authorization: Bearer {token}`
 
-La documentación completa está en los archivos de rutas.
+La documentacion detallada sigue en los modulos y rutas del proyecto.
 
-Troubleshooting
+## Troubleshooting
 
-Error: "Student not found in the electoral registry"
+Error: `Student not found in the electoral registry`
 - La base de datos no tiene datos de estudiantes cargados
-- Verificar que la tabla de estudiantes tenga registros
+- Verifica que la tabla de estudiantes tenga registros
 
-Error 500 en /api/auth/microsoft
-- Revisar que AZURE_CLIENT_ID y AZURE_TENANT_ID sean correctos
-- Confirmar que JWT_SECRET esté configurado
-- Ver los logs para el mensaje de error específico
+Error 500 en `/api/auth/microsoft`
+- Revisa `AZURE_CLIENT_ID` y `AZURE_TENANT_ID`
+- Confirma `JWT_SECRET`
+- Revisa los logs del backend
 
-Error de conexión a base de datos
-- Verificar que PostgreSQL esté corriendo
-- Confirmar que la DATABASE_URL sea correcta
-- Revisar credenciales de acceso
+Error de conexion a base de datos
+- Verifica que PostgreSQL o Supabase esten accesibles
+- Confirma que `DATABASE_URL` sea correcta
+- En Vercel, usa el pooler transaccional de Supabase
