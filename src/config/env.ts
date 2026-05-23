@@ -42,6 +42,19 @@ function normalizeDatabaseUrl(databaseUrl: string): string {
   return normalizedQueryString ? `${baseUrl}?${normalizedQueryString}` : baseUrl;
 }
 
+function normalizeOrigin(origin: string): string {
+  return origin.trim().replace(/\/+$/, '');
+}
+
+function normalizeCorsOrigins(rawOrigins: string): string | string[] {
+  const origins = rawOrigins
+    .split(',')
+    .map((origin) => normalizeOrigin(origin))
+    .filter(Boolean);
+
+  return origins.length <= 1 ? (origins[0] || 'http://localhost:3000') : origins;
+}
+
 const isSupabaseConnection = /supabase\.co|pooler\.supabase\.com/i.test(rawDatabaseUrl);
 const databaseSsl = parseBoolean(process.env.DATABASE_SSL) ?? isSupabaseConnection;
 const databaseSslRejectUnauthorized =
@@ -62,5 +75,5 @@ export const env = {
   databaseSsl,
   databaseSslRejectUnauthorized,
   databasePoolMax: Number.isNaN(parsedDatabasePoolMax) ? 10 : parsedDatabasePoolMax,
-  corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+  corsOrigin: normalizeCorsOrigins(process.env.CORS_ORIGIN || 'http://localhost:3000'),
 };
