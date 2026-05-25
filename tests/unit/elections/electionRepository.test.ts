@@ -169,8 +169,12 @@ describe('electionRepository', () => {
       };
 
       const result = await purgeElectionOptionImages('election-1', db as any);
+      const scrubSql = db.query.mock.calls[0][0] as string;
 
       expect(result).toBe(1);
+      expect(scrubSql).toContain('WHERE eo.election_id = $1::uuid');
+      expect(scrubSql).toContain("al.details -> 'new' ->> 'election_id' = $1::text");
+      expect(scrubSql).toContain("al.details -> 'old' ->> 'election_id' = $1::text");
       expect(db.query).toHaveBeenNthCalledWith(
         1,
         expect.stringContaining("resource_type = 'election_option'"),

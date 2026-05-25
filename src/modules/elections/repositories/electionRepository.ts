@@ -524,10 +524,10 @@ export async function purgeElectionOptionImages(electionId: string, db: Queryabl
         al.resource_id IN (
           SELECT eo.id::text
           FROM election_options eo
-          WHERE eo.election_id = $1
+          WHERE eo.election_id = $1::uuid
         )
-        OR al.details -> 'new' ->> 'election_id' = $1
-        OR al.details -> 'old' ->> 'election_id' = $1
+        OR al.details -> 'new' ->> 'election_id' = $1::text
+        OR al.details -> 'old' ->> 'election_id' = $1::text
       )
   `;
 
