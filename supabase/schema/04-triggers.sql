@@ -11,7 +11,7 @@
 --   SET LOCAL app.client_ip = '<ip>';
 -- ========================================================
 
--- Helper: lee variables de sesion sin error si no existen
+-- Helper: lee variables de sesion sin error si no existen.
 CREATE OR REPLACE FUNCTION _audit_get(key TEXT) RETURNS TEXT AS $$
 BEGIN
   RETURN current_setting(key, true);
