@@ -19,6 +19,7 @@ import {
   populateVotersFromPadron,
   populateVotersFromTag,
   populateVotersManual,
+  purgeSuboptionPresetAuditLogs,
   purgeElectionOptionImages,
   syncAutomaticStatuses,
   updateElection,
@@ -324,6 +325,20 @@ describe('electionRepository', () => {
       expect(db.query).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO suboption_presets'),
         ['Consulta base', JSON.stringify(['A favor', 'En contra']), 'admin-1']
+      );
+    });
+  });
+
+  describe('purgeSuboptionPresetAuditLogs', () => {
+    it('deletes audit entries linked to the preset', async () => {
+      const db = makeDb([], 1);
+
+      const result = await purgeSuboptionPresetAuditLogs('preset-1', db as any);
+
+      expect(result).toBe(1);
+      expect(db.query).toHaveBeenCalledWith(
+        expect.stringContaining("WHERE resource_type = 'suboption_preset'"),
+        ['preset-1']
       );
     });
   });

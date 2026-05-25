@@ -57,6 +57,12 @@ BEGIN
     IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
   END IF;
 
+  -- Los presets de subopciones son configuracion auxiliar y no deben
+  -- aparecer en la bitacora de auditoria.
+  IF TG_ARGV[0] = 'suboption_preset' THEN
+    IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
+  END IF;
+
   -- Accion
   v_action := TG_ARGV[0] || '.' || lower(TG_OP);
 

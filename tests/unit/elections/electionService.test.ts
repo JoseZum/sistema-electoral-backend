@@ -201,6 +201,7 @@ describe('electionService', () => {
     vi.mocked(electionRepo.findSuboptionPresetsByCreator).mockResolvedValue([savedSuboptionPreset]);
     vi.mocked(electionRepo.findSuboptionPresetByCreatorAndName).mockResolvedValue(null);
     vi.mocked(electionRepo.createSuboptionPreset).mockResolvedValue(savedSuboptionPreset);
+    vi.mocked(electionRepo.purgeSuboptionPresetAuditLogs).mockResolvedValue(1);
 
     vi.mocked(getTagById).mockResolvedValue({
       id: 'tag-1',
@@ -293,7 +294,7 @@ describe('electionService', () => {
       });
     });
 
-    it('normalizes and stores the preset inside an audited transaction', async () => {
+    it('normalizes, stores and removes the preset from audit inside an audited transaction', async () => {
       const result = await createSuboptionPreset(
         { name: '  Consulta base ', items: ['  A favor ', 'En   contra'] },
         actor
@@ -308,6 +309,10 @@ describe('electionService', () => {
       expect(electionRepo.createSuboptionPreset).toHaveBeenCalledWith(
         { name: 'Consulta base', items: ['A favor', 'En contra'] },
         'admin-1',
+        mockClient
+      );
+      expect(electionRepo.purgeSuboptionPresetAuditLogs).toHaveBeenCalledWith(
+        savedSuboptionPreset.id,
         mockClient
       );
     });

@@ -367,6 +367,20 @@ export async function createSuboptionPreset(
   return result.rows[0];
 }
 
+export async function purgeSuboptionPresetAuditLogs(
+  presetId: string,
+  db: Queryable = pool
+): Promise<number> {
+  const result = await db.query(
+    `DELETE FROM audit_logs
+     WHERE resource_type = 'suboption_preset'
+       AND resource_id = $1`,
+    [presetId]
+  );
+
+  return result.rowCount ?? 0;
+}
+
 export async function updateOption(
   electionId: string,
   optionId: string,

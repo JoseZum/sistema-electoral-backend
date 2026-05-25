@@ -490,9 +490,11 @@ export async function createSuboptionPreset(
     );
   }
 
-  return withOptionalAudit(actor, (client) =>
-    electionRepo.createSuboptionPreset({ name, items }, actor.id as string, client)
-  );
+  return withOptionalAudit(actor, async (client) => {
+    const preset = await electionRepo.createSuboptionPreset({ name, items }, actor.id as string, client);
+    await electionRepo.purgeSuboptionPresetAuditLogs(preset.id, client);
+    return preset;
+  });
 }
 
 export async function createElection(data: CreateElectionRequestDto, actor?: AuditActor) {
