@@ -32,9 +32,11 @@ function isAlreadyFinalizedError(error: unknown): boolean {
 function generateNums(): string {
     let result = '';
     while (result.length < 6) {
-        const byte = randomBytes(1)[0];
-        if (byte < 250) {
-            result += (byte % 10).toString();
+        const bytes = randomBytes(6 - result.length);
+        for (let i = 0; i < bytes.length && result.length < 6; i++) {
+            if (bytes[i] < 250) {
+                result += (bytes[i] % 10).toString();
+            }
         }
     }
     return result;

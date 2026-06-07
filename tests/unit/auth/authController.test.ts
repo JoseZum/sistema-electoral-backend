@@ -46,13 +46,14 @@ describe('authController', () => {
   describe('microsoftAuthHandler', () => {
     it('authenticates with Microsoft and responds with the auth payload', async () => {
       vi.mocked(authService.authenticateWithMicrosoft).mockResolvedValue(authResponse);
-      const req = makeReq({ body: { idToken: 'microsoft-id-token' } });
+      const idToken = 'aaa.bbb.ccc';
+      const req = makeReq({ body: { idToken } });
       const res = makeRes();
       const next = makeNext();
 
       await microsoftAuthHandler(req, res, next);
 
-      expect(authService.authenticateWithMicrosoft).toHaveBeenCalledWith('microsoft-id-token');
+      expect(authService.authenticateWithMicrosoft).toHaveBeenCalledWith(idToken);
       expect(res.json).toHaveBeenCalledWith(authResponse);
       expect(next).not.toHaveBeenCalled();
     });
@@ -81,12 +82,13 @@ describe('authController', () => {
     it('passes service errors to next', async () => {
       const error = new Error('Auth failed');
       vi.mocked(authService.authenticateWithMicrosoft).mockRejectedValue(error);
+      const idToken = 'xxx.yyy.zzz';
       const res = makeRes();
       const next = makeNext();
 
-      await microsoftAuthHandler(makeReq({ body: { idToken: 'invalid-token' } }), res, next);
+      await microsoftAuthHandler(makeReq({ body: { idToken } }), res, next);
 
-      expect(authService.authenticateWithMicrosoft).toHaveBeenCalledWith('invalid-token');
+      expect(authService.authenticateWithMicrosoft).toHaveBeenCalledWith(idToken);
       expect(res.json).not.toHaveBeenCalled();
       expect(next).toHaveBeenCalledWith(error);
     });

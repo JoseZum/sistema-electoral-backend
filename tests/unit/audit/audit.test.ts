@@ -74,20 +74,41 @@ describe('audit', () => {
 
     it('sets actor_id session variable when actor.id is provided', async () => {
       await withAuditContext({ id: 'admin-uuid' }, async () => {});
-      const queries: string[] = mockClient.query.mock.calls.map((c: any) => c[0]);
-      expect(queries.some((q) => q.includes('app.actor_id') && q.includes('admin-uuid'))).toBe(true);
+      expect(
+        mockClient.query.mock.calls.some(
+          (c: any) =>
+            typeof c[0] === 'string' &&
+            c[0].includes('app.actor_id') &&
+            Array.isArray(c[1]) &&
+            c[1].includes('admin-uuid')
+        )
+      ).toBe(true);
     });
 
     it('sets actor_carnet session variable when actor.carnet is provided', async () => {
       await withAuditContext({ carnet: '2021001234' }, async () => {});
-      const queries: string[] = mockClient.query.mock.calls.map((c: any) => c[0]);
-      expect(queries.some((q) => q.includes('app.actor_carnet') && q.includes('2021001234'))).toBe(true);
+      expect(
+        mockClient.query.mock.calls.some(
+          (c: any) =>
+            typeof c[0] === 'string' &&
+            c[0].includes('app.actor_carnet') &&
+            Array.isArray(c[1]) &&
+            c[1].includes('2021001234')
+        )
+      ).toBe(true);
     });
 
     it('sets client_ip session variable when actor.ip is provided', async () => {
       await withAuditContext({ ip: '192.168.1.1' }, async () => {});
-      const queries: string[] = mockClient.query.mock.calls.map((c: any) => c[0]);
-      expect(queries.some((q) => q.includes('app.client_ip') && q.includes('192.168.1.1'))).toBe(true);
+      expect(
+        mockClient.query.mock.calls.some(
+          (c: any) =>
+            typeof c[0] === 'string' &&
+            c[0].includes('app.client_ip') &&
+            Array.isArray(c[1]) &&
+            c[1].includes('192.168.1.1')
+        )
+      ).toBe(true);
     });
 
     it('skips all session variable SET calls when actor is empty', async () => {
