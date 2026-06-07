@@ -404,7 +404,8 @@ test.describe('audit e2e', () => {
     await expect(page).toHaveURL(/\/auditoria$/);
     await expect(page.getByRole('heading', { name: /Registro de actividad/i })).toBeVisible();
     await expect(page.getByRole('navigation', { name: /Filtrar por categor/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Exportar \/ vaciar/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Exportar$/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Vaciar registros/i })).toBeVisible();
 
     await page.getByLabel(/Buscar eventos/i).fill(auditMarker);
 

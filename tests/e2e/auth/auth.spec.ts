@@ -104,7 +104,7 @@ test.describe('auth e2e', () => {
 
     await expect(page.getByRole('heading', { name: /Portal de votaci.n/i })).toBeVisible();
     await expect(page.getByRole('button', { name: /Continuar con Microsoft/i })).toBeVisible();
-    await expect(page.getByText(/Acceso institucional del TEE/i)).toBeVisible();
+    await expect(page.getByText(/Ingresa con tu cuenta institucional/i)).toBeVisible();
   });
 
   test('anonymous users are redirected away from the admin area', async ({ page }) => {
