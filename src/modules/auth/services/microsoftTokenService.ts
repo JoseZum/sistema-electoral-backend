@@ -5,6 +5,8 @@ import { env } from '../../../config/env';
 import { AppError } from '../../../errors/appError';
 import { MicrosoftIdTokenClaims } from '../models/authModel';
 
+const ALLOWED_ISSUER_HOSTS = new Set(['login.microsoftonline.com', 'sts.windows.net']);
+
 const microsoftJwksAgent = new https.Agent({
   family: 4,
 });
@@ -158,7 +160,13 @@ export async function verifyMicrosoftIdToken(idToken: string): Promise<Microsoft
   }
 
   const issuer = payload.iss || '';
-  if (!issuer.includes('login.microsoftonline.com') && !issuer.includes('sts.windows.net')) {
+  let issuerHost = '';
+  try {
+    issuerHost = new URL(issuer).hostname.toLowerCase();
+  } catch {
+    // invalid URL — treat as invalid issuer
+  }
+  if (!ALLOWED_ISSUER_HOSTS.has(issuerHost)) {
     throw new AppError({
       status: 401,
       code: 'AUTH_TOKEN_INVALID',

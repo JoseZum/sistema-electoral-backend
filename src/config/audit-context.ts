@@ -20,13 +20,13 @@ export async function withAuditContext<T>(
     await client.query('BEGIN');
 
     if (actor.id) {
-      await client.query(`SET LOCAL app.actor_id = '${actor.id.replace(/'/g, "''")}'`);
+      await client.query(`SELECT set_config('app.actor_id', $1, true)`, [actor.id]);
     }
     if (actor.carnet) {
-      await client.query(`SET LOCAL app.actor_carnet = '${actor.carnet.replace(/'/g, "''")}'`);
+      await client.query(`SELECT set_config('app.actor_carnet', $1, true)`, [actor.carnet]);
     }
     if (actor.ip) {
-      await client.query(`SET LOCAL app.client_ip = '${actor.ip.replace(/'/g, "''")}'`);
+      await client.query(`SELECT set_config('app.client_ip', $1, true)`, [actor.ip]);
     }
 
     const result = await fn(client);

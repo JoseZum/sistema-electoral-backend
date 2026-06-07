@@ -19,7 +19,17 @@ const app = express();
 app.use(helmet());
 app.use(cors(corsOptions));
 
-// RateLimit para seguridad en endpoints 
+// RateLimit general para todos los endpoints de la API
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiadas peticiones, por favor intente más tarde' },
+});
+app.use('/api', generalLimiter);
+
+// RateLimit para seguridad en endpoints
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,

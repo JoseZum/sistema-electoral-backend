@@ -167,7 +167,9 @@ export function errorHandler(
 ): void {
   const normalized = normalizeError(err);
 
-  console.error(`[${normalized.code}] ${req.method} ${req.originalUrl}`, {
+  console.error(`[${normalized.code}]`, {
+    method: req.method,
+    url: req.originalUrl,
     message: normalized.message,
     details: normalized.details,
     stack: err instanceof Error ? err.stack : undefined,

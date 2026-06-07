@@ -29,12 +29,13 @@ function isAlreadyFinalizedError(error: unknown): boolean {
     return isAppError(error) && error.code === 'SCRUTINY_ELECTION_ALREADY_FINALIZED';
 }
 
-function generateNums(): string{
-    const bytes = randomBytes(6);
+function generateNums(): string {
     let result = '';
-
-    for (let i =0; i < 6 ; i++){
-        result += (bytes[i] %10 ).toString();
+    while (result.length < 6) {
+        const byte = randomBytes(1)[0];
+        if (byte < 250) {
+            result += (byte % 10).toString();
+        }
     }
     return result;
 }
