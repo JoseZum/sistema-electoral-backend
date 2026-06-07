@@ -218,10 +218,10 @@ describe('auth integration', () => {
   }
 
   it('authenticates an active voter and returns a signed session token', async () => {
-    const { response, body } = await postMicrosoftAuth({ idToken: 'valid-voter-token' });
+    const { response, body } = await postMicrosoftAuth({ idToken: 'valid-voter-token.aaa.bbb' });
 
     expect(response.status).toBe(200);
-    expect(mockMicrosoft.verifyMicrosoftIdToken).toHaveBeenCalledWith('valid-voter-token');
+    expect(mockMicrosoft.verifyMicrosoftIdToken).toHaveBeenCalledWith('valid-voter-token.aaa.bbb');
     expect(mockDb.query).toHaveBeenCalledWith(
       'SELECT * FROM students WHERE email = $1 AND is_active = true',
       ['votante@estudiantec.cr']
@@ -254,7 +254,7 @@ describe('auth integration', () => {
       })
     );
 
-    const { response, body } = await postMicrosoftAuth({ idToken: 'valid-admin-token' });
+    const { response, body } = await postMicrosoftAuth({ idToken: 'valid-admin-token.aaa.bbb' });
 
     expect(response.status).toBe(200);
     expect(mockDb.query).toHaveBeenCalledWith(
@@ -304,7 +304,7 @@ describe('auth integration', () => {
       })
     );
 
-    const { response, body } = await postMicrosoftAuth({ idToken: 'missing-email-token' });
+    const { response, body } = await postMicrosoftAuth({ idToken: 'missing-email-token.aaa.bbb' });
 
     expect(response.status).toBe(401);
     expect(body).toEqual({
@@ -321,7 +321,7 @@ describe('auth integration', () => {
       })
     );
 
-    const { response, body } = await postMicrosoftAuth({ idToken: 'external-domain-token' });
+    const { response, body } = await postMicrosoftAuth({ idToken: 'external-domain-token.aaa.bbb' });
 
     expect(response.status).toBe(403);
     expect(body).toEqual({
@@ -338,7 +338,7 @@ describe('auth integration', () => {
       })
     );
 
-    const { response, body } = await postMicrosoftAuth({ idToken: 'inactive-student-token' });
+    const { response, body } = await postMicrosoftAuth({ idToken: 'inactive-student-token.aaa.bbb' });
 
     expect(response.status).toBe(404);
     expect(body).toEqual({
@@ -358,7 +358,7 @@ describe('auth integration', () => {
       })
     );
 
-    const { response, body } = await postMicrosoftAuth({ idToken: 'invalid-microsoft-token' });
+    const { response, body } = await postMicrosoftAuth({ idToken: 'invalid-microsoft-token.aaa.bbb' });
 
     expect(response.status).toBe(401);
     expect(body).toEqual(expect.objectContaining({

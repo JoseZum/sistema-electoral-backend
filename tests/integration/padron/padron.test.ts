@@ -229,7 +229,8 @@ const mockDb = vi.hoisted(() => {
       sql === 'BEGIN' ||
       sql === 'COMMIT' ||
       sql === 'ROLLBACK' ||
-      sql.startsWith('SET LOCAL')
+      sql.startsWith('SET LOCAL') ||
+      sql.startsWith('SELECT set_config')
     ) {
       return { rows: [], rowCount: 0 };
     }
