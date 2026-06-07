@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Server } from 'node:http';
-import XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 
 const mockAuth = vi.hoisted(() => ({
   verifySessionJWT: vi.fn(),
@@ -373,17 +373,18 @@ type RequestOptions = {
   body?: unknown;
 };
 
-function makePadronWorkbook(rows: unknown[][]) {
-  const workbook = XLSX.utils.book_new();
-  const worksheet = XLSX.utils.aoa_to_sheet([
+async function makePadronWorkbook(rows: unknown[][]): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet('Padron');
+  worksheet.addRows([
     ['Padron electoral'],
     ['Tribunal Electoral Estudiantil'],
     [],
     ['Carnet', 'Nombre completo', 'Correo', 'Sede', 'Carrera', 'Grado'],
     ...rows,
   ]);
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'Padron');
-  return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer as ArrayBuffer);
 }
 
 describe('padron integration', () => {
@@ -675,7 +676,7 @@ describe('padron integration', () => {
   });
 
   it('imports an XLSX padron, normalizes rows, and returns the diff summary', async () => {
-    const workbook = makePadronWorkbook([
+    const workbook = await makePadronWorkbook([
       [
         '2021001234',
         'Ana Importada',
@@ -748,7 +749,7 @@ describe('padron integration', () => {
   });
 
   it('returns 400 when the XLSX contains no valid padron rows', async () => {
-    const workbook = makePadronWorkbook([
+    const workbook = await makePadronWorkbook([
       ['', 'Sin carnet', 'sin-carnet@estudiantec.cr', 'Central', 'Administracion', 'Bachillerato'],
     ]);
 
