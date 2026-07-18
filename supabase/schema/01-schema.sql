@@ -3,7 +3,7 @@
 -- =================================================
 
 -----------------------------------------------
--- ENUMS
+-- ENUMs
 -----------------------------------------------
 CREATE TYPE election_status AS ENUM ('DRAFT', 'SCHEDULED', 'OPEN', 'CLOSED', 'SCRUTINIZED', 'ARCHIVED');
 CREATE TYPE auth_method_type AS ENUM ('MICROSOFT');
