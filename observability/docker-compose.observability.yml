@@ -1,0 +1,18 @@
+services:
+  lgtm:
+    # Fijado por digest para que un cambio futuro de "latest" no altere el entorno.
+    image: grafana/otel-lgtm@sha256:b4da8bf6b1b44f6f683883869619eb9781465c642ce5f2d70591fb27094ddb1c
+    container_name: tee-observability-lgtm
+    ports:
+      # Solo accesible desde esta maquina; evita exponer admin/admin y OTLP a la LAN.
+      - "127.0.0.1:3002:3000"
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
+    volumes:
+      - lgtm-data:/data
+      - lgtm-grafana:/otel-lgtm/grafana/data
+    restart: unless-stopped
+
+volumes:
+  lgtm-data:
+  lgtm-grafana:

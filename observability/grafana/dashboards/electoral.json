@@ -1,0 +1,118 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 1,
+  "time": { "from": "now-3h", "to": "now" },
+  "title": "TEE — Negocio Electoral",
+  "tags": ["tee", "votaciones", "electoral"],
+  "schemaVersion": 39,
+  "version": 2,
+  "refresh": "10s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Votos por minuto",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(tee_votes_cast_total[1m])) * 60",
+          "legendFormat": "votos/min"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Votos por minuto por elección",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (election_id) (rate(tee_votes_cast_total[1m])) * 60",
+          "legendFormat": "{{election_id}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Votos acumulados",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(tee_votes_cast_total)",
+          "legendFormat": "votos"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Peticiones esperando conexión PostgreSQL",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(tee_db_pool_waiting)",
+          "legendFormat": "waiting"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Intentos de doble voto rechazados",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(tee_app_errors_total{code=\"VOTING_ALREADY_VOTED\"}[5m])) + sum(rate(tee_app_errors_total{code=\"VOTING_TOKEN_INVALID_OR_USED\"}[5m]))",
+          "legendFormat": "rechazos/s"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Errores 5xx",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 14 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (route) (rate(tee_http_server_duration_milliseconds_count{status_class=\"5xx\"}[5m]))",
+          "legendFormat": "{{route}}"
+        }
+      ]
+    }
+  ]
+}

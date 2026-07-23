@@ -7,6 +7,7 @@ import {
   findElectionById,
 } from '../../elections/repositories/electionRepository';
 import { badRequest, conflict, forbidden, internalError, notFound } from '../../../errors/httpErrors';
+import { recordVoteCast } from '../../../observability/metrics';
 
 const tokenEncryptionKey = crypto
   .createHash('sha256')
@@ -247,6 +248,14 @@ export async function castVote(data: CastVoteDto, email: string) {
       throw err;
     }
   }
+
+  // Metrica de dominio: voto confirmado por la BD. Atributos NO identificatorios
+  // (solo election_id y flags); nunca student_id, token ni carnet.
+  recordVoteCast({
+    election_id: data.electionId,
+    anonymous: election.is_anonymous ? 'true' : 'false',
+    mode: election.allow_suboptions ? 'suboption' : 'single',
+  });
 
   return { success: true, message: 'Voto emitido exitosamente' };
 }

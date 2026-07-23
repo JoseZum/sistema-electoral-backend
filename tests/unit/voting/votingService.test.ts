@@ -3,6 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../../src/modules/voting/repositories/votingRepository');
 vi.mock('../../../src/modules/elections/repositories/electionRepository');
+vi.mock('../../../src/observability/metrics', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/observability/metrics')>()),
+  recordVoteCast: vi.fn(),
+}));
 
 import * as votingRepo from '../../../src/modules/voting/repositories/votingRepository';
 import {
@@ -10,6 +14,7 @@ import {
   syncAutomaticStatuses,
 } from '../../../src/modules/elections/repositories/electionRepository';
 import { env } from '../../../src/config/env';
+import { recordVoteCast } from '../../../src/observability/metrics';
 import {
   castVote,
   getElectionForVoting,
@@ -311,6 +316,11 @@ describe('votingService', () => {
         'option-1',
         expectedHash
       );
+      expect(recordVoteCast).toHaveBeenCalledWith({
+        election_id: 'election-1',
+        anonymous: 'true',
+        mode: 'single',
+      });
     });
 
     it('casts an anonymous vote with one selected suboption per parent option', async () => {
@@ -439,6 +449,7 @@ describe('votingService', () => {
         status: 409,
         code: 'VOTING_ALREADY_VOTED',
       });
+      expect(recordVoteCast).not.toHaveBeenCalled();
     });
   });
 

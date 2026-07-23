@@ -18,6 +18,8 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { AppError, isAppError } from '../errors/appError';
+import { logger, sanitizeUrlPath } from '../observability/logger';
+import { recordAppError } from '../observability/metrics';
 
 type DatabaseError = Error & {
   code?: string;
@@ -167,12 +169,22 @@ export function errorHandler(
 ): void {
   const normalized = normalizeError(err);
 
-  console.error(`[${normalized.code}]`, {
+  // Contador de errores por codigo/status: da la taxonomia completa de fallos
+  // (AUTH_*, VOTING_ALREADY_VOTED, VOTING_TOKEN_INVALID_OR_USED, DB_*, etc.)
+  // desde un unico punto. No-op si la observabilidad esta apagada.
+  recordAppError({ code: normalized.code, status: normalized.status });
+
+  logger.error(`[${normalized.code}]`, {
     method: req.method,
-    url: req.originalUrl,
+    url: sanitizeUrlPath(req.originalUrl),
+    status: normalized.status,
     message: normalized.message,
-    details: normalized.details,
-    stack: err instanceof Error ? err.stack : undefined,
+    ...(process.env.NODE_ENV === 'development'
+      ? {
+          details: normalized.details,
+          stack: err instanceof Error ? err.stack : undefined,
+        }
+      : {}),
   });
 
   res.status(normalized.status).json({
