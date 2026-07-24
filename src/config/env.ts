@@ -28,6 +28,15 @@ function parseBoolean(value: string | undefined): boolean | undefined {
   return undefined;
 }
 
+function parsePositiveInteger(value: string | undefined, fallback: number): number {
+  if (value === undefined) {
+    return fallback;
+  }
+
+  const parsed = parseInt(value, 10);
+  return Number.isNaN(parsed) || parsed < 0 ? fallback : parsed;
+}
+
 function normalizeDatabaseUrl(databaseUrl: string): string {
   const [baseUrl, queryString] = databaseUrl.split('?', 2);
 
@@ -76,4 +85,13 @@ export const env = {
   databaseSslRejectUnauthorized,
   databasePoolMax: Number.isNaN(parsedDatabasePoolMax) ? 10 : parsedDatabasePoolMax,
   corsOrigin: normalizeCorsOrigins(process.env.CORS_ORIGIN || 'http://localhost:3000'),
+  // Nº de saltos de proxy de confianza. En Vercel debe ser >=1 para que req.ip use
+  // X-Forwarded-For correctamente (evita ERR_ERL_UNEXPECTED_X_FORWARDED_FOR).
+  trustProxyHops: parsePositiveInteger(process.env.TRUST_PROXY_HOPS, runningOnVercel ? 1 : 0),
+  rateLimit: {
+    enabled: parseBoolean(process.env.RATE_LIMIT_ENABLED) ?? true,
+    windowMs: parsePositiveInteger(process.env.RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000),
+    generalMax: parsePositiveInteger(process.env.RATE_LIMIT_GENERAL_MAX, 300),
+    authMax: parsePositiveInteger(process.env.RATE_LIMIT_AUTH_MAX, 20),
+  },
 };

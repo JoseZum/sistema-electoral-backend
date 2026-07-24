@@ -6,6 +6,8 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { corsOptions } from './config/cors';
+import { env } from './config/env';
+import { getGeneralRateLimitKey } from './config/rate-limit';
 import { pool } from './config/database';
 import { metricsMiddleware } from './middleware/metricsMiddleware';
 import { authRoutes } from './modules/auth';
@@ -20,27 +22,44 @@ import { dashboardRoutes } from './modules/dashboard';
 
 const app = express();
 
+// Detras del proxy de Vercel se necesita confiar en X-Forwarded-For para resolver la IP real.
+if (env.trustProxyHops > 0) {
+  app.set('trust proxy', env.trustProxyHops);
+}
+
 // Middleware de seguridad
 app.use(helmet());
 app.use(cors(corsOptions));
 
-// RateLimit general para todos los endpoints de la API
-const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 300,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Demasiadas peticiones, por favor intente más tarde' },
-});
-app.use('/api', generalLimiter);
+if (env.rateLimit.enabled) {
+  // Los usuarios autenticados se limitan por SESION (hash del token), no por IP, para no
+  // agrupar en una sola cubeta a todo un campus/sede que comparte IP o NAT (lo que bloquearia
+  // a votantes legitimos). Las peticiones anonimas se siguen limitando por IP.
+  const generalLimiter = rateLimit({
+    windowMs: env.rateLimit.windowMs,
+    max: env.rateLimit.generalMax,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: getGeneralRateLimitKey,
+    message: {
+      error: 'Demasiadas peticiones, por favor intente más tarde',
+      code: 'RATE_LIMIT_EXCEEDED',
+    },
+  });
+  app.use('/api', generalLimiter);
 
-// RateLimit para seguridad en endpoints
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
-  message: { error: 'Demasiados intentos de autenticación, por favor intente más tarde' },
-});
-app.use('/api/auth', authLimiter);
+  const authLimiter = rateLimit({
+    windowMs: env.rateLimit.windowMs,
+    max: env.rateLimit.authMax,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+      error: 'Demasiados intentos de autenticación, por favor intente más tarde',
+      code: 'AUTH_RATE_LIMIT_EXCEEDED',
+    },
+  });
+  app.use('/api/auth', authLimiter);
+}
 
 // Parseo del cuerpo de las peticiones
 app.use(express.json({ limit: '15mb' }));
