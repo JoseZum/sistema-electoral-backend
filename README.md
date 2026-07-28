@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="./public/logo-backend.png" alt="TEE Voting System API" width="180">
+<img src="./public/logo-backend.png" alt="TEE Voting System API" width="400">
 
-# TEE Voting — API
+# TEE Voting System - Backend
 
 Infraestructura electoral de producción del Tribunal Electoral Estudiantil del Instituto Tecnológico de Costa Rica. Centraliza identidad, padrón, elegibilidad, voto, escrutinio y evidencia operativa en una API diseñada para procesos electorales verificables.
 
