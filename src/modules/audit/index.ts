@@ -44,6 +44,11 @@ const actionLabels: Record<string, string> = {
   'auth.login': 'Inicio de sesion',
   'auth.logout': 'Cierre de sesion',
   'audit.purge': 'Auditoria purgada',
+  'application_form.insert': 'Formulario de postulacion creado',
+  'application_form.update': 'Formulario de postulacion actualizado',
+  'application_form.delete': 'Formulario de postulacion eliminado',
+  'application.update': 'Postulacion actualizada',
+  'application.delete': 'Postulacion eliminada',
 };
 
 const resourceLabels: Record<string, string> = {
@@ -56,6 +61,8 @@ const resourceLabels: Record<string, string> = {
   auth: 'autenticacion',
   padron: 'padron',
   audit: 'auditoria',
+  application_form: 'formulario de postulacion',
+  application: 'postulacion',
 };
 
 // Estos resource_types NUNCA deben aparecer en auditoria por privacidad.
@@ -239,6 +246,37 @@ function buildActivityMessage(row: Record<string, unknown>): string {
     if (composed.trim().length > 0) {
       return composed;
     }
+  }
+
+  if (row.resource_type === 'application_form') {
+    const formTitle = getDetailString(details, 'form_title');
+    if (formTitle) {
+      return `${actionLabel} "${formTitle}"`;
+    }
+  }
+
+  // Solo se auditan los cambios de estado de una postulación, así que la
+  // frase se construye alrededor de la resolución (enviada, aprobada, etc.).
+  if (row.resource_type === 'application') {
+    const formTitle = getDetailString(details, 'form_title');
+    const personLabel = formatPersonReference(targetName, targetCarnet);
+    const changes = asObjectRecord(details?.changes);
+    const newStatus = getDetailString(changes, 'status');
+
+    const statusLabels: Record<string, string> = {
+      SUBMITTED: 'Postulacion enviada',
+      APPROVED: 'Postulacion aprobada',
+      CONDITIONED: 'Postulacion condicionada',
+      REJECTED: 'Postulacion denegada',
+      DRAFT: 'Postulacion reabierta',
+    };
+
+    const verb = (newStatus && statusLabels[newStatus]) || actionLabel;
+    const parts = [verb];
+    if (formTitle) parts.push(`en "${formTitle}"`);
+    if (personLabel) parts.push(`· ${personLabel}`);
+
+    return parts.join(' ');
   }
 
   if (resourceId) {
