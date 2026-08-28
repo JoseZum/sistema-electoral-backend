@@ -63,6 +63,13 @@ BEGIN
     IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
   END IF;
 
+  -- Al crear un formulario de postulacion se puebla la elegibilidad
+  -- en bloque; esos eventos son ruido igual que tag_member.
+  IF TG_ARGV[0] = 'application_form' AND _audit_get('app.compound_application_mode') = 'true'
+     AND TG_OP <> 'INSERT' THEN
+    IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
+  END IF;
+
   -- Accion
   v_action := TG_ARGV[0] || '.' || lower(TG_OP);
 
@@ -145,6 +152,62 @@ BEGIN
        AND COALESCE(v_details -> 'changes', '{}'::jsonb) = '{}'::jsonb THEN
       RETURN NEW;
     END IF;
+  END IF;
+
+  -- ==========================================================
+  -- APPLICATIONS
+  -- La bitacora es visible para cualquier admin, asi que nunca
+  -- debe contener datos personales sensibles del postulante.
+  -- Se elimina cedula y telefono de todas las ramas del detalle
+  -- y se enriquece con el titulo del formulario.
+  -- ==========================================================
+  IF TG_ARGV[0] = 'application' THEN
+    v_details := (
+      (((((((
+        COALESCE(v_details, '{}'::jsonb)
+        #- '{new,national_id}') #- '{new,phone}')
+        #- '{old,national_id}') #- '{old,phone}')
+        #- '{changes,national_id}') #- '{changes,phone}')
+        #- '{previous,national_id}') #- '{previous,phone}'
+    );
+
+    -- Si lo unico que cambio era PII, no queda nada que registrar.
+    IF TG_OP = 'UPDATE'
+       AND jsonb_typeof(COALESCE(v_details -> 'changes', '{}'::jsonb)) = 'object'
+       AND COALESCE(v_details -> 'changes', '{}'::jsonb) = '{}'::jsonb THEN
+      RETURN NEW;
+    END IF;
+
+    DECLARE
+      v_form_title    TEXT;
+      v_student_name  TEXT;
+      v_student_carnet TEXT;
+    BEGIN
+      SELECT af.title INTO v_form_title
+      FROM application_forms af
+      WHERE af.id::TEXT = v_resource ->> 'form_id';
+
+      SELECT s.full_name, s.carnet INTO v_student_name, v_student_carnet
+      FROM students s
+      WHERE s.id::TEXT = v_resource ->> 'student_id';
+
+      v_details := COALESCE(v_details, '{}'::jsonb) || jsonb_strip_nulls(
+        jsonb_build_object(
+          'form_title', v_form_title,
+          'target_name', v_student_name,
+          'target_carnet', v_student_carnet
+        )
+      );
+    END;
+  END IF;
+
+  -- Titulo legible del formulario de postulacion
+  IF TG_ARGV[0] = 'application_form' THEN
+    v_details := COALESCE(v_details, '{}'::jsonb) || jsonb_strip_nulls(
+      jsonb_build_object(
+        'form_title', v_resource ->> 'title'
+      )
+    );
   END IF;
 
   -- Enriquecimiento para ELECTIONS: incluir titulo legible y, al cerrar, el conteo agregado
@@ -381,6 +444,45 @@ CREATE TRIGGER trg_padron_uploads_insert
   FOR EACH ROW EXECUTE FUNCTION fn_audit_log('padron_upload');
 
 -- ============================================
+-- TRIGGERS: APPLICATION_FORMS
+-- ============================================
+CREATE TRIGGER trg_application_forms_insert
+  AFTER INSERT ON application_forms
+  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('application_form');
+
+CREATE TRIGGER trg_application_forms_update
+  AFTER UPDATE ON application_forms
+  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('application_form');
+
+CREATE TRIGGER trg_application_forms_delete
+  AFTER DELETE ON application_forms
+  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('application_form');
+
+-- ============================================
+-- TRIGGERS: APPLICATIONS
+--
+-- Solo se auditan los cambios de estado (envío y resolución).
+-- El tecleo de un borrador no es un evento de interés y además
+-- llenaría la bitácora de datos personales.
+-- ============================================
+CREATE TRIGGER trg_applications_update
+  AFTER UPDATE ON applications
+  FOR EACH ROW
+  WHEN (OLD.status IS DISTINCT FROM NEW.status)
+  EXECUTE FUNCTION fn_audit_log('application');
+
+CREATE TRIGGER trg_applications_delete
+  AFTER DELETE ON applications
+  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('application');
+
+-- ============================================
+-- PRIVACIDAD / VOLUMEN: NO hay triggers en application_files
+-- (la columna content reventaría audit_logs) ni en
+-- application_form_eligibility (ruido masivo, mismo criterio
+-- que election_voters).
+-- ============================================
+
+-- ============================================
 -- updated_at AUTO-UPDATE
 -- ============================================
 CREATE OR REPLACE FUNCTION fn_set_updated_at()
@@ -409,4 +511,12 @@ CREATE TRIGGER trg_tags_updated_at
 
 CREATE TRIGGER trg_suboption_presets_updated_at
   BEFORE UPDATE ON suboption_presets
+  FOR EACH ROW EXECUTE FUNCTION fn_set_updated_at();
+
+CREATE TRIGGER trg_application_forms_updated_at
+  BEFORE UPDATE ON application_forms
+  FOR EACH ROW EXECUTE FUNCTION fn_set_updated_at();
+
+CREATE TRIGGER trg_applications_updated_at
+  BEFORE UPDATE ON applications
   FOR EACH ROW EXECUTE FUNCTION fn_set_updated_at();
