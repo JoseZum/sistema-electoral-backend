@@ -17,6 +17,7 @@ import { tagRoutes } from './modules/tags';
 import { votingRoutes } from './modules/voting';
 import { auditRoutes } from './modules/audit';
 import { scrutinyRoutes } from './modules/scrutiny';
+import { misPostulacionesRoutes, postulacionRoutes } from './modules/postulaciones';
 import { errorHandler } from './middleware/errorHandler';
 import { dashboardRoutes } from './modules/dashboard';
 
@@ -76,6 +77,10 @@ app.use('/api/voting', votingRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/scrutiny', scrutinyRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+// Postulaciones: el router de admin gestiona formularios y revisiones; el de
+// votante solo expone la postulación propia de quien está autenticado.
+app.use('/api/postulaciones', postulacionRoutes);
+app.use('/api/mis-postulaciones', misPostulacionesRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
