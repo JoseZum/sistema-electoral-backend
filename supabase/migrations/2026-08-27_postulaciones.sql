@@ -1,28 +1,182 @@
--- ========================================================
--- SCRIPT 04: AUDIT LOG TRIGGERS
+-- =========================================================
+-- MIGRACION: MODULO DE POSTULACIONES
 --
--- Toda accion relevante se registra automaticamente
--- via triggers, sin consumir requests de la API.
+-- Anade el sistema de formularios de postulacion:
+--   * El admin crea formularios con ventana de tiempo y audiencia.
+--   * Los estudiantes elegibles los llenan (datos + adjuntos PDF/imagen).
+--   * El admin revisa y asigna APPROVED / CONDITIONED / REJECTED.
+--   * En CONDITIONED solo se reabren los campos que el admin marque.
 --
--- El backend puede (opcionalmente) setear variables
--- de sesion antes de operaciones para capturar contexto:
---   SET LOCAL app.actor_id = '<uuid>';
---   SET LOCAL app.actor_carnet = '<carnet>';
---   SET LOCAL app.client_ip = '<ip>';
--- ========================================================
+-- Los adjuntos se guardan como BYTEA dentro de Postgres para que el
+-- comportamiento sea identico en local (docker-compose) y en Supabase,
+-- sin depender de un bucket externo.
+--
+-- Idempotente: se puede correr varias veces sin romper nada.
+-- =========================================================
 
--- Helper: lee variables de sesion sin error si no existen.
-CREATE OR REPLACE FUNCTION _audit_get(key TEXT) RETURNS TEXT AS $$
+-- ---------------------------------------------------------
+-- ENUMS
+-- ---------------------------------------------------------
+DO $$
 BEGIN
-  RETURN current_setting(key, true);
-EXCEPTION WHEN OTHERS THEN
-  RETURN NULL;
-END;
-$$ LANGUAGE plpgsql IMMUTABLE;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'application_form_status') THEN
+    CREATE TYPE application_form_status AS ENUM ('DRAFT', 'SCHEDULED', 'OPEN', 'CLOSED', 'ARCHIVED');
+  END IF;
 
--- ============================================
--- FUNCION GENERICA DE AUDITORIA
--- ============================================
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'application_status') THEN
+    CREATE TYPE application_status AS ENUM ('DRAFT', 'SUBMITTED', 'APPROVED', 'CONDITIONED', 'REJECTED');
+  END IF;
+END
+$$;
+
+-- ---------------------------------------------------------
+-- FORMULARIOS DE POSTULACION
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS application_forms (
+    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title                 TEXT NOT NULL,
+    description           TEXT,
+    status                application_form_status NOT NULL DEFAULT 'DRAFT',
+    start_time            TIMESTAMPTZ,
+    end_time              TIMESTAMPTZ,
+    -- "Otros PDF (opcional: el administrador elige si si o no)"
+    allow_other_documents BOOLEAN NOT NULL DEFAULT false,
+    other_documents_label TEXT,
+    -- Audiencia: reutiliza el enum de elecciones (FULL_PADRON | FILTERED | MANUAL | TAG)
+    voter_source          voter_source_type NOT NULL DEFAULT 'FULL_PADRON',
+    voter_filter          JSONB,
+    tag_id                UUID REFERENCES tags(id) ON DELETE SET NULL,
+    -- Vinculo opcional con una votacion (para convertir aprobados en candidatos)
+    election_id           UUID REFERENCES elections(id) ON DELETE SET NULL,
+    created_by            UUID REFERENCES students(id),
+    created_at            TIMESTAMPTZ DEFAULT now(),
+    updated_at            TIMESTAMPTZ DEFAULT now(),
+    CONSTRAINT chk_application_forms_window CHECK (
+        start_time IS NULL OR end_time IS NULL OR end_time > start_time
+    )
+);
+
+CREATE INDEX IF NOT EXISTS idx_application_forms_status     ON application_forms(status);
+CREATE INDEX IF NOT EXISTS idx_application_forms_tag_id     ON application_forms(tag_id);
+CREATE INDEX IF NOT EXISTS idx_application_forms_election   ON application_forms(election_id);
+
+-- ---------------------------------------------------------
+-- PADRON ELEGIBLE POR FORMULARIO (espejo de election_voters)
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS application_form_eligibility (
+    form_id    UUID NOT NULL REFERENCES application_forms(id) ON DELETE CASCADE,
+    student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    PRIMARY KEY (form_id, student_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_application_eligibility_student
+    ON application_form_eligibility(student_id);
+
+-- ---------------------------------------------------------
+-- POSTULACIONES (respuesta del estudiante)
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS applications (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    form_id             UUID NOT NULL REFERENCES application_forms(id) ON DELETE CASCADE,
+    student_id          UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    status              application_status NOT NULL DEFAULT 'DRAFT',
+
+    -- Informacion personal escrita
+    last_name_1         TEXT,
+    last_name_2         TEXT,
+    first_name          TEXT,
+    email               TEXT,
+    national_id         TEXT,
+    carnet              TEXT,
+    phone               TEXT,
+
+    -- Informacion seleccionable
+    sede                TEXT,
+    career              TEXT,
+
+    -- Revision
+    unlocked_fields     JSONB,
+    correction_deadline TIMESTAMPTZ,
+    review_comment      TEXT,
+    reviewed_by         UUID REFERENCES students(id),
+    reviewed_at         TIMESTAMPTZ,
+    submitted_at        TIMESTAMPTZ,
+
+    created_at          TIMESTAMPTZ DEFAULT now(),
+    updated_at          TIMESTAMPTZ DEFAULT now(),
+
+    CONSTRAINT uniq_applications_form_student UNIQUE (form_id, student_id),
+    -- "no guiones ni espacios" (el doc). NULL permitido mientras es borrador.
+    CONSTRAINT chk_applications_national_id CHECK (national_id IS NULL OR national_id ~ '^[0-9]+$'),
+    CONSTRAINT chk_applications_carnet      CHECK (carnet      IS NULL OR carnet      ~ '^[0-9]+$'),
+    CONSTRAINT chk_applications_phone       CHECK (phone       IS NULL OR phone       ~ '^[0-9]+$'),
+    CONSTRAINT chk_applications_unlocked_fields CHECK (
+        unlocked_fields IS NULL OR jsonb_typeof(unlocked_fields) = 'array'
+    )
+);
+
+CREATE INDEX IF NOT EXISTS idx_applications_form    ON applications(form_id);
+CREATE INDEX IF NOT EXISTS idx_applications_student ON applications(student_id);
+CREATE INDEX IF NOT EXISTS idx_applications_status  ON applications(status);
+
+-- ---------------------------------------------------------
+-- ADJUNTOS (PDF / imagen) guardados como BYTEA
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS application_files (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    application_id UUID NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+    field_key      TEXT NOT NULL CHECK (field_key IN (
+                      'enrollment_report',  -- Informe de matricula
+                      'id_copy',            -- Copia de la identificacion
+                      'carnet_copy',        -- Copia del carne
+                      'tdf_letter',         -- Carta de sanciones del TDF
+                      'th_letter',          -- Carta de sanciones del TH
+                      'other'               -- Otros PDF (opcional)
+                    )),
+    file_name      TEXT NOT NULL,
+    mime_type      TEXT NOT NULL CHECK (mime_type IN (
+                      'application/pdf', 'image/jpeg', 'image/png', 'image/webp'
+                    )),
+    size_bytes     INT NOT NULL CHECK (size_bytes > 0 AND size_bytes <= 4194304), -- 4 MB
+    content        BYTEA NOT NULL,
+    uploaded_at    TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_application_files_application
+    ON application_files(application_id);
+
+-- Los campos fijos admiten un unico archivo; 'other' admite varios.
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_application_files_field
+    ON application_files(application_id, field_key)
+    WHERE field_key <> 'other';
+
+-- ---------------------------------------------------------
+-- HISTORIAL DE REVISIONES
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS application_reviews (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    application_id      UUID NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+    reviewer_id         UUID REFERENCES students(id),
+    decision            application_status NOT NULL CHECK (
+                          decision IN ('APPROVED', 'CONDITIONED', 'REJECTED')
+                        ),
+    comment             TEXT,
+    unlocked_fields     JSONB,
+    correction_deadline TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_application_reviews_application
+    ON application_reviews(application_id, created_at DESC);
+
+-- =========================================================
+-- AUDITORIA
+--
+-- fn_audit_log() es una unica funcion compartida por todos los
+-- triggers, asi que hay que reemplazarla completa para anadir el
+-- saneo de PII de 'application'. El cuerpo es identico al de
+-- 04-triggers.sql salvo el bloque marcado como NUEVO.
+-- =========================================================
 CREATE OR REPLACE FUNCTION fn_audit_log()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -63,7 +217,7 @@ BEGIN
     IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
   END IF;
 
-  -- Al crear un formulario de postulacion se puebla la elegibilidad
+  -- NUEVO: al crear un formulario de postulacion se puebla la elegibilidad
   -- en bloque; esos eventos son ruido igual que tag_member.
   IF TG_ARGV[0] = 'application_form' AND _audit_get('app.compound_application_mode') = 'true'
      AND TG_OP <> 'INSERT' THEN
@@ -155,7 +309,7 @@ BEGIN
   END IF;
 
   -- ==========================================================
-  -- APPLICATIONS
+  -- NUEVO: APPLICATIONS
   -- La bitacora es visible para cualquier admin, asi que nunca
   -- debe contener datos personales sensibles del postulante.
   -- Se elimina cedula y telefono de todas las ramas del detalle
@@ -201,7 +355,7 @@ BEGIN
     END;
   END IF;
 
-  -- Titulo legible del formulario de postulacion
+  -- NUEVO: titulo legible del formulario de postulacion
   IF TG_ARGV[0] = 'application_form' THEN
     v_details := COALESCE(v_details, '{}'::jsonb) || jsonb_strip_nulls(
       jsonb_build_object(
@@ -320,203 +474,58 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- ============================================
--- TRIGGERS: STUDENTS (padrón)
--- ============================================
-CREATE TRIGGER trg_students_insert
-  AFTER INSERT ON students
-  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('student');
-
-CREATE TRIGGER trg_students_update
-  AFTER UPDATE ON students
-  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('student');
-
-CREATE TRIGGER trg_students_delete
-  AFTER DELETE ON students
-  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('student');
-
--- ============================================
--- TRIGGERS: ADMINS
--- ============================================
-CREATE TRIGGER trg_admins_insert
-  AFTER INSERT ON admins
-  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('admin');
-
-CREATE TRIGGER trg_admins_update
-  AFTER UPDATE ON admins
-  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('admin');
-
-CREATE TRIGGER trg_admins_delete
-  AFTER DELETE ON admins
-  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('admin');
-
--- ============================================
--- TRIGGERS: ELECTIONS
--- ============================================
-CREATE TRIGGER trg_elections_insert
-  AFTER INSERT ON elections
-  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('election');
-
-CREATE TRIGGER trg_elections_update
-  AFTER UPDATE ON elections
-  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('election');
-
-CREATE TRIGGER trg_elections_delete
-  AFTER DELETE ON elections
-  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('election');
-
--- ============================================
--- TRIGGERS: TAGS
--- ============================================
-CREATE TRIGGER trg_tags_insert
-  AFTER INSERT ON tags
-  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('tag');
-
-CREATE TRIGGER trg_tags_update
-  AFTER UPDATE ON tags
-  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('tag');
-
-CREATE TRIGGER trg_tags_delete
-  AFTER DELETE ON tags
-  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('tag');
-
-CREATE TRIGGER trg_suboption_presets_insert
-  AFTER INSERT ON suboption_presets
-  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('suboption_preset');
-
-CREATE TRIGGER trg_suboption_presets_update
-  AFTER UPDATE ON suboption_presets
-  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('suboption_preset');
-
-CREATE TRIGGER trg_suboption_presets_delete
-  AFTER DELETE ON suboption_presets
-  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('suboption_preset');
-
-CREATE TRIGGER trg_tag_members_insert
-  AFTER INSERT ON tag_members
-  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('tag_member');
-
-CREATE TRIGGER trg_tag_members_delete
-  AFTER DELETE ON tag_members
-  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('tag_member');
-
--- ============================================
--- TRIGGERS: ELECTION_OPTIONS
--- ============================================
-CREATE TRIGGER trg_election_options_insert
-  AFTER INSERT ON election_options
-  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('election_option');
-
-CREATE TRIGGER trg_election_options_update
-  AFTER UPDATE ON election_options
-  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('election_option');
-
-CREATE TRIGGER trg_election_options_delete
-  AFTER DELETE ON election_options
-  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('election_option');
-
--- ============================================
--- PRIVACIDAD: NO se auditan eventos individuales de voto/canjeo
--- de token. Esos triggers fueron eliminados a proposito para
--- evitar trazabilidad de votantes. La auditoria solo expone el
--- conteo agregado al cerrar la eleccion (ver fn_audit_log para
--- 'election' con status CLOSED).
--- ============================================
-
--- ============================================
--- TRIGGERS: SCRUTINY_KEYS
--- ============================================
-CREATE TRIGGER trg_scrutiny_keys_insert
-  AFTER INSERT ON scrutiny_keys
-  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('scrutiny_key');
-
-CREATE TRIGGER trg_scrutiny_keys_update
-  AFTER UPDATE ON scrutiny_keys
-  FOR EACH ROW
-  WHEN (OLD.has_submitted IS DISTINCT FROM NEW.has_submitted)
-  EXECUTE FUNCTION fn_audit_log('scrutiny_key');
-
--- ============================================
--- TRIGGERS: PADRON_UPLOADS
--- ============================================
-CREATE TRIGGER trg_padron_uploads_insert
-  AFTER INSERT ON padron_uploads
-  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('padron_upload');
-
--- ============================================
+-- ---------------------------------------------------------
 -- TRIGGERS: APPLICATION_FORMS
--- ============================================
+-- ---------------------------------------------------------
+DROP TRIGGER IF EXISTS trg_application_forms_insert ON application_forms;
 CREATE TRIGGER trg_application_forms_insert
   AFTER INSERT ON application_forms
   FOR EACH ROW EXECUTE FUNCTION fn_audit_log('application_form');
 
+DROP TRIGGER IF EXISTS trg_application_forms_update ON application_forms;
 CREATE TRIGGER trg_application_forms_update
   AFTER UPDATE ON application_forms
   FOR EACH ROW EXECUTE FUNCTION fn_audit_log('application_form');
 
+DROP TRIGGER IF EXISTS trg_application_forms_delete ON application_forms;
 CREATE TRIGGER trg_application_forms_delete
   AFTER DELETE ON application_forms
   FOR EACH ROW EXECUTE FUNCTION fn_audit_log('application_form');
 
--- ============================================
+-- ---------------------------------------------------------
 -- TRIGGERS: APPLICATIONS
 --
--- Solo se auditan los cambios de estado (envío y resolución).
--- El tecleo de un borrador no es un evento de interés y además
--- llenaría la bitácora de datos personales.
--- ============================================
+-- Solo se auditan los cambios de estado (envio y resolucion).
+-- El tecleo de un borrador no es un evento de interes y ademas
+-- llenaria la bitacora de datos personales.
+-- ---------------------------------------------------------
+DROP TRIGGER IF EXISTS trg_applications_update ON applications;
 CREATE TRIGGER trg_applications_update
   AFTER UPDATE ON applications
   FOR EACH ROW
   WHEN (OLD.status IS DISTINCT FROM NEW.status)
   EXECUTE FUNCTION fn_audit_log('application');
 
+DROP TRIGGER IF EXISTS trg_applications_delete ON applications;
 CREATE TRIGGER trg_applications_delete
   AFTER DELETE ON applications
   FOR EACH ROW EXECUTE FUNCTION fn_audit_log('application');
 
--- ============================================
--- PRIVACIDAD / VOLUMEN: NO hay triggers en application_files
--- (la columna content reventaría audit_logs) ni en
--- application_form_eligibility (ruido masivo, mismo criterio
--- que election_voters).
--- ============================================
+-- ---------------------------------------------------------
+-- SIN TRIGGER en application_files (la columna content reventaria
+-- audit_logs) ni en application_form_eligibility (ruido masivo,
+-- mismo criterio que election_voters).
+-- ---------------------------------------------------------
 
--- ============================================
+-- ---------------------------------------------------------
 -- updated_at AUTO-UPDATE
--- ============================================
-CREATE OR REPLACE FUNCTION fn_set_updated_at()
-RETURNS TRIGGER AS $$
-BEGIN
-  NEW.updated_at = now();
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trg_students_updated_at
-  BEFORE UPDATE ON students
-  FOR EACH ROW EXECUTE FUNCTION fn_set_updated_at();
-
-CREATE TRIGGER trg_admins_updated_at
-  BEFORE UPDATE ON admins
-  FOR EACH ROW EXECUTE FUNCTION fn_set_updated_at();
-
-CREATE TRIGGER trg_elections_updated_at
-  BEFORE UPDATE ON elections
-  FOR EACH ROW EXECUTE FUNCTION fn_set_updated_at();
-
-CREATE TRIGGER trg_tags_updated_at
-  BEFORE UPDATE ON tags
-  FOR EACH ROW EXECUTE FUNCTION fn_set_updated_at();
-
-CREATE TRIGGER trg_suboption_presets_updated_at
-  BEFORE UPDATE ON suboption_presets
-  FOR EACH ROW EXECUTE FUNCTION fn_set_updated_at();
-
+-- ---------------------------------------------------------
+DROP TRIGGER IF EXISTS trg_application_forms_updated_at ON application_forms;
 CREATE TRIGGER trg_application_forms_updated_at
   BEFORE UPDATE ON application_forms
   FOR EACH ROW EXECUTE FUNCTION fn_set_updated_at();
 
+DROP TRIGGER IF EXISTS trg_applications_updated_at ON applications;
 CREATE TRIGGER trg_applications_updated_at
   BEFORE UPDATE ON applications
   FOR EACH ROW EXECUTE FUNCTION fn_set_updated_at();

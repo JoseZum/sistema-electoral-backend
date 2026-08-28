@@ -11,21 +11,51 @@
     }
   ],
   "tags": [
-    { "name": "Health" },
-    { "name": "Auth" },
-    { "name": "Students" },
-    { "name": "Admins" },
-    { "name": "Elections" },
-    { "name": "Tags" },
-    { "name": "Voting" },
-    { "name": "Audit" },
-    { "name": "Scrutiny" },
-    { "name": "Dashboard" }
+    {
+      "name": "Health"
+    },
+    {
+      "name": "Auth"
+    },
+    {
+      "name": "Students"
+    },
+    {
+      "name": "Admins"
+    },
+    {
+      "name": "Elections"
+    },
+    {
+      "name": "Tags"
+    },
+    {
+      "name": "Voting"
+    },
+    {
+      "name": "Audit"
+    },
+    {
+      "name": "Scrutiny"
+    },
+    {
+      "name": "Dashboard"
+    },
+    {
+      "name": "Applications",
+      "description": "Formularios de postulacion y revision (solo administradores)"
+    },
+    {
+      "name": "MyApplications",
+      "description": "Postulacion propia del estudiante autenticado"
+    }
   ],
   "paths": {
     "/api/health": {
       "get": {
-        "tags": ["Health"],
+        "tags": [
+          "Health"
+        ],
         "operationId": "getHealth",
         "responses": {
           "200": {
@@ -35,8 +65,14 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "status": { "type": "string", "example": "ok" },
-                    "timestamp": { "type": "string", "format": "date-time" }
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
                   }
                 }
               }
@@ -47,7 +83,9 @@
     },
     "/api/auth/microsoft": {
       "post": {
-        "tags": ["Auth"],
+        "tags": [
+          "Auth"
+        ],
         "operationId": "authenticateWithMicrosoft",
         "requestBody": {
           "required": true,
@@ -55,7 +93,9 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["idToken"],
+                "required": [
+                  "idToken"
+                ],
                 "properties": {
                   "idToken": {
                     "type": "string",
@@ -67,122 +107,266 @@
           }
         },
         "responses": {
-          "200": { "$ref": "#/components/responses/JsonObject" },
-          "400": { "$ref": "#/components/responses/Error" },
-          "401": { "$ref": "#/components/responses/Error" }
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       }
     },
     "/api/users/students": {
       "get": {
-        "tags": ["Students"],
+        "tags": [
+          "Students"
+        ],
         "operationId": "listStudents",
-        "security": [{ "bearerAuth": [] }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "parameters": [
-          { "$ref": "#/components/parameters/Page" },
-          { "$ref": "#/components/parameters/Limit" },
-          { "name": "search", "in": "query", "schema": { "type": "string" }, "example": "Maria" },
-          { "name": "sede", "in": "query", "schema": { "type": "string" }, "example": "Cartago" },
-          { "name": "career", "in": "query", "schema": { "type": "string" }, "example": "Computacion" },
-          { "name": "is_active", "in": "query", "schema": { "type": "boolean" }, "example": true }
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "Maria"
+          },
+          {
+            "name": "sede",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "Cartago"
+          },
+          {
+            "name": "career",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "Computacion"
+          },
+          {
+            "name": "is_active",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "example": true
+          }
         ],
         "responses": {
-          "200": { "$ref": "#/components/responses/JsonObject" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "403": { "$ref": "#/components/responses/Error" }
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       },
       "post": {
-        "tags": ["Students"],
+        "tags": [
+          "Students"
+        ],
         "operationId": "createStudent",
-        "security": [{ "bearerAuth": [] }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/StudentInput" }
+              "schema": {
+                "$ref": "#/components/schemas/StudentInput"
+              }
             }
           }
         },
         "responses": {
-          "201": { "$ref": "#/components/responses/JsonObject" },
-          "400": { "$ref": "#/components/responses/Error" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "403": { "$ref": "#/components/responses/Error" }
+          "201": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       }
     },
     "/api/users/students/catalog": {
       "get": {
-        "tags": ["Students"],
+        "tags": [
+          "Students"
+        ],
         "operationId": "getStudentCatalog",
-        "security": [{ "bearerAuth": [] }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "responses": {
-          "200": { "$ref": "#/components/responses/JsonArray" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "403": { "$ref": "#/components/responses/Error" }
+          "200": {
+            "$ref": "#/components/responses/JsonArray"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       }
     },
     "/api/users/students/{id}": {
       "get": {
-        "tags": ["Students"],
+        "tags": [
+          "Students"
+        ],
         "operationId": "getStudentById",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "$ref": "#/components/parameters/Id" }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
         "responses": {
-          "200": { "$ref": "#/components/responses/JsonObject" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "403": { "$ref": "#/components/responses/Error" },
-          "404": { "$ref": "#/components/responses/Error" }
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       },
       "put": {
-        "tags": ["Students"],
+        "tags": [
+          "Students"
+        ],
         "operationId": "updateStudent",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "$ref": "#/components/parameters/Id" }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/StudentPatch" }
+              "schema": {
+                "$ref": "#/components/schemas/StudentPatch"
+              }
             }
           }
         },
         "responses": {
-          "200": { "$ref": "#/components/responses/JsonObject" },
-          "400": { "$ref": "#/components/responses/Error" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "403": { "$ref": "#/components/responses/Error" },
-          "404": { "$ref": "#/components/responses/Error" }
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       },
       "delete": {
-        "tags": ["Students"],
+        "tags": [
+          "Students"
+        ],
         "operationId": "deleteStudent",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "$ref": "#/components/parameters/Id" }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
         "responses": {
-          "200": { "$ref": "#/components/responses/JsonObject" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "403": { "$ref": "#/components/responses/Error" },
-          "404": { "$ref": "#/components/responses/Error" }
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       }
     },
     "/api/users/students/import": {
       "post": {
-        "tags": ["Students"],
+        "tags": [
+          "Students"
+        ],
         "operationId": "importPadron",
-        "security": [{ "bearerAuth": [] }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "multipart/form-data": {
               "schema": {
                 "type": "object",
-                "required": ["file"],
+                "required": [
+                  "file"
+                ],
                 "properties": {
                   "file": {
                     "type": "string",
@@ -194,625 +378,2225 @@
           }
         },
         "responses": {
-          "200": { "$ref": "#/components/responses/JsonObject" },
-          "400": { "$ref": "#/components/responses/Error" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "403": { "$ref": "#/components/responses/Error" }
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       }
     },
     "/api/users/admins": {
       "get": {
-        "tags": ["Admins"],
+        "tags": [
+          "Admins"
+        ],
         "operationId": "listAdmins",
-        "security": [{ "bearerAuth": [] }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "responses": {
-          "200": { "$ref": "#/components/responses/JsonArray" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "403": { "$ref": "#/components/responses/Error" }
+          "200": {
+            "$ref": "#/components/responses/JsonArray"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       },
       "post": {
-        "tags": ["Admins"],
+        "tags": [
+          "Admins"
+        ],
         "operationId": "createAdmin",
-        "security": [{ "bearerAuth": [] }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/AdminInput" }
+              "schema": {
+                "$ref": "#/components/schemas/AdminInput"
+              }
             }
           }
         },
         "responses": {
-          "201": { "$ref": "#/components/responses/JsonObject" },
-          "400": { "$ref": "#/components/responses/Error" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "403": { "$ref": "#/components/responses/Error" }
+          "201": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       }
     },
     "/api/users/admins/{id}": {
       "get": {
-        "tags": ["Admins"],
+        "tags": [
+          "Admins"
+        ],
         "operationId": "getAdminById",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "$ref": "#/components/parameters/Id" }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
         "responses": {
-          "200": { "$ref": "#/components/responses/JsonObject" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "403": { "$ref": "#/components/responses/Error" },
-          "404": { "$ref": "#/components/responses/Error" }
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       },
       "put": {
-        "tags": ["Admins"],
+        "tags": [
+          "Admins"
+        ],
         "operationId": "updateAdmin",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "$ref": "#/components/parameters/Id" }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/AdminInput" }
+              "schema": {
+                "$ref": "#/components/schemas/AdminInput"
+              }
             }
           }
         },
         "responses": {
-          "200": { "$ref": "#/components/responses/JsonObject" },
-          "400": { "$ref": "#/components/responses/Error" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "403": { "$ref": "#/components/responses/Error" },
-          "404": { "$ref": "#/components/responses/Error" }
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       },
       "delete": {
-        "tags": ["Admins"],
+        "tags": [
+          "Admins"
+        ],
         "operationId": "deleteAdmin",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "$ref": "#/components/parameters/Id" }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
         "responses": {
-          "200": { "$ref": "#/components/responses/JsonObject" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "403": { "$ref": "#/components/responses/Error" },
-          "404": { "$ref": "#/components/responses/Error" }
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       }
     },
     "/api/elections": {
       "get": {
-        "tags": ["Elections"],
+        "tags": [
+          "Elections"
+        ],
         "operationId": "listElections",
-        "security": [{ "bearerAuth": [] }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "responses": {
-          "200": { "$ref": "#/components/responses/JsonArray" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "403": { "$ref": "#/components/responses/Error" }
+          "200": {
+            "$ref": "#/components/responses/JsonArray"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       },
       "post": {
-        "tags": ["Elections"],
+        "tags": [
+          "Elections"
+        ],
         "operationId": "createElection",
-        "security": [{ "bearerAuth": [] }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/ElectionInput" }
+              "schema": {
+                "$ref": "#/components/schemas/ElectionInput"
+              }
             }
           }
         },
         "responses": {
-          "201": { "$ref": "#/components/responses/JsonObject" },
-          "400": { "$ref": "#/components/responses/Error" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "403": { "$ref": "#/components/responses/Error" }
+          "201": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       }
     },
     "/api/elections/{id}": {
       "get": {
-        "tags": ["Elections"],
+        "tags": [
+          "Elections"
+        ],
         "operationId": "getElectionById",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "$ref": "#/components/parameters/Id" }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
         "responses": {
-          "200": { "$ref": "#/components/responses/JsonObject" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "403": { "$ref": "#/components/responses/Error" },
-          "404": { "$ref": "#/components/responses/Error" }
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       },
       "put": {
-        "tags": ["Elections"],
+        "tags": [
+          "Elections"
+        ],
         "operationId": "updateElection",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "$ref": "#/components/parameters/Id" }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/ElectionPatch" }
+              "schema": {
+                "$ref": "#/components/schemas/ElectionPatch"
+              }
             }
           }
         },
         "responses": {
-          "200": { "$ref": "#/components/responses/JsonObject" },
-          "400": { "$ref": "#/components/responses/Error" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "403": { "$ref": "#/components/responses/Error" },
-          "404": { "$ref": "#/components/responses/Error" }
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       },
       "delete": {
-        "tags": ["Elections"],
+        "tags": [
+          "Elections"
+        ],
         "operationId": "deleteElection",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "$ref": "#/components/parameters/Id" }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
         "responses": {
-          "200": { "$ref": "#/components/responses/JsonObject" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "403": { "$ref": "#/components/responses/Error" },
-          "404": { "$ref": "#/components/responses/Error" }
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       }
     },
     "/api/elections/{id}/status": {
       "put": {
-        "tags": ["Elections"],
+        "tags": [
+          "Elections"
+        ],
         "operationId": "changeElectionStatus",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "$ref": "#/components/parameters/Id" }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/ElectionStatus" }
+              "schema": {
+                "$ref": "#/components/schemas/ElectionStatus"
+              }
             }
           }
         },
         "responses": {
-          "200": { "$ref": "#/components/responses/JsonObject" },
-          "400": { "$ref": "#/components/responses/Error" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "403": { "$ref": "#/components/responses/Error" }
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       }
     },
     "/api/elections/{id}/options": {
       "post": {
-        "tags": ["Elections"],
+        "tags": [
+          "Elections"
+        ],
         "operationId": "addElectionOption",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "$ref": "#/components/parameters/Id" }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/ElectionOptionInput" }
+              "schema": {
+                "$ref": "#/components/schemas/ElectionOptionInput"
+              }
             }
           }
         },
         "responses": {
-          "201": { "$ref": "#/components/responses/JsonObject" },
-          "400": { "$ref": "#/components/responses/Error" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "403": { "$ref": "#/components/responses/Error" }
+          "201": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       }
     },
     "/api/elections/{id}/options/{optionId}": {
       "put": {
-        "tags": ["Elections"],
+        "tags": [
+          "Elections"
+        ],
         "operationId": "updateElectionOption",
-        "security": [{ "bearerAuth": [] }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "parameters": [
-          { "$ref": "#/components/parameters/Id" },
-          { "$ref": "#/components/parameters/OptionId" }
+          {
+            "$ref": "#/components/parameters/Id"
+          },
+          {
+            "$ref": "#/components/parameters/OptionId"
+          }
         ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/ElectionOptionInput" }
+              "schema": {
+                "$ref": "#/components/schemas/ElectionOptionInput"
+              }
             }
           }
         },
         "responses": {
-          "200": { "$ref": "#/components/responses/JsonObject" },
-          "400": { "$ref": "#/components/responses/Error" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "403": { "$ref": "#/components/responses/Error" },
-          "404": { "$ref": "#/components/responses/Error" }
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       },
       "delete": {
-        "tags": ["Elections"],
+        "tags": [
+          "Elections"
+        ],
         "operationId": "deleteElectionOption",
-        "security": [{ "bearerAuth": [] }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "parameters": [
-          { "$ref": "#/components/parameters/Id" },
-          { "$ref": "#/components/parameters/OptionId" }
+          {
+            "$ref": "#/components/parameters/Id"
+          },
+          {
+            "$ref": "#/components/parameters/OptionId"
+          }
         ],
         "responses": {
-          "200": { "$ref": "#/components/responses/JsonObject" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "403": { "$ref": "#/components/responses/Error" },
-          "404": { "$ref": "#/components/responses/Error" }
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       }
     },
     "/api/elections/{id}/voters/populate": {
       "post": {
-        "tags": ["Elections"],
+        "tags": [
+          "Elections"
+        ],
         "operationId": "populateElectionVoters",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "$ref": "#/components/parameters/Id" }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/PopulateVotersRequest" }
+              "schema": {
+                "$ref": "#/components/schemas/PopulateVotersRequest"
+              }
             }
           }
         },
         "responses": {
-          "200": { "$ref": "#/components/responses/JsonObject" },
-          "400": { "$ref": "#/components/responses/Error" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "403": { "$ref": "#/components/responses/Error" }
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       }
     },
     "/api/elections/{id}/voters": {
       "delete": {
-        "tags": ["Elections"],
+        "tags": [
+          "Elections"
+        ],
         "operationId": "clearElectionVoters",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "$ref": "#/components/parameters/Id" }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
         "responses": {
-          "200": { "$ref": "#/components/responses/JsonObject" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "403": { "$ref": "#/components/responses/Error" },
-          "404": { "$ref": "#/components/responses/Error" }
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       }
     },
     "/api/elections/{id}/results": {
       "get": {
-        "tags": ["Elections"],
+        "tags": [
+          "Elections"
+        ],
         "operationId": "getElectionResults",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "$ref": "#/components/parameters/Id" }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
         "responses": {
-          "200": { "$ref": "#/components/responses/JsonObject" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "403": { "$ref": "#/components/responses/Error" },
-          "404": { "$ref": "#/components/responses/Error" }
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       }
     },
     "/api/elections/{id}/monitoring": {
       "get": {
-        "tags": ["Elections"],
+        "tags": [
+          "Elections"
+        ],
         "operationId": "getElectionMonitoring",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "$ref": "#/components/parameters/Id" }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
         "responses": {
-          "200": { "$ref": "#/components/responses/JsonObject" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "403": { "$ref": "#/components/responses/Error" },
-          "404": { "$ref": "#/components/responses/Error" }
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       }
     },
     "/api/tags": {
       "get": {
-        "tags": ["Tags"],
+        "tags": [
+          "Tags"
+        ],
         "operationId": "listTags",
-        "security": [{ "bearerAuth": [] }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "responses": {
-          "200": { "$ref": "#/components/responses/JsonArray" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "403": { "$ref": "#/components/responses/Error" }
+          "200": {
+            "$ref": "#/components/responses/JsonArray"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       },
       "post": {
-        "tags": ["Tags"],
+        "tags": [
+          "Tags"
+        ],
         "operationId": "createTag",
-        "security": [{ "bearerAuth": [] }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/TagInput" }
+              "schema": {
+                "$ref": "#/components/schemas/TagInput"
+              }
             }
           }
         },
         "responses": {
-          "201": { "$ref": "#/components/responses/JsonObject" },
-          "400": { "$ref": "#/components/responses/Error" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "403": { "$ref": "#/components/responses/Error" }
+          "201": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       }
     },
     "/api/tags/{id}": {
       "get": {
-        "tags": ["Tags"],
+        "tags": [
+          "Tags"
+        ],
         "operationId": "getTagById",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "$ref": "#/components/parameters/Id" }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
         "responses": {
-          "200": { "$ref": "#/components/responses/JsonObject" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "403": { "$ref": "#/components/responses/Error" },
-          "404": { "$ref": "#/components/responses/Error" }
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       },
       "put": {
-        "tags": ["Tags"],
+        "tags": [
+          "Tags"
+        ],
         "operationId": "updateTag",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "$ref": "#/components/parameters/Id" }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/TagInput" }
+              "schema": {
+                "$ref": "#/components/schemas/TagInput"
+              }
             }
           }
         },
         "responses": {
-          "200": { "$ref": "#/components/responses/JsonObject" },
-          "400": { "$ref": "#/components/responses/Error" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "403": { "$ref": "#/components/responses/Error" },
-          "404": { "$ref": "#/components/responses/Error" }
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       },
       "delete": {
-        "tags": ["Tags"],
+        "tags": [
+          "Tags"
+        ],
         "operationId": "deleteTag",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "$ref": "#/components/parameters/Id" }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
         "responses": {
-          "200": { "$ref": "#/components/responses/JsonObject" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "403": { "$ref": "#/components/responses/Error" },
-          "404": { "$ref": "#/components/responses/Error" }
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       }
     },
     "/api/voting/elections": {
       "get": {
-        "tags": ["Voting"],
+        "tags": [
+          "Voting"
+        ],
         "operationId": "listMyVotingElections",
-        "security": [{ "bearerAuth": [] }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "responses": {
-          "200": { "$ref": "#/components/responses/JsonArray" },
-          "401": { "$ref": "#/components/responses/Error" }
+          "200": {
+            "$ref": "#/components/responses/JsonArray"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       }
     },
     "/api/voting/elections/{id}": {
       "get": {
-        "tags": ["Voting"],
+        "tags": [
+          "Voting"
+        ],
         "operationId": "getVotingElectionDetail",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "$ref": "#/components/parameters/Id" }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
         "responses": {
-          "200": { "$ref": "#/components/responses/JsonObject" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "404": { "$ref": "#/components/responses/Error" }
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       }
     },
     "/api/voting/cast": {
       "post": {
-        "tags": ["Voting"],
+        "tags": [
+          "Voting"
+        ],
         "operationId": "castVote",
-        "security": [{ "bearerAuth": [] }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/CastVoteRequest" }
+              "schema": {
+                "$ref": "#/components/schemas/CastVoteRequest"
+              }
             }
           }
         },
         "responses": {
-          "200": { "$ref": "#/components/responses/JsonObject" },
-          "400": { "$ref": "#/components/responses/Error" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "404": { "$ref": "#/components/responses/Error" },
-          "409": { "$ref": "#/components/responses/Error" }
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       }
     },
     "/api/voting/elections/{id}/results": {
       "get": {
-        "tags": ["Voting"],
+        "tags": [
+          "Voting"
+        ],
         "operationId": "getVotingResults",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "$ref": "#/components/parameters/Id" }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
         "responses": {
-          "200": { "$ref": "#/components/responses/JsonObject" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "404": { "$ref": "#/components/responses/Error" }
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       }
     },
     "/api/audit": {
       "get": {
-        "tags": ["Audit"],
+        "tags": [
+          "Audit"
+        ],
         "operationId": "listAuditLogs",
         "parameters": [
-          { "$ref": "#/components/parameters/Page" },
-          { "$ref": "#/components/parameters/Limit" },
-          { "name": "resource_type", "in": "query", "schema": { "type": "string" }, "example": "student" },
-          { "name": "resource_types", "in": "query", "schema": { "type": "string" }, "example": "student,election" },
-          { "name": "action", "in": "query", "schema": { "type": "string" }, "example": "insert" },
-          { "name": "search", "in": "query", "schema": { "type": "string" }, "example": "Maria" },
-          { "name": "from", "in": "query", "schema": { "type": "string", "format": "date" }, "example": "2026-01-01" },
-          { "name": "to", "in": "query", "schema": { "type": "string", "format": "date" }, "example": "2026-12-31" }
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "name": "resource_type",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "student"
+          },
+          {
+            "name": "resource_types",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "student,election"
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "insert"
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "Maria"
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "example": "2026-01-01"
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "example": "2026-12-31"
+          }
         ],
         "responses": {
-          "200": { "$ref": "#/components/responses/JsonObject" },
-          "500": { "$ref": "#/components/responses/Error" }
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       },
       "delete": {
-        "tags": ["Audit"],
+        "tags": [
+          "Audit"
+        ],
         "operationId": "purgeAuditLogs",
-        "security": [{ "bearerAuth": [] }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/AuditPurgeRequest" }
+              "schema": {
+                "$ref": "#/components/schemas/AuditPurgeRequest"
+              }
             }
           }
         },
         "responses": {
-          "200": { "$ref": "#/components/responses/JsonObject" },
-          "400": { "$ref": "#/components/responses/Error" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "403": { "$ref": "#/components/responses/Error" }
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       }
     },
     "/api/audit/active-days": {
       "get": {
-        "tags": ["Audit"],
+        "tags": [
+          "Audit"
+        ],
         "operationId": "getAuditActiveDays",
         "responses": {
-          "200": { "$ref": "#/components/responses/JsonArray" },
-          "500": { "$ref": "#/components/responses/Error" }
+          "200": {
+            "$ref": "#/components/responses/JsonArray"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       }
     },
     "/api/audit/stats": {
       "get": {
-        "tags": ["Audit"],
+        "tags": [
+          "Audit"
+        ],
         "operationId": "getAuditStats",
         "responses": {
-          "200": { "$ref": "#/components/responses/JsonArray" },
-          "500": { "$ref": "#/components/responses/Error" }
+          "200": {
+            "$ref": "#/components/responses/JsonArray"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       }
     },
     "/api/audit/export": {
       "get": {
-        "tags": ["Audit"],
+        "tags": [
+          "Audit"
+        ],
         "operationId": "exportAuditLogs",
-        "security": [{ "bearerAuth": [] }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "parameters": [
-          { "name": "format", "in": "query", "schema": { "type": "string", "enum": ["csv", "json"] }, "example": "json" },
-          { "name": "resource_types", "in": "query", "schema": { "type": "string" }, "example": "student,election" },
-          { "name": "from", "in": "query", "schema": { "type": "string", "format": "date" }, "example": "2026-01-01" },
-          { "name": "to", "in": "query", "schema": { "type": "string", "format": "date" }, "example": "2026-12-31" }
+          {
+            "name": "format",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "csv",
+                "json"
+              ]
+            },
+            "example": "json"
+          },
+          {
+            "name": "resource_types",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "student,election"
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "example": "2026-01-01"
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "example": "2026-12-31"
+          }
         ],
         "responses": {
-          "200": { "description": "Audit export file" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "403": { "$ref": "#/components/responses/Error" }
+          "200": {
+            "description": "Audit export file"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       }
     },
     "/api/scrutiny/{electionId}": {
       "get": {
-        "tags": ["Scrutiny"],
+        "tags": [
+          "Scrutiny"
+        ],
         "operationId": "getScrutinyStatus",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "$ref": "#/components/parameters/ElectionId" }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ElectionId"
+          }
+        ],
         "responses": {
-          "200": { "$ref": "#/components/responses/JsonObject" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "403": { "$ref": "#/components/responses/Error" },
-          "404": { "$ref": "#/components/responses/Error" }
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       }
     },
     "/api/scrutiny/{electionId}/results": {
       "get": {
-        "tags": ["Scrutiny"],
+        "tags": [
+          "Scrutiny"
+        ],
         "operationId": "getScrutinyResults",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "$ref": "#/components/parameters/ElectionId" }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ElectionId"
+          }
+        ],
         "responses": {
-          "201": { "$ref": "#/components/responses/JsonObject" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "403": { "$ref": "#/components/responses/Error" },
-          "404": { "$ref": "#/components/responses/Error" }
+          "201": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       }
     },
     "/api/scrutiny/{electionId}/submit-key": {
       "post": {
-        "tags": ["Scrutiny"],
+        "tags": [
+          "Scrutiny"
+        ],
         "operationId": "submitScrutinyKey",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "$ref": "#/components/parameters/ElectionId" }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ElectionId"
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/SubmitKeyRequest" }
+              "schema": {
+                "$ref": "#/components/schemas/SubmitKeyRequest"
+              }
             }
           }
         },
         "responses": {
-          "201": { "$ref": "#/components/responses/JsonObject" },
-          "400": { "$ref": "#/components/responses/Error" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "403": { "$ref": "#/components/responses/Error" }
+          "201": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       }
     },
     "/api/scrutiny/{electionId}/assign-members": {
       "post": {
-        "tags": ["Scrutiny"],
+        "tags": [
+          "Scrutiny"
+        ],
         "operationId": "assignScrutinyMembers",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "$ref": "#/components/parameters/ElectionId" }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ElectionId"
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/ScrutinyMembersRequest" }
+              "schema": {
+                "$ref": "#/components/schemas/ScrutinyMembersRequest"
+              }
             }
           }
         },
         "responses": {
-          "201": { "$ref": "#/components/responses/JsonObject" },
-          "400": { "$ref": "#/components/responses/Error" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "403": { "$ref": "#/components/responses/Error" }
+          "201": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       }
     },
     "/api/scrutiny/{electionId}/finalize": {
       "post": {
-        "tags": ["Scrutiny"],
+        "tags": [
+          "Scrutiny"
+        ],
         "operationId": "finalizeScrutiny",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "$ref": "#/components/parameters/ElectionId" }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ElectionId"
+          }
+        ],
         "responses": {
-          "201": { "$ref": "#/components/responses/JsonObject" },
-          "400": { "$ref": "#/components/responses/Error" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "403": { "$ref": "#/components/responses/Error" }
+          "201": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       }
     },
     "/api/dashboard/stats": {
       "get": {
-        "tags": ["Dashboard"],
+        "tags": [
+          "Dashboard"
+        ],
         "operationId": "getDashboardStats",
         "responses": {
-          "200": { "$ref": "#/components/responses/JsonObject" },
-          "500": { "$ref": "#/components/responses/Error" }
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/postulaciones/formularios": {
+      "get": {
+        "tags": [
+          "Applications"
+        ],
+        "operationId": "listApplicationForms",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Applications"
+        ],
+        "operationId": "createApplicationForm",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "title",
+                  "voter_source"
+                ],
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "example": "Postulacion TEE 2026"
+                  },
+                  "description": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "DRAFT",
+                      "SCHEDULED",
+                      "OPEN",
+                      "CLOSED",
+                      "ARCHIVED"
+                    ]
+                  },
+                  "start_time": {
+                    "type": "string",
+                    "format": "date-time",
+                    "nullable": true
+                  },
+                  "end_time": {
+                    "type": "string",
+                    "format": "date-time",
+                    "nullable": true
+                  },
+                  "allow_other_documents": {
+                    "type": "boolean"
+                  },
+                  "other_documents_label": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "voter_source": {
+                    "type": "string",
+                    "enum": [
+                      "FULL_PADRON",
+                      "FILTERED",
+                      "MANUAL",
+                      "TAG"
+                    ]
+                  },
+                  "voter_filter": {
+                    "type": "object",
+                    "nullable": true,
+                    "properties": {
+                      "sede": {
+                        "type": "string"
+                      },
+                      "career": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "tag_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "nullable": true
+                  },
+                  "election_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "nullable": true
+                  },
+                  "student_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/postulaciones/formularios/{id}": {
+      "get": {
+        "tags": [
+          "Applications"
+        ],
+        "operationId": "getApplicationForm",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Applications"
+        ],
+        "operationId": "updateApplicationForm",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "title",
+                  "voter_source"
+                ],
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "example": "Postulacion TEE 2026"
+                  },
+                  "description": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "DRAFT",
+                      "SCHEDULED",
+                      "OPEN",
+                      "CLOSED",
+                      "ARCHIVED"
+                    ]
+                  },
+                  "start_time": {
+                    "type": "string",
+                    "format": "date-time",
+                    "nullable": true
+                  },
+                  "end_time": {
+                    "type": "string",
+                    "format": "date-time",
+                    "nullable": true
+                  },
+                  "allow_other_documents": {
+                    "type": "boolean"
+                  },
+                  "other_documents_label": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "voter_source": {
+                    "type": "string",
+                    "enum": [
+                      "FULL_PADRON",
+                      "FILTERED",
+                      "MANUAL",
+                      "TAG"
+                    ]
+                  },
+                  "voter_filter": {
+                    "type": "object",
+                    "nullable": true,
+                    "properties": {
+                      "sede": {
+                        "type": "string"
+                      },
+                      "career": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "tag_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "nullable": true
+                  },
+                  "election_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "nullable": true
+                  },
+                  "student_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Applications"
+        ],
+        "operationId": "deleteApplicationForm",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/postulaciones/formularios/{id}/respuestas": {
+      "get": {
+        "tags": [
+          "Applications"
+        ],
+        "operationId": "listApplications",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "DRAFT",
+                "SUBMITTED",
+                "APPROVED",
+                "CONDITIONED",
+                "REJECTED"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/postulaciones/respuestas/{id}": {
+      "get": {
+        "tags": [
+          "Applications"
+        ],
+        "operationId": "getApplication",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/postulaciones/respuestas/{id}/revision": {
+      "post": {
+        "tags": [
+          "Applications"
+        ],
+        "operationId": "reviewApplication",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "decision"
+                ],
+                "properties": {
+                  "decision": {
+                    "type": "string",
+                    "enum": [
+                      "APPROVED",
+                      "CONDITIONED",
+                      "REJECTED"
+                    ]
+                  },
+                  "comment": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "unlocked_fields": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "correction_deadline": {
+                    "type": "string",
+                    "format": "date-time",
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/postulaciones/archivos/{fileId}": {
+      "get": {
+        "tags": [
+          "Applications"
+        ],
+        "operationId": "getApplicationFileAsAdmin",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "fileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "1f2e3d4c-5b6a-4978-8899-aabbccddeeff"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/mis-postulaciones": {
+      "get": {
+        "tags": [
+          "MyApplications"
+        ],
+        "operationId": "listMyApplicationForms",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/mis-postulaciones/{formId}": {
+      "get": {
+        "tags": [
+          "MyApplications"
+        ],
+        "operationId": "getMyApplication",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "formId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "1f2e3d4c-5b6a-4978-8899-aabbccddeeff"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "MyApplications"
+        ],
+        "operationId": "saveMyApplication",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "formId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "1f2e3d4c-5b6a-4978-8899-aabbccddeeff"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "last_name_1": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "last_name_2": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "first_name": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "national_id": {
+                    "type": "string",
+                    "nullable": true,
+                    "example": "119330447"
+                  },
+                  "carnet": {
+                    "type": "string",
+                    "nullable": true,
+                    "example": "2024080534"
+                  },
+                  "phone": {
+                    "type": "string",
+                    "nullable": true,
+                    "example": "88887777"
+                  },
+                  "sede": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "career": {
+                    "type": "string",
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/mis-postulaciones/{formId}/enviar": {
+      "post": {
+        "tags": [
+          "MyApplications"
+        ],
+        "operationId": "submitMyApplication",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "formId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "1f2e3d4c-5b6a-4978-8899-aabbccddeeff"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/mis-postulaciones/{formId}/archivos/{fieldKey}": {
+      "post": {
+        "tags": [
+          "MyApplications"
+        ],
+        "operationId": "uploadMyApplicationFile",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "formId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "1f2e3d4c-5b6a-4978-8899-aabbccddeeff"
+          },
+          {
+            "name": "fieldKey",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "enrollment_report",
+                "id_copy",
+                "carnet_copy",
+                "tdf_letter",
+                "th_letter",
+                "other"
+              ]
+            },
+            "example": "id_copy"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "201": {
+            "$ref": "#/components/responses/JsonObject"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "PDF o imagen, maximo 4 MB"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mis-postulaciones/{formId}/archivos/{fileId}": {
+      "delete": {
+        "tags": [
+          "MyApplications"
+        ],
+        "operationId": "deleteMyApplicationFile",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "formId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "1f2e3d4c-5b6a-4978-8899-aabbccddeeff"
+          },
+          {
+            "name": "fileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "1f2e3d4c-5b6a-4978-8899-aabbccddeeff"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/mis-postulaciones/archivos/{fileId}": {
+      "get": {
+        "tags": [
+          "MyApplications"
+        ],
+        "operationId": "getMyApplicationFile",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "fileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "1f2e3d4c-5b6a-4978-8899-aabbccddeeff"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JsonObject"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       }
     }
@@ -830,33 +2614,51 @@
         "name": "id",
         "in": "path",
         "required": true,
-        "schema": { "type": "string", "format": "uuid" },
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        },
         "example": "00000000-0000-0000-0000-000000000001"
       },
       "OptionId": {
         "name": "optionId",
         "in": "path",
         "required": true,
-        "schema": { "type": "string", "format": "uuid" },
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        },
         "example": "00000000-0000-0000-0000-000000000002"
       },
       "ElectionId": {
         "name": "electionId",
         "in": "path",
         "required": true,
-        "schema": { "type": "string", "format": "uuid" },
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        },
         "example": "00000000-0000-0000-0000-000000000001"
       },
       "Page": {
         "name": "page",
         "in": "query",
-        "schema": { "type": "integer", "minimum": 1, "default": 1 },
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        },
         "example": 1
       },
       "Limit": {
         "name": "limit",
         "in": "query",
-        "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 30 },
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 30
+        },
         "example": 30
       }
     },
@@ -865,7 +2667,10 @@
         "description": "JSON object response",
         "content": {
           "application/json": {
-            "schema": { "type": "object", "additionalProperties": true }
+            "schema": {
+              "type": "object",
+              "additionalProperties": true
+            }
           }
         }
       },
@@ -875,7 +2680,10 @@
           "application/json": {
             "schema": {
               "type": "array",
-              "items": { "type": "object", "additionalProperties": true }
+              "items": {
+                "type": "object",
+                "additionalProperties": true
+              }
             }
           }
         }
@@ -884,7 +2692,9 @@
         "description": "Error response",
         "content": {
           "application/json": {
-            "schema": { "$ref": "#/components/schemas/Error" }
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
           }
         }
       }
@@ -894,25 +2704,61 @@
         "type": "object",
         "additionalProperties": true,
         "properties": {
-          "error": { "type": "string", "example": "No autenticado" },
-          "message": { "type": "string", "example": "Solicitud invalida" },
-          "code": { "type": "string", "example": "VALIDATION_ERROR" }
+          "error": {
+            "type": "string",
+            "example": "No autenticado"
+          },
+          "message": {
+            "type": "string",
+            "example": "Solicitud invalida"
+          },
+          "code": {
+            "type": "string",
+            "example": "VALIDATION_ERROR"
+          }
         }
       },
       "StudentInput": {
         "type": "object",
-        "required": ["carnet", "email", "full_name"],
+        "required": [
+          "carnet",
+          "email",
+          "full_name"
+        ],
         "properties": {
-          "carnet": { "type": "string", "example": "2026000010" },
-          "email": { "type": "string", "format": "email", "example": "student@estudiantec.cr" },
-          "full_name": { "type": "string", "example": "Maria Prueba" },
-          "career": { "type": "string", "example": "Computacion" },
-          "sede": { "type": "string", "example": "Cartago" },
-          "is_active": { "type": "boolean", "example": true }
+          "carnet": {
+            "type": "string",
+            "example": "2026000010"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "student@estudiantec.cr"
+          },
+          "full_name": {
+            "type": "string",
+            "example": "Maria Prueba"
+          },
+          "career": {
+            "type": "string",
+            "example": "Computacion"
+          },
+          "sede": {
+            "type": "string",
+            "example": "Cartago"
+          },
+          "is_active": {
+            "type": "boolean",
+            "example": true
+          }
         }
       },
       "StudentPatch": {
-        "allOf": [{ "$ref": "#/components/schemas/StudentInput" }]
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/StudentInput"
+          }
+        ]
       },
       "AdminInput": {
         "type": "object",
@@ -922,44 +2768,117 @@
             "format": "uuid",
             "example": "00000000-0000-0000-0000-000000000001"
           },
-          "role": { "type": "string", "example": "admin" },
-          "is_active": { "type": "boolean", "example": true }
+          "role": {
+            "type": "string",
+            "example": "admin"
+          },
+          "is_active": {
+            "type": "boolean",
+            "example": true
+          }
         }
       },
       "ElectionInput": {
         "type": "object",
-        "required": ["title", "start_date", "end_date"],
+        "required": [
+          "title",
+          "start_date",
+          "end_date"
+        ],
         "properties": {
-          "title": { "type": "string", "example": "Eleccion de prueba ZAP" },
-          "description": { "type": "string", "example": "Escenario automatizado de seguridad" },
-          "election_type": { "type": "string", "example": "INTERNA" },
-          "status": { "type": "string", "example": "draft" },
-          "start_date": { "type": "string", "format": "date-time", "example": "2026-06-01T08:00:00.000Z" },
-          "end_date": { "type": "string", "format": "date-time", "example": "2026-06-01T18:00:00.000Z" },
-          "is_anonymous": { "type": "boolean", "example": true },
-          "allow_suboptions": { "type": "boolean", "example": false },
-          "allow_blank_vote": { "type": "boolean", "example": true },
-          "requires_key_ceremony": { "type": "boolean", "example": false },
-          "key_threshold": { "type": "integer", "minimum": 1, "example": 2 }
+          "title": {
+            "type": "string",
+            "example": "Eleccion de prueba ZAP"
+          },
+          "description": {
+            "type": "string",
+            "example": "Escenario automatizado de seguridad"
+          },
+          "election_type": {
+            "type": "string",
+            "example": "INTERNA"
+          },
+          "status": {
+            "type": "string",
+            "example": "draft"
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-06-01T08:00:00.000Z"
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-06-01T18:00:00.000Z"
+          },
+          "is_anonymous": {
+            "type": "boolean",
+            "example": true
+          },
+          "allow_suboptions": {
+            "type": "boolean",
+            "example": false
+          },
+          "allow_blank_vote": {
+            "type": "boolean",
+            "example": true
+          },
+          "requires_key_ceremony": {
+            "type": "boolean",
+            "example": false
+          },
+          "key_threshold": {
+            "type": "integer",
+            "minimum": 1,
+            "example": 2
+          }
         }
       },
       "ElectionPatch": {
-        "allOf": [{ "$ref": "#/components/schemas/ElectionInput" }]
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ElectionInput"
+          }
+        ]
       },
       "ElectionStatus": {
         "type": "object",
-        "required": ["status"],
+        "required": [
+          "status"
+        ],
         "properties": {
-          "status": { "type": "string", "enum": ["draft", "scheduled", "open", "closed", "cancelled"], "example": "open" }
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "scheduled",
+              "open",
+              "closed",
+              "cancelled"
+            ],
+            "example": "open"
+          }
         }
       },
       "ElectionOptionInput": {
         "type": "object",
-        "required": ["label"],
+        "required": [
+          "label"
+        ],
         "properties": {
-          "label": { "type": "string", "example": "Opcion A" },
-          "description": { "type": "string", "example": "Descripcion de opcion" },
-          "option_type": { "type": "string", "example": "ticket" },
+          "label": {
+            "type": "string",
+            "example": "Opcion A"
+          },
+          "description": {
+            "type": "string",
+            "example": "Descripcion de opcion"
+          },
+          "option_type": {
+            "type": "string",
+            "example": "ticket"
+          },
           "parent_option_id": {
             "type": "string",
             "format": "uuid",
@@ -971,17 +2890,31 @@
             "nullable": true,
             "example": "https://cdn.example.com/candidate.png"
           },
-          "display_order": { "type": "integer", "minimum": 1, "example": 1 },
+          "display_order": {
+            "type": "integer",
+            "minimum": 1,
+            "example": 1
+          },
           "suboptions": {
             "type": "array",
-            "items": { "$ref": "#/components/schemas/ElectionOptionInput" }
+            "items": {
+              "$ref": "#/components/schemas/ElectionOptionInput"
+            }
           }
         }
       },
       "PopulateVotersRequest": {
         "type": "object",
         "properties": {
-          "mode": { "type": "string", "enum": ["all", "tag", "manual"], "example": "manual" },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "all",
+              "tag",
+              "manual"
+            ],
+            "example": "manual"
+          },
           "tagId": {
             "type": "string",
             "format": "uuid",
@@ -989,28 +2922,51 @@
           },
           "studentIds": {
             "type": "array",
-            "items": { "type": "string", "format": "uuid" },
-            "example": ["00000000-0000-0000-0000-000000000001"]
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": [
+              "00000000-0000-0000-0000-000000000001"
+            ]
           }
         }
       },
       "TagInput": {
         "type": "object",
-        "required": ["name"],
+        "required": [
+          "name"
+        ],
         "properties": {
-          "name": { "type": "string", "example": "Padron ZAP" },
-          "description": { "type": "string", "example": "Grupo de prueba" },
-          "color": { "type": "string", "example": "#2563eb" },
+          "name": {
+            "type": "string",
+            "example": "Padron ZAP"
+          },
+          "description": {
+            "type": "string",
+            "example": "Grupo de prueba"
+          },
+          "color": {
+            "type": "string",
+            "example": "#2563eb"
+          },
           "studentIds": {
             "type": "array",
-            "items": { "type": "string", "format": "uuid" },
-            "example": ["00000000-0000-0000-0000-000000000001"]
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": [
+              "00000000-0000-0000-0000-000000000001"
+            ]
           }
         }
       },
       "CastVoteRequest": {
         "type": "object",
-        "required": ["electionId"],
+        "required": [
+          "electionId"
+        ],
         "properties": {
           "electionId": {
             "type": "string",
@@ -1024,7 +2980,9 @@
           },
           "selections": {
             "type": "array",
-            "items": { "$ref": "#/components/schemas/VoteSelection" },
+            "items": {
+              "$ref": "#/components/schemas/VoteSelection"
+            },
             "example": [
               {
                 "parentOptionId": "00000000-0000-0000-0000-000000000002",
@@ -1036,7 +2994,10 @@
       },
       "VoteSelection": {
         "type": "object",
-        "required": ["parentOptionId", "optionId"],
+        "required": [
+          "parentOptionId",
+          "optionId"
+        ],
         "properties": {
           "parentOptionId": {
             "type": "string",
@@ -1053,14 +3014,29 @@
       "AuditPurgeRequest": {
         "type": "object",
         "properties": {
-          "from": { "type": "string", "format": "date", "example": "2026-01-01" },
-          "to": { "type": "string", "format": "date", "example": "2026-01-31" },
+          "from": {
+            "type": "string",
+            "format": "date",
+            "example": "2026-01-01"
+          },
+          "to": {
+            "type": "string",
+            "format": "date",
+            "example": "2026-01-31"
+          },
           "resource_types": {
             "type": "array",
-            "items": { "type": "string" },
-            "example": ["student"]
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "student"
+            ]
           },
-          "action": { "type": "string", "example": "student.insert" }
+          "action": {
+            "type": "string",
+            "example": "student.insert"
+          }
         }
       },
       "ScrutinyMembersRequest": {
@@ -1068,22 +3044,36 @@
         "properties": {
           "members": {
             "type": "array",
-            "items": { "type": "string", "format": "uuid" },
-            "example": ["00000000-0000-0000-0000-000000000001"]
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": [
+              "00000000-0000-0000-0000-000000000001"
+            ]
           },
-          "threshold": { "type": "integer", "minimum": 1, "example": 2 }
+          "threshold": {
+            "type": "integer",
+            "minimum": 1,
+            "example": 2
+          }
         }
       },
       "SubmitKeyRequest": {
         "type": "object",
-        "required": ["key"],
+        "required": [
+          "key"
+        ],
         "properties": {
           "memberId": {
             "type": "string",
             "format": "uuid",
             "example": "00000000-0000-0000-0000-000000000001"
           },
-          "key": { "type": "string", "example": "1-a1b2c3d4" }
+          "key": {
+            "type": "string",
+            "example": "1-a1b2c3d4"
+          }
         }
       }
     }

@@ -1,21 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { findAdminByStudentId } from '../modules/users/repositories/adminRepository';
-import { findStudentByCarnet, findStudentByEmail } from '../modules/users/repositories/studentRepository';
-
-async function resolveCurrentStudentId(req: Request) {
-  if (req.user?.studentId) {
-    return req.user.studentId;
-  }
-
-  const email = req.user?.email?.toLowerCase();
-  let student = email ? await findStudentByEmail(email) : null;
-
-  if (!student && req.user?.carnet) {
-    student = await findStudentByCarnet(req.user.carnet);
-  }
-
-  return student?.id ?? null;
-}
+import { resolveCurrentStudentId } from './resolveStudent';
 
 export async function requireAdmin(req: Request, res: Response, next: NextFunction): Promise<void> {
   if (!req.user) {

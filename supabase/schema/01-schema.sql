@@ -8,6 +8,8 @@
 CREATE TYPE election_status AS ENUM ('DRAFT', 'SCHEDULED', 'OPEN', 'CLOSED', 'SCRUTINIZED', 'ARCHIVED');
 CREATE TYPE auth_method_type AS ENUM ('MICROSOFT');
 CREATE TYPE voter_source_type AS ENUM ('FULL_PADRON', 'FILTERED', 'MANUAL', 'TAG');
+CREATE TYPE application_form_status AS ENUM ('DRAFT', 'SCHEDULED', 'OPEN', 'CLOSED', 'ARCHIVED');
+CREATE TYPE application_status AS ENUM ('DRAFT', 'SUBMITTED', 'APPROVED', 'CONDITIONED', 'REJECTED');
 
 -- ============================================
 -- PADRON ESTUDIANTIL
@@ -257,3 +259,149 @@ CREATE TABLE padron_uploads (
     updated_students INT,
     created_at      TIMESTAMPTZ DEFAULT now()
 );
+
+-- ============================================
+-- POSTULACIONES: FORMULARIOS
+--
+-- El admin crea formularios con ventana de tiempo y audiencia;
+-- los estudiantes elegibles los llenan con datos personales y
+-- adjuntos, y el admin los resuelve con
+-- APPROVED / CONDITIONED / REJECTED.
+-- ============================================
+CREATE TABLE application_forms (
+    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title                 TEXT NOT NULL,
+    description           TEXT,
+    status                application_form_status NOT NULL DEFAULT 'DRAFT',
+    start_time            TIMESTAMPTZ,
+    end_time              TIMESTAMPTZ,
+    -- "Otros PDF (opcional: el administrador elige si sí o no)"
+    allow_other_documents BOOLEAN NOT NULL DEFAULT false,
+    other_documents_label TEXT,
+    -- Audiencia: reutiliza el enum de elecciones
+    voter_source          voter_source_type NOT NULL DEFAULT 'FULL_PADRON',
+    voter_filter          JSONB,
+    tag_id                UUID REFERENCES tags(id) ON DELETE SET NULL,
+    -- Vínculo opcional con una votación (para convertir aprobados en candidatos)
+    election_id           UUID REFERENCES elections(id) ON DELETE SET NULL,
+    created_by            UUID REFERENCES students(id),
+    created_at            TIMESTAMPTZ DEFAULT now(),
+    updated_at            TIMESTAMPTZ DEFAULT now(),
+    CONSTRAINT chk_application_forms_window CHECK (
+        start_time IS NULL OR end_time IS NULL OR end_time > start_time
+    )
+);
+
+CREATE INDEX idx_application_forms_status   ON application_forms(status);
+CREATE INDEX idx_application_forms_tag_id   ON application_forms(tag_id);
+CREATE INDEX idx_application_forms_election ON application_forms(election_id);
+
+-- ============================================
+-- PADRÓN ELEGIBLE POR FORMULARIO
+-- ============================================
+CREATE TABLE application_form_eligibility (
+    form_id    UUID NOT NULL REFERENCES application_forms(id) ON DELETE CASCADE,
+    student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    PRIMARY KEY (form_id, student_id)
+);
+
+CREATE INDEX idx_application_eligibility_student ON application_form_eligibility(student_id);
+
+-- ============================================
+-- POSTULACIONES (respuesta del estudiante)
+-- ============================================
+CREATE TABLE applications (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    form_id             UUID NOT NULL REFERENCES application_forms(id) ON DELETE CASCADE,
+    student_id          UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    status              application_status NOT NULL DEFAULT 'DRAFT',
+
+    -- Información personal escrita
+    last_name_1         TEXT,
+    last_name_2         TEXT,
+    first_name          TEXT,
+    email               TEXT,
+    national_id         TEXT,
+    carnet              TEXT,
+    phone               TEXT,
+
+    -- Información seleccionable
+    sede                TEXT,
+    career              TEXT,
+
+    -- Revisión
+    unlocked_fields     JSONB,
+    correction_deadline TIMESTAMPTZ,
+    review_comment      TEXT,
+    reviewed_by         UUID REFERENCES students(id),
+    reviewed_at         TIMESTAMPTZ,
+    submitted_at        TIMESTAMPTZ,
+
+    created_at          TIMESTAMPTZ DEFAULT now(),
+    updated_at          TIMESTAMPTZ DEFAULT now(),
+
+    CONSTRAINT uniq_applications_form_student UNIQUE (form_id, student_id),
+    -- "no guiones ni espacios". NULL permitido mientras es borrador.
+    CONSTRAINT chk_applications_national_id CHECK (national_id IS NULL OR national_id ~ '^[0-9]+$'),
+    CONSTRAINT chk_applications_carnet      CHECK (carnet      IS NULL OR carnet      ~ '^[0-9]+$'),
+    CONSTRAINT chk_applications_phone       CHECK (phone       IS NULL OR phone       ~ '^[0-9]+$'),
+    CONSTRAINT chk_applications_unlocked_fields CHECK (
+        unlocked_fields IS NULL OR jsonb_typeof(unlocked_fields) = 'array'
+    )
+);
+
+CREATE INDEX idx_applications_form    ON applications(form_id);
+CREATE INDEX idx_applications_student ON applications(student_id);
+CREATE INDEX idx_applications_status  ON applications(status);
+
+-- ============================================
+-- ADJUNTOS DE POSTULACIÓN (PDF / imagen) como BYTEA
+--
+-- Se guardan dentro de Postgres para que el comportamiento sea
+-- idéntico en local y en Supabase, sin depender de un bucket.
+-- ============================================
+CREATE TABLE application_files (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    application_id UUID NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+    field_key      TEXT NOT NULL CHECK (field_key IN (
+                      'enrollment_report',  -- Informe de matrícula
+                      'id_copy',            -- Copia de la identificación
+                      'carnet_copy',        -- Copia del carné
+                      'tdf_letter',         -- Carta de sanciones del TDF
+                      'th_letter',          -- Carta de sanciones del TH
+                      'other'               -- Otros PDF (opcional)
+                    )),
+    file_name      TEXT NOT NULL,
+    mime_type      TEXT NOT NULL CHECK (mime_type IN (
+                      'application/pdf', 'image/jpeg', 'image/png', 'image/webp'
+                    )),
+    size_bytes     INT NOT NULL CHECK (size_bytes > 0 AND size_bytes <= 4194304), -- 4 MB
+    content        BYTEA NOT NULL,
+    uploaded_at    TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_application_files_application ON application_files(application_id);
+
+-- Los campos fijos admiten un único archivo; 'other' admite varios.
+CREATE UNIQUE INDEX uniq_application_files_field
+    ON application_files(application_id, field_key)
+    WHERE field_key <> 'other';
+
+-- ============================================
+-- HISTORIAL DE REVISIONES DE POSTULACIONES
+-- ============================================
+CREATE TABLE application_reviews (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    application_id      UUID NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+    reviewer_id         UUID REFERENCES students(id),
+    decision            application_status NOT NULL CHECK (
+                          decision IN ('APPROVED', 'CONDITIONED', 'REJECTED')
+                        ),
+    comment             TEXT,
+    unlocked_fields     JSONB,
+    correction_deadline TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_application_reviews_application
+    ON application_reviews(application_id, created_at DESC);
