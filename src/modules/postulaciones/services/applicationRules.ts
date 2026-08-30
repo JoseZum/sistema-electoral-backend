@@ -136,11 +136,13 @@ export function assertInstitutionalEmail(email?: string | null): string {
  */
 export function resolveEditableFields(
   application: Application | null,
-  form: Pick<ApplicationForm, 'allow_other_documents'>
+  form: Pick<ApplicationForm, 'allow_other_documents'>,
+  hasPositions = false
 ): ApplicationFieldKey[] {
   const everything: ApplicationFieldKey[] = [
     ...TEXT_FIELD_KEYS.filter((key) => key !== 'email'),
-    ...SELECT_FIELD_KEYS,
+    // El puesto solo existe como campo si el formulario define alguno.
+    ...SELECT_FIELD_KEYS.filter((key) => key !== 'position_id' || hasPositions),
     ...FILE_FIELD_KEYS.filter((key) => key !== 'other' || form.allow_other_documents),
   ];
 
@@ -249,7 +251,8 @@ export function pickEditableData<T extends Record<string, unknown>>(
  */
 export function findMissingFields(
   application: Application,
-  files: ApplicationFileMeta[]
+  files: ApplicationFileMeta[],
+  hasPositions = false
 ): string[] {
   const missing: string[] = [];
 
@@ -263,6 +266,8 @@ export function findMissingFields(
     'phone',
     'sede',
     'career',
+    // Si el formulario define puestos, elegir uno es obligatorio.
+    ...(hasPositions ? (['position_id'] as ApplicationFieldKey[]) : []),
   ];
 
   for (const field of requiredData) {
@@ -358,6 +363,29 @@ export function sanitizeFileName(originalName: string): string {
 
   const safe = base === '' ? 'archivo' : base;
   return safe.length > 120 ? safe.slice(safe.length - 120) : safe;
+}
+
+// ============================================
+// PUESTOS
+// ============================================
+
+/**
+ * Normaliza y valida el nombre de un puesto. Solo tiene nombre, asi que es
+ * lo unico que hay que cuidar.
+ */
+export function normalizePositionName(name?: string | null): string {
+  const normalized = normalizeText(name);
+
+  if (!normalized) {
+    throw badRequest('APPLICATION_POSITION_NAME_REQUIRED', 'El puesto necesita un nombre');
+  }
+  if (normalized.length > 120) {
+    throw badRequest(
+      'APPLICATION_POSITION_NAME_TOO_LONG',
+      'El nombre del puesto no puede pasar de 120 caracteres'
+    );
+  }
+  return normalized;
 }
 
 // ============================================
