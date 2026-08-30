@@ -69,11 +69,21 @@ BEGIN
     IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
   END IF;
 
-  -- Al crear un formulario de postulacion se puebla la elegibilidad
-  -- en bloque; esos eventos son ruido igual que tag_member.
-  IF TG_ARGV[0] = 'application_form' AND _audit_get('app.compound_application_mode') = 'true'
-     AND TG_OP <> 'INSERT' THEN
-    IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
+  -- Los puestos de un formulario se insertan uno por uno durante la creacion.
+  -- Auditarlos por separado convertia una sola accion del administrador en N
+  -- eventos; el evento de application_form.insert los resume. Los puestos que
+  -- se agregan despues, sobre un formulario ya creado, si son un cambio real
+  -- y se siguen auditando.
+  IF TG_ARGV[0] = 'application_position' AND TG_OP = 'INSERT'
+     AND _audit_get('app.compound_application_mode') = 'true' THEN
+    RETURN NEW;
+  END IF;
+
+  -- Borrar un formulario arrastra en cascada sus puestos y sus postulaciones.
+  -- Mismo criterio que en elecciones: el evento del formulario basta.
+  IF TG_OP = 'DELETE' AND _audit_get('app.cascade_application_form_delete') = 'true'
+     AND TG_ARGV[0] IN ('application_position', 'application') THEN
+    RETURN OLD;
   END IF;
 
   -- Accion
@@ -107,11 +117,14 @@ BEGIN
   ELSE -- UPDATE
     v_old := to_jsonb(OLD);
     v_new := to_jsonb(NEW);
-    -- Solo guardar campos que cambiaron
+    -- Solo guardar campos que cambiaron. updated_at lo mueve el trigger de
+    -- timestamp en cada guardado, asi que por si solo no cuenta como cambio:
+    -- registrarlo dejaba eventos que la pantalla mostraba vacios.
     SELECT jsonb_object_agg(key, value)
     INTO v_details
     FROM jsonb_each(v_new)
-    WHERE v_new -> key IS DISTINCT FROM v_old -> key;
+    WHERE v_new -> key IS DISTINCT FROM v_old -> key
+      AND key <> 'updated_at';
 
     IF v_details IS NULL THEN
       -- Nada cambio, no loguear
@@ -164,18 +177,26 @@ BEGIN
   -- APPLICATIONS
   -- La bitacora es visible para cualquier admin, asi que nunca
   -- debe contener datos personales sensibles del postulante.
-  -- Se elimina cedula y telefono de todas las ramas del detalle
-  -- y se enriquece con el titulo del formulario.
+  -- Se eliminan de todas las ramas del detalle y se enriquece
+  -- con el titulo del formulario. La identidad de la persona
+  -- viaja aparte, resuelta contra el padron.
   -- ==========================================================
   IF TG_ARGV[0] = 'application' THEN
-    v_details := (
-      (((((((
-        COALESCE(v_details, '{}'::jsonb)
-        #- '{new,national_id}') #- '{new,phone}')
-        #- '{old,national_id}') #- '{old,phone}')
-        #- '{changes,national_id}') #- '{changes,phone}')
-        #- '{previous,national_id}') #- '{previous,phone}'
-    );
+    DECLARE
+      v_pii_fields TEXT[] := ARRAY[
+        'national_id', 'phone', 'email', 'first_name', 'last_name_1', 'last_name_2'
+      ];
+      v_slot  TEXT;
+      v_field TEXT;
+    BEGIN
+      v_details := COALESCE(v_details, '{}'::jsonb);
+
+      FOREACH v_field IN ARRAY v_pii_fields LOOP
+        FOREACH v_slot IN ARRAY ARRAY['new', 'old', 'changes', 'previous'] LOOP
+          v_details := v_details #- ARRAY[v_slot, v_field];
+        END LOOP;
+      END LOOP;
+    END;
 
     -- Si lo unico que cambio era PII, no queda nada que registrar.
     IF TG_OP = 'UPDATE'
@@ -186,12 +207,17 @@ BEGIN
 
     DECLARE
       v_form_title    TEXT;
+      v_position_name TEXT;
       v_student_name  TEXT;
       v_student_carnet TEXT;
     BEGIN
       SELECT af.title INTO v_form_title
       FROM application_forms af
       WHERE af.id::TEXT = v_resource ->> 'form_id';
+
+      SELECT ap.name INTO v_position_name
+      FROM application_positions ap
+      WHERE ap.id::TEXT = v_resource ->> 'position_id';
 
       SELECT s.full_name, s.carnet INTO v_student_name, v_student_carnet
       FROM students s
@@ -200,6 +226,7 @@ BEGIN
       v_details := COALESCE(v_details, '{}'::jsonb) || jsonb_strip_nulls(
         jsonb_build_object(
           'form_title', v_form_title,
+          'position_name', v_position_name,
           'target_name', v_student_name,
           'target_carnet', v_student_carnet
         )
@@ -214,6 +241,25 @@ BEGIN
         'form_title', v_resource ->> 'title'
       )
     );
+  END IF;
+
+  -- Un puesto solo tiene sentido dentro de su convocatoria: sin el titulo
+  -- del formulario el evento no le dice nada a quien lee la bitacora.
+  IF TG_ARGV[0] = 'application_position' THEN
+    DECLARE
+      v_form_title TEXT;
+    BEGIN
+      SELECT af.title INTO v_form_title
+      FROM application_forms af
+      WHERE af.id::TEXT = v_resource ->> 'form_id';
+
+      v_details := COALESCE(v_details, '{}'::jsonb) || jsonb_strip_nulls(
+        jsonb_build_object(
+          'form_title', v_form_title,
+          'position_name', v_resource ->> 'name'
+        )
+      );
+    END;
   END IF;
 
   -- Enriquecimiento para ELECTIONS: incluir titulo legible y, al cerrar, el conteo agregado
