@@ -8,6 +8,8 @@ import {
   ApplicationFileContent,
   ApplicationFormStatus,
   ApplicationFormWithStats,
+  ApplicationPosition,
+  ApplicationPositionWithUsage,
   ApplicationStatus,
   ApplicationSummary,
   AuditActor,
@@ -16,7 +18,7 @@ import {
   UpdateApplicationFormDto,
   VoterSource,
 } from '../models/postulacionModel';
-import { normalizeText, normalizeUnlockedFields } from './applicationRules';
+import { normalizePositionName, normalizeText, normalizeUnlockedFields } from './applicationRules';
 
 const VOTER_SOURCES: VoterSource[] = ['FULL_PADRON', 'FILTERED', 'MANUAL', 'TAG'];
 const APPLICATION_STATUSES: ApplicationStatus[] = [
@@ -212,6 +214,10 @@ export async function createForm(
       client
     );
 
+    for (const rawName of data.positions ?? []) {
+      await repo.insertPosition(form.id, normalizePositionName(rawName), client);
+    }
+
     const eligible = await populateEligibility(
       form.id,
       { ...data, voter_source: voterSource },
@@ -338,6 +344,90 @@ export async function deleteForm(id: string, actor?: AuditActor): Promise<void> 
   await withOptionalAudit(actor, async (client) => {
     await repo.deleteForm(id, client);
   });
+}
+
+// ============================================
+// PUESTOS
+//
+// Editables en cualquier momento, tambien con el formulario ya abierto: el
+// cliente pidio poder anadirlos sobre una convocatoria existente.
+// ============================================
+
+export async function listPositions(formId: string): Promise<ApplicationPositionWithUsage[]> {
+  await getForm(formId);
+  return repo.findPositionsWithUsage(formId);
+}
+
+export async function createPosition(
+  formId: string,
+  name: string,
+  actor?: AuditActor
+): Promise<ApplicationPosition> {
+  await getForm(formId);
+  const normalized = normalizePositionName(name);
+
+  const existing = await repo.findPositionsByForm(formId);
+  if (existing.some((position) => position.name.toLowerCase() === normalized.toLowerCase())) {
+    throw conflict(
+      'APPLICATION_POSITION_DUPLICATED',
+      `Ya existe un puesto llamado "${normalized}" en este formulario`
+    );
+  }
+
+  return withOptionalAudit(actor, (client) => repo.insertPosition(formId, normalized, client));
+}
+
+export async function updatePosition(
+  positionId: string,
+  name: string,
+  actor?: AuditActor
+): Promise<ApplicationPosition> {
+  const position = await repo.findPositionById(positionId);
+  if (!position) {
+    throw notFound('APPLICATION_POSITION_NOT_FOUND', 'Puesto no encontrado');
+  }
+
+  const normalized = normalizePositionName(name);
+
+  const siblings = await repo.findPositionsByForm(position.form_id);
+  const duplicated = siblings.some(
+    (candidate) =>
+      candidate.id !== positionId && candidate.name.toLowerCase() === normalized.toLowerCase()
+  );
+  if (duplicated) {
+    throw conflict(
+      'APPLICATION_POSITION_DUPLICATED',
+      `Ya existe un puesto llamado "${normalized}" en este formulario`
+    );
+  }
+
+  const updated = await withOptionalAudit(actor, (client) =>
+    repo.updatePositionName(positionId, normalized, client)
+  );
+
+  if (!updated) {
+    throw notFound('APPLICATION_POSITION_NOT_FOUND', 'Puesto no encontrado');
+  }
+  return updated;
+}
+
+export async function deletePosition(positionId: string, actor?: AuditActor): Promise<void> {
+  const position = await repo.findPositionById(positionId);
+  if (!position) {
+    throw notFound('APPLICATION_POSITION_NOT_FOUND', 'Puesto no encontrado');
+  }
+
+  // Borrarlo dejaria sin destino a quienes ya lo eligieron; la FK lo impide
+  // con RESTRICT, pero se comprueba antes para dar un mensaje util.
+  const postulantes = await repo.countApplicationsByPosition(positionId);
+  if (postulantes > 0) {
+    throw conflict(
+      'APPLICATION_POSITION_IN_USE',
+      `No se puede eliminar "${position.name}": ya hay ${postulantes} postulación(es) a ese puesto`
+    );
+  }
+
+  await withOptionalAudit(actor, (client) => repo.deletePosition(positionId, client));
 }
 
 // ============================================

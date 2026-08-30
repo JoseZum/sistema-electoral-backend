@@ -127,11 +127,12 @@ export async function getMyApplication(
   const form = await loadFormForStudent(formId, studentId);
   const application = await repo.findApplicationByStudent(formId, studentId);
 
-  const [files, reviews, prefill, catalog] = await Promise.all([
+  const [files, reviews, prefill, catalog, positions] = await Promise.all([
     application ? repo.findFilesByApplication(application.id) : Promise.resolve([]),
     application ? repo.findReviewsByApplication(application.id) : Promise.resolve([]),
     buildPrefill(studentId, sessionEmail),
     findStudentCatalog(),
+    repo.findPositionsByForm(formId),
   ]);
 
   const writable = canStudentWrite(application, form);
@@ -156,7 +157,10 @@ export async function getMyApplication(
     files,
     reviews,
     prefill,
-    editable_fields: writable.allowed ? resolveEditableFields(application, form) : [],
+    editable_fields: writable.allowed
+      ? resolveEditableFields(application, form, positions.length > 0)
+      : [],
+    positions,
     sedes: catalog.sedes,
     careers: catalog.careers,
   };
@@ -208,7 +212,8 @@ export async function saveMyApplication(
 ): Promise<MyApplicationDetail> {
   const { application, form } = await getWritableApplication(formId, studentId, sessionEmail, actor);
 
-  const editableFields = resolveEditableFields(application, form);
+  const positions = await repo.findPositionsByForm(formId);
+  const editableFields = resolveEditableFields(application, form, positions.length > 0);
   const allowed = pickEditableData(data as Record<string, unknown>, editableFields);
 
   const normalized: SaveApplicationDto = {};
@@ -225,6 +230,19 @@ export async function saveMyApplication(
   }
   if (allowed.phone !== undefined) {
     normalized.phone = normalizeDigits(allowed.phone as string, 'phone');
+  }
+  if (allowed.position_id !== undefined) {
+    // Se comprueba que el puesto exista y pertenezca a ESTE formulario: si
+    // no, alguien podria apuntarse a un puesto de otra convocatoria.
+    const positionId = normalizeText(allowed.position_id as string);
+
+    if (positionId && !positions.some((position) => position.id === positionId)) {
+      throw badRequest(
+        'APPLICATION_POSITION_INVALID',
+        'El puesto seleccionado no pertenece a este formulario'
+      );
+    }
+    normalized.position_id = positionId;
   }
 
   await withOptionalAudit(actor, (client) =>
@@ -248,8 +266,11 @@ export async function submitMyApplication(
 ): Promise<MyApplicationDetail> {
   const { application } = await getWritableApplication(formId, studentId, sessionEmail, actor);
 
-  const files = await repo.findFilesByApplication(application.id);
-  const missing = findMissingFields(application, files);
+  const [files, positions] = await Promise.all([
+    repo.findFilesByApplication(application.id),
+    repo.findPositionsByForm(formId),
+  ]);
+  const missing = findMissingFields(application, files, positions.length > 0);
 
   if (missing.length > 0) {
     throw badRequest(
@@ -289,7 +310,8 @@ export async function uploadMyFile(
     );
   }
 
-  const editableFields = resolveEditableFields(application, form);
+  const positions = await repo.findPositionsByForm(formId);
+  const editableFields = resolveEditableFields(application, form, positions.length > 0);
   if (!editableFields.includes(fieldKey)) {
     throw forbidden(
       'APPLICATION_FIELD_LOCKED',
@@ -340,7 +362,8 @@ export async function deleteMyFile(
     throw notFound('APPLICATION_FILE_NOT_FOUND', 'Archivo no encontrado');
   }
 
-  const editableFields = resolveEditableFields(application, form);
+  const positions = await repo.findPositionsByForm(formId);
+  const editableFields = resolveEditableFields(application, form, positions.length > 0);
   if (!editableFields.includes(file.field_key)) {
     throw forbidden(
       'APPLICATION_FIELD_LOCKED',
