@@ -49,6 +49,9 @@ const actionLabels: Record<string, string> = {
   'application_form.delete': 'Formulario de postulacion eliminado',
   'application.update': 'Postulacion actualizada',
   'application.delete': 'Postulacion eliminada',
+  'application_position.insert': 'Puesto de postulacion agregado',
+  'application_position.update': 'Puesto de postulacion actualizado',
+  'application_position.delete': 'Puesto de postulacion eliminado',
 };
 
 const resourceLabels: Record<string, string> = {
@@ -63,6 +66,7 @@ const resourceLabels: Record<string, string> = {
   audit: 'auditoria',
   application_form: 'formulario de postulacion',
   application: 'postulacion',
+  application_position: 'puesto de postulacion',
 };
 
 // Estos resource_types NUNCA deben aparecer en auditoria por privacidad.
@@ -252,6 +256,19 @@ function buildActivityMessage(row: Record<string, unknown>): string {
     const formTitle = getDetailString(details, 'form_title');
     if (formTitle) {
       return `${actionLabel} "${formTitle}"`;
+    }
+  }
+
+  if (row.resource_type === 'application_position') {
+    const branch = details?.new ?? details?.old ?? details?.changes ?? details?.previous;
+    const positionName = getDetailString(asObjectRecord(branch), 'name');
+    const formTitle = getDetailString(details, 'form_title');
+
+    if (positionName && formTitle) {
+      return `${actionLabel} "${positionName}" en "${formTitle}"`;
+    }
+    if (positionName) {
+      return `${actionLabel} "${positionName}"`;
     }
   }
 
