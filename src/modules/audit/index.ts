@@ -44,9 +44,10 @@ const actionLabels: Record<string, string> = {
   'auth.login': 'Inicio de sesion',
   'auth.logout': 'Cierre de sesion',
   'audit.purge': 'Auditoria purgada',
-  'application_form.insert': 'Formulario de postulacion creado',
-  'application_form.update': 'Formulario de postulacion actualizado',
-  'application_form.delete': 'Formulario de postulacion eliminado',
+  'application_form.insert': 'Convocatoria de postulacion creada',
+  'application_form.update': 'Convocatoria de postulacion actualizada',
+  'application_form.delete': 'Convocatoria de postulacion eliminada',
+  'application.insert': 'Postulacion iniciada',
   'application.update': 'Postulacion actualizada',
   'application.delete': 'Postulacion eliminada',
   'application_position.insert': 'Puesto de postulacion agregado',
@@ -64,7 +65,7 @@ const resourceLabels: Record<string, string> = {
   auth: 'autenticacion',
   padron: 'padron',
   audit: 'auditoria',
-  application_form: 'formulario de postulacion',
+  application_form: 'convocatoria de postulacion',
   application: 'postulacion',
   application_position: 'puesto de postulacion',
 };
@@ -261,7 +262,8 @@ function buildActivityMessage(row: Record<string, unknown>): string {
 
   if (row.resource_type === 'application_position') {
     const branch = details?.new ?? details?.old ?? details?.changes ?? details?.previous;
-    const positionName = getDetailString(asObjectRecord(branch), 'name');
+    const positionName =
+      getDetailString(details, 'position_name') ?? getDetailString(asObjectRecord(branch), 'name');
     const formTitle = getDetailString(details, 'form_title');
 
     if (positionName && formTitle) {
@@ -289,7 +291,9 @@ function buildActivityMessage(row: Record<string, unknown>): string {
     };
 
     const verb = (newStatus && statusLabels[newStatus]) || actionLabel;
+    const positionName = getDetailString(details, 'position_name');
     const parts = [verb];
+    if (positionName) parts.push(`a "${positionName}"`);
     if (formTitle) parts.push(`en "${formTitle}"`);
     if (personLabel) parts.push(`· ${personLabel}`);
 

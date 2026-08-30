@@ -376,6 +376,56 @@ describe('audit', () => {
       expect(msg).toContain('Carlos López');
     });
 
+    it('formats application_form action with the form title', async () => {
+      const msg = await getMessage({
+        action: 'application_form.insert', resource_type: 'application_form',
+        resource_id: 'uuid-form', details: { form_title: 'Convocatoria TEE 2026' },
+      });
+      expect(msg).toBe('Convocatoria de postulacion creada "Convocatoria TEE 2026"');
+    });
+
+    it('names the position and its form instead of the raw id', async () => {
+      const msg = await getMessage({
+        action: 'application_position.insert', resource_type: 'application_position',
+        resource_id: 'fd188816-0309-40c3-b6d3-58ed8f869295',
+        details: { position_name: 'Presidencia', form_title: 'Convocatoria TEE 2026' },
+      });
+      expect(msg).toBe('Puesto de postulacion agregado "Presidencia" en "Convocatoria TEE 2026"');
+      expect(msg).not.toContain('fd188816');
+    });
+
+    it('falls back to the position name inside new when the trigger did not enrich', async () => {
+      const msg = await getMessage({
+        action: 'application_position.insert', resource_type: 'application_position',
+        resource_id: 'uuid-pos', details: { new: { name: 'Tesoreria' } },
+      });
+      expect(msg).toBe('Puesto de postulacion agregado "Tesoreria"');
+    });
+
+    it('describes an approved application with position, form and applicant', async () => {
+      const msg = await getMessage({
+        action: 'application.update', resource_type: 'application', resource_id: 'uuid-app',
+        target_name: 'Ana García', target_carnet: '2021001234',
+        details: {
+          changes: { status: 'APPROVED' },
+          position_name: 'Presidencia',
+          form_title: 'Convocatoria TEE 2026',
+        },
+      });
+      expect(msg).toBe(
+        'Postulacion aprobada a "Presidencia" en "Convocatoria TEE 2026" · Ana García · 2021001234',
+      );
+    });
+
+    it('uses the submitted wording when the student sends the application', async () => {
+      const msg = await getMessage({
+        action: 'application.update', resource_type: 'application', resource_id: 'uuid-app',
+        target_name: 'Ana García', target_carnet: '2021001234',
+        details: { changes: { status: 'SUBMITTED' }, form_title: 'Convocatoria TEE 2026' },
+      });
+      expect(msg).toBe('Postulacion enviada en "Convocatoria TEE 2026" · Ana García · 2021001234');
+    });
+
     it('formats unknown action as title case', async () => {
       const msg = await getMessage({
         action: 'custom.action_type', resource_type: 'tag',
