@@ -8,6 +8,7 @@ import {
   findMissingFields,
   guessNationalIdFromDegreeLevel,
   normalizeDigits,
+  normalizePositionName,
   normalizeUnlockedFields,
   pickEditableData,
   resolveEditableFields,
@@ -35,6 +36,7 @@ function buildApplication(overrides: Partial<Application> = {}): Application {
     phone: '88887777',
     sede: 'Cartago',
     career: 'Ingenieria en Computacion',
+    position_id: null,
     unlocked_fields: null,
     correction_deadline: null,
     review_comment: null,
@@ -188,6 +190,24 @@ describe('resolveEditableFields', () => {
     expect(fields).toEqual(['last_name_2', 'carnet_copy']);
   });
 
+  it('solo ofrece el puesto si el formulario define alguno', () => {
+    const sin = resolveEditableFields(null, { allow_other_documents: false }, false);
+    const con = resolveEditableFields(null, { allow_other_documents: false }, true);
+
+    expect(sin).not.toContain('position_id');
+    expect(con).toContain('position_id');
+  });
+
+  it('respeta el puesto entre los campos desbloqueados al condicionar', () => {
+    const fields = resolveEditableFields(
+      buildApplication({ status: 'CONDITIONED', unlocked_fields: ['position_id'] }),
+      { allow_other_documents: false },
+      true
+    );
+
+    expect(fields).toEqual(['position_id']);
+  });
+
   it('no deja editar nada una vez enviada o resuelta', () => {
     for (const status of ['SUBMITTED', 'APPROVED', 'REJECTED'] as const) {
       expect(resolveEditableFields(buildApplication({ status }), { allow_other_documents: true }))
@@ -289,6 +309,20 @@ describe('findMissingFields', () => {
     expect(missing).not.toContain('Informe de matrícula');
   });
 
+  it('exige elegir puesto solo si el formulario define alguno', () => {
+    const sinPuesto = buildApplication({ position_id: null });
+
+    expect(findMissingFields(sinPuesto, ALL_REQUIRED_FILES, false)).toEqual([]);
+    expect(findMissingFields(sinPuesto, ALL_REQUIRED_FILES, true)).toEqual([
+      'Puesto al que se postula',
+    ]);
+  });
+
+  it('no reporta el puesto cuando ya fue elegido', () => {
+    const conPuesto = buildApplication({ position_id: 'puesto-1' });
+    expect(findMissingFields(conPuesto, ALL_REQUIRED_FILES, true)).toEqual([]);
+  });
+
   it('no exige el adjunto opcional de otros documentos', () => {
     expect(findMissingFields(buildApplication(), ALL_REQUIRED_FILES)).not.toContain(
       'Otros documentos'
@@ -379,6 +413,22 @@ describe('sanitizeFileName', () => {
   });
 });
 
+describe('normalizePositionName', () => {
+  it('recorta espacios sobrantes', () => {
+    expect(normalizePositionName('  Presidencia  ')).toBe('Presidencia');
+    expect(normalizePositionName('Secretaria   General')).toBe('Secretaria General');
+  });
+
+  it('rechaza un nombre vacio', () => {
+    expect(() => normalizePositionName('   ')).toThrowError(AppError);
+    expect(() => normalizePositionName(null)).toThrowError(AppError);
+  });
+
+  it('rechaza un nombre desmedido', () => {
+    expect(() => normalizePositionName('a'.repeat(121))).toThrowError(AppError);
+  });
+});
+
 describe('normalizeUnlockedFields', () => {
   it('descarta claves inventadas', () => {
     expect(normalizeUnlockedFields(['last_name_2', 'campo_inventado', 'carnet_copy'])).toEqual([
@@ -389,6 +439,10 @@ describe('normalizeUnlockedFields', () => {
 
   it('nunca permite desbloquear el correo', () => {
     expect(normalizeUnlockedFields(['email', 'phone'])).toEqual(['phone']);
+  });
+
+  it('permite desbloquear el puesto', () => {
+    expect(normalizeUnlockedFields(['position_id'])).toEqual(['position_id']);
   });
 
   it('elimina duplicados y tolera entradas invalidas', () => {

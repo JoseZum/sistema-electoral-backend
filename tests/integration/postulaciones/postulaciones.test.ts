@@ -16,6 +16,7 @@ const OTHER_STUDENT_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const FORM_ID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const APPLICATION_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 const FILE_ID = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+const POSITION_ID = '11111111-1111-4111-8111-111111111111';
 
 const mockAuth = vi.hoisted(() => ({ verifySessionJWT: vi.fn() }));
 
@@ -50,6 +51,13 @@ const mockRepo = vi.hoisted(() => ({
   insertForm: vi.fn(),
   updateForm: vi.fn(),
   deleteForm: vi.fn(),
+  findPositionsByForm: vi.fn(),
+  findPositionsWithUsage: vi.fn(),
+  findPositionById: vi.fn(),
+  insertPosition: vi.fn(),
+  updatePositionName: vi.fn(),
+  deletePosition: vi.fn(),
+  countApplicationsByPosition: vi.fn(),
   clearEligibility: vi.fn(),
   populateEligibilityFromPadron: vi.fn(),
   populateEligibilityFromTag: vi.fn(),
@@ -205,6 +213,8 @@ beforeEach(() => {
   mockRepo.findApplicationByStudent.mockResolvedValue(draftApplication);
   mockRepo.findFilesByApplication.mockResolvedValue([]);
   mockRepo.findReviewsByApplication.mockResolvedValue([]);
+  mockRepo.findPositionsByForm.mockResolvedValue([]);
+  mockRepo.findPositionsWithUsage.mockResolvedValue([]);
   mockRepo.findAllForms.mockResolvedValue([]);
   mockRepo.findFormsForStudent.mockResolvedValue([]);
   mockRepo.findApplicationsByForm.mockResolvedValue([]);
@@ -252,6 +262,10 @@ describe('/api/postulaciones (admin)', () => {
     ['GET', `/api/postulaciones/respuestas/${APPLICATION_ID}`],
     ['POST', `/api/postulaciones/respuestas/${APPLICATION_ID}/revision`],
     ['GET', `/api/postulaciones/archivos/${FILE_ID}`],
+    ['GET', `/api/postulaciones/formularios/${FORM_ID}/puestos`],
+    ['POST', `/api/postulaciones/formularios/${FORM_ID}/puestos`],
+    ['PUT', `/api/postulaciones/puestos/${POSITION_ID}`],
+    ['DELETE', `/api/postulaciones/puestos/${POSITION_ID}`],
   ];
 
   it.each(adminRoutes)('%s %s responde 401 sin bearer', async (method, path) => {
@@ -572,6 +586,141 @@ describe('/api/mis-postulaciones (estudiante)', () => {
     expect(body.code).toBe('APPLICATION_INCOMPLETE');
     expect(String(body.error)).toContain('Informe de matrícula');
     expect(mockRepo.markApplicationSubmitted).not.toHaveBeenCalled();
+  });
+});
+
+// ============================================
+// PUESTOS
+// ============================================
+
+describe('puestos', () => {
+  const basePath = `/api/postulaciones/formularios/${FORM_ID}/puestos`;
+
+  const position = {
+    id: POSITION_ID,
+    form_id: FORM_ID,
+    name: 'Presidencia',
+    display_order: 0,
+    created_at: '2026-08-29T00:00:00Z',
+    updated_at: '2026-08-29T00:00:00Z',
+  };
+
+  it('rechaza un nombre vacio', async () => {
+    const { response, body } = await request('POST', basePath, {
+      token: 'admin-token',
+      body: { name: '   ' },
+    });
+
+    expect(response.status).toBe(400);
+    expect(body.code).toBe('APPLICATION_POSITION_NAME_REQUIRED');
+    expect(mockRepo.insertPosition).not.toHaveBeenCalled();
+  });
+
+  it('rechaza un puesto duplicado ignorando mayusculas y espacios', async () => {
+    mockRepo.findPositionsByForm.mockResolvedValueOnce([position]);
+
+    const { response, body } = await request('POST', basePath, {
+      token: 'admin-token',
+      body: { name: '  presidencia ' },
+    });
+
+    expect(response.status).toBe(409);
+    expect(body.code).toBe('APPLICATION_POSITION_DUPLICATED');
+    expect(mockRepo.insertPosition).not.toHaveBeenCalled();
+  });
+
+  it('crea un puesto con el nombre normalizado', async () => {
+    mockRepo.insertPosition.mockResolvedValue(position);
+
+    const { response } = await request('POST', basePath, {
+      token: 'admin-token',
+      body: { name: '  Presidencia  ' },
+    });
+
+    expect(response.status).toBe(201);
+    expect(mockRepo.insertPosition).toHaveBeenCalledWith(
+      FORM_ID,
+      'Presidencia',
+      expect.anything()
+    );
+  });
+
+  it('no deja borrar un puesto que ya tiene postulaciones', async () => {
+    mockRepo.findPositionById.mockResolvedValue(position);
+    mockRepo.countApplicationsByPosition.mockResolvedValue(3);
+
+    const { response, body } = await request('DELETE', `/api/postulaciones/puestos/${POSITION_ID}`, {
+      token: 'admin-token',
+    });
+
+    expect(response.status).toBe(409);
+    expect(body.code).toBe('APPLICATION_POSITION_IN_USE');
+    expect(String(body.error)).toContain('3');
+    expect(mockRepo.deletePosition).not.toHaveBeenCalled();
+  });
+
+  it('borra un puesto sin postulaciones', async () => {
+    mockRepo.findPositionById.mockResolvedValue(position);
+    mockRepo.countApplicationsByPosition.mockResolvedValue(0);
+
+    const { response } = await request('DELETE', `/api/postulaciones/puestos/${POSITION_ID}`, {
+      token: 'admin-token',
+    });
+
+    expect(response.status).toBe(200);
+    expect(mockRepo.deletePosition).toHaveBeenCalled();
+  });
+
+  it('devuelve 404 al editar un puesto inexistente', async () => {
+    mockRepo.findPositionById.mockResolvedValue(null);
+
+    const { response, body } = await request('PUT', `/api/postulaciones/puestos/${POSITION_ID}`, {
+      token: 'admin-token',
+      body: { name: 'Otro' },
+    });
+
+    expect(response.status).toBe(404);
+    expect(body.code).toBe('APPLICATION_POSITION_NOT_FOUND');
+  });
+
+  it('impide postularse a un puesto de otro formulario', async () => {
+    mockRepo.findPositionsByForm.mockResolvedValue([position]);
+
+    const { response, body } = await request('PUT', `/api/mis-postulaciones/${FORM_ID}`, {
+      token: 'voter-token',
+      body: { position_id: '99999999-9999-4999-8999-999999999999' },
+    });
+
+    expect(response.status).toBe(400);
+    expect(body.code).toBe('APPLICATION_POSITION_INVALID');
+    expect(mockRepo.updateApplicationData).not.toHaveBeenCalled();
+  });
+
+  it('acepta un puesto del propio formulario', async () => {
+    mockRepo.findPositionsByForm.mockResolvedValue([position]);
+
+    const { response } = await request('PUT', `/api/mis-postulaciones/${FORM_ID}`, {
+      token: 'voter-token',
+      body: { position_id: POSITION_ID },
+    });
+
+    expect(response.status).toBe(200);
+    expect(mockRepo.updateApplicationData).toHaveBeenCalledWith(
+      APPLICATION_ID,
+      { position_id: POSITION_ID },
+      expect.anything()
+    );
+  });
+
+  it('exige elegir puesto al enviar si el formulario define alguno', async () => {
+    mockRepo.findPositionsByForm.mockResolvedValue([position]);
+
+    const { response, body } = await request('POST', `/api/mis-postulaciones/${FORM_ID}/enviar`, {
+      token: 'voter-token',
+    });
+
+    expect(response.status).toBe(400);
+    expect(String(body.error)).toContain('Puesto al que se postula');
   });
 });
 
