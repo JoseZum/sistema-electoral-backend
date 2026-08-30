@@ -308,6 +308,28 @@ CREATE TABLE application_form_eligibility (
 CREATE INDEX idx_application_eligibility_student ON application_form_eligibility(student_id);
 
 -- ============================================
+-- PUESTOS DE UN FORMULARIO
+--
+-- Cada formulario define N puestos (solo nombre) y el postulante elige a
+-- cuál se presenta. El administrador puede editarlos en cualquier momento.
+-- ============================================
+CREATE TABLE application_positions (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    form_id       UUID NOT NULL REFERENCES application_forms(id) ON DELETE CASCADE,
+    name          TEXT NOT NULL,
+    display_order INT NOT NULL DEFAULT 0,
+    created_at    TIMESTAMPTZ DEFAULT now(),
+    updated_at    TIMESTAMPTZ DEFAULT now(),
+    CONSTRAINT chk_application_positions_name CHECK (btrim(name) <> '')
+);
+
+CREATE INDEX idx_application_positions_form ON application_positions(form_id, display_order);
+
+-- Dos puestos con el mismo nombre no se distinguen en el desplegable.
+CREATE UNIQUE INDEX uniq_application_positions_name
+    ON application_positions(form_id, lower(btrim(name)));
+
+-- ============================================
 -- POSTULACIONES (respuesta del estudiante)
 -- ============================================
 CREATE TABLE applications (
@@ -328,6 +350,10 @@ CREATE TABLE applications (
     -- Información seleccionable
     sede                TEXT,
     career              TEXT,
+    -- Puesto al que se presenta. Nullable porque un formulario puede no
+    -- definir puestos; si los define, se exige al enviar.
+    -- RESTRICT protege el histórico: no se borra un puesto con postulantes.
+    position_id         UUID REFERENCES application_positions(id) ON DELETE RESTRICT,
 
     -- Revisión
     unlocked_fields     JSONB,
@@ -353,6 +379,7 @@ CREATE TABLE applications (
 CREATE INDEX idx_applications_form    ON applications(form_id);
 CREATE INDEX idx_applications_student ON applications(student_id);
 CREATE INDEX idx_applications_status  ON applications(status);
+CREATE INDEX idx_applications_position ON applications(position_id);
 
 -- ============================================
 -- ADJUNTOS DE POSTULACIÓN (PDF / imagen) como BYTEA

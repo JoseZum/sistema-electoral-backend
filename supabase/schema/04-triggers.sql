@@ -476,6 +476,21 @@ CREATE TRIGGER trg_applications_delete
   FOR EACH ROW EXECUTE FUNCTION fn_audit_log('application');
 
 -- ============================================
+-- TRIGGERS: APPLICATION_POSITIONS
+-- ============================================
+CREATE TRIGGER trg_application_positions_insert
+  AFTER INSERT ON application_positions
+  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('application_position');
+
+CREATE TRIGGER trg_application_positions_update
+  AFTER UPDATE ON application_positions
+  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('application_position');
+
+CREATE TRIGGER trg_application_positions_delete
+  AFTER DELETE ON application_positions
+  FOR EACH ROW EXECUTE FUNCTION fn_audit_log('application_position');
+
+-- ============================================
 -- PRIVACIDAD / VOLUMEN: NO hay triggers en application_files
 -- (la columna content reventaría audit_logs) ni en
 -- application_form_eligibility (ruido masivo, mismo criterio
@@ -519,4 +534,8 @@ CREATE TRIGGER trg_application_forms_updated_at
 
 CREATE TRIGGER trg_applications_updated_at
   BEFORE UPDATE ON applications
+  FOR EACH ROW EXECUTE FUNCTION fn_set_updated_at();
+
+CREATE TRIGGER trg_application_positions_updated_at
+  BEFORE UPDATE ON application_positions
   FOR EACH ROW EXECUTE FUNCTION fn_set_updated_at();
