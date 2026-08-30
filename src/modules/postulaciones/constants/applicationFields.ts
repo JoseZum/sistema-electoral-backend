@@ -18,8 +18,13 @@ export const TEXT_FIELD_KEYS = [
   'phone',
 ] as const;
 
-/** Campos de lista desplegable. */
-export const SELECT_FIELD_KEYS = ['sede', 'career'] as const;
+/**
+ * Campos de lista desplegable.
+ *
+ * `position_id` solo se muestra si el formulario define puestos; en ese caso
+ * es obligatorio para poder enviar.
+ */
+export const SELECT_FIELD_KEYS = ['sede', 'career', 'position_id'] as const;
 
 /** Campos de archivo. `other` solo existe si el admin lo habilito. */
 export const FILE_FIELD_KEYS = [
@@ -71,6 +76,7 @@ export const FIELD_LABELS: Record<ApplicationFieldKey, string> = {
   phone: 'Número de teléfono',
   sede: 'Sede',
   career: 'Carrera',
+  position_id: 'Puesto al que se postula',
   enrollment_report: 'Informe de matrícula',
   id_copy: 'Copia de la identificación',
   carnet_copy: 'Copia del carné',

@@ -17,6 +17,21 @@ export type ReviewDecision = Extract<
 
 export type VoterSource = 'FULL_PADRON' | 'FILTERED' | 'MANUAL' | 'TAG';
 
+/** Puesto al que se puede presentar un postulante. Solo tiene nombre. */
+export interface ApplicationPosition {
+  id: string;
+  form_id: string;
+  name: string;
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Puesto con el conteo de postulantes, para avisar antes de borrarlo. */
+export interface ApplicationPositionWithUsage extends ApplicationPosition {
+  application_count: number;
+}
+
 export interface ApplicationForm {
   id: string;
   title: string;
@@ -39,6 +54,7 @@ export interface ApplicationFormWithStats extends ApplicationForm {
   tag_name: string | null;
   tag_color: string | null;
   election_title: string | null;
+  positions: ApplicationPosition[];
   eligible_count: number;
   submitted_count: number;
   approved_count: number;
@@ -61,6 +77,7 @@ export interface Application {
   phone: string | null;
   sede: string | null;
   career: string | null;
+  position_id: string | null;
   unlocked_fields: ApplicationFieldKey[] | null;
   correction_deadline: string | null;
   review_comment: string | null;
@@ -103,6 +120,7 @@ export interface ApplicationSummary extends Application {
   student_full_name: string;
   student_carnet: string;
   student_email: string;
+  position_name: string | null;
   files_count: number;
 }
 
@@ -128,9 +146,17 @@ export interface CreateApplicationFormDto {
   tag_id?: string | null;
   election_id?: string | null;
   student_ids?: string[];
+  /** Nombres de los puestos a crear junto con el formulario. */
+  positions?: string[];
 }
 
 export type UpdateApplicationFormDto = Partial<CreateApplicationFormDto>;
+
+export interface CreatePositionDto {
+  name: string;
+}
+
+export type UpdatePositionDto = CreatePositionDto;
 
 export interface ReviewApplicationDto {
   decision: ReviewDecision;
@@ -149,7 +175,8 @@ export type SaveApplicationDto = Partial<
     | 'carnet'
     | 'phone'
     | 'sede'
-    | 'career',
+    | 'career'
+    | 'position_id',
     string | null
   >
 >;
@@ -197,6 +224,7 @@ export interface MyApplicationDetail {
    * CONDITIONED solo los que el admin desbloqueó.
    */
   editable_fields: ApplicationFieldKey[];
+  positions: ApplicationPosition[];
   sedes: string[];
   careers: string[];
 }
