@@ -21,6 +21,14 @@ import {
 import { normalizePositionName, normalizeText, normalizeUnlockedFields } from './applicationRules';
 
 const VOTER_SOURCES: VoterSource[] = ['FULL_PADRON', 'FILTERED', 'MANUAL', 'TAG'];
+const FORM_STATUSES: ApplicationFormStatus[] = [
+  'DRAFT',
+  'SCHEDULED',
+  'OPEN',
+  'CLOSED',
+  'ARCHIVED',
+];
+const EDITABLE_FORM_STATUSES: ApplicationFormStatus[] = ['DRAFT', 'SCHEDULED'];
 const APPLICATION_STATUSES: ApplicationStatus[] = [
   'DRAFT',
   'SUBMITTED',
@@ -92,6 +100,25 @@ function validateWindow(startTime: Date | null, endTime: Date | null) {
   }
 }
 
+function validatePublishableWindow(
+  requestedStatus: ApplicationFormStatus | undefined,
+  endTime: Date | null,
+  now: Date = new Date()
+) {
+  if (
+    requestedStatus !== undefined &&
+    requestedStatus !== 'DRAFT' &&
+    requestedStatus !== 'ARCHIVED' &&
+    endTime &&
+    endTime.getTime() <= now.getTime()
+  ) {
+    throw badRequest(
+      'APPLICATION_FORM_WINDOW_ALREADY_CLOSED',
+      'La fecha de cierre debe estar en el futuro para publicar el formulario'
+    );
+  }
+}
+
 function validateVoterSource(source: unknown): VoterSource {
   if (typeof source !== 'string' || !VOTER_SOURCES.includes(source as VoterSource)) {
     throw badRequest(
@@ -100,6 +127,16 @@ function validateVoterSource(source: unknown): VoterSource {
     );
   }
   return source as VoterSource;
+}
+
+function validateFormStatus(status: unknown): ApplicationFormStatus {
+  if (typeof status !== 'string' || !FORM_STATUSES.includes(status as ApplicationFormStatus)) {
+    throw badRequest(
+      'APPLICATION_FORM_INVALID_STATUS',
+      'El estado indicado para el formulario no existe'
+    );
+  }
+  return status as ApplicationFormStatus;
 }
 
 /**
@@ -186,7 +223,10 @@ export async function createForm(
   const endTime = parseDate(data.end_time, 'cierre');
   validateWindow(startTime, endTime);
 
-  const status = resolveFormStatus(data.status, startTime, endTime);
+  const requestedStatus =
+    data.status !== undefined ? validateFormStatus(data.status) : undefined;
+  validatePublishableWindow(requestedStatus, endTime);
+  const status = resolveFormStatus(requestedStatus, startTime, endTime);
 
   const created = await withOptionalAudit(actor, async (client) => {
     const form = await repo.insertForm(
@@ -244,29 +284,31 @@ export async function updateForm(
   data: UpdateApplicationFormDto,
   actor?: AuditActor
 ): Promise<ApplicationFormWithStats> {
+  // Una convocatoria programada puede haberse abierto desde la ultima vez
+  // que el administrador cargo la pantalla. Sincronizar primero evita que
+  // una pestaña vieja modifique un formulario que ya esta recibiendo datos.
+  await repo.syncAutomaticStatuses();
+
   const existing = await repo.findFormRawById(id);
   if (!existing) {
     throw notFound('APPLICATION_FORM_NOT_FOUND', 'Formulario de postulación no encontrado');
   }
 
-  const audienceChanged =
-    data.voter_source !== undefined ||
-    data.voter_filter !== undefined ||
-    data.tag_id !== undefined ||
-    data.student_ids !== undefined;
-
-  // Cambiar la audiencia repuebla la elegibilidad; si ya hay respuestas,
-  // eso dejaria postulaciones huerfanas de gente que ya no es elegible.
-  if (audienceChanged) {
-    const applications = await repo.findApplicationsByForm(id);
-    if (applications.length > 0) {
-      throw conflict(
-        'APPLICATION_FORM_HAS_RESPONSES',
-        'No se puede cambiar la audiencia de un formulario que ya tiene postulaciones'
-      );
-    }
+  if (!EDITABLE_FORM_STATUSES.includes(existing.status)) {
+    throw conflict(
+      'APPLICATION_FORM_NOT_EDITABLE',
+      'Solo se pueden editar formularios en borrador o programados'
+    );
   }
 
+  const requestedStatus =
+    data.status !== undefined ? validateFormStatus(data.status) : undefined;
+  if (requestedStatus === 'CLOSED' || requestedStatus === 'ARCHIVED') {
+    throw badRequest(
+      'APPLICATION_FORM_INVALID_STATUS_TRANSITION',
+      `No se puede pasar un formulario editable directamente a ${requestedStatus}`
+    );
+  }
   const startTime =
     data.start_time !== undefined
       ? parseDate(data.start_time, 'apertura')
@@ -280,10 +322,62 @@ export async function updateForm(
         ? new Date(existing.end_time)
         : null;
   validateWindow(startTime, endTime);
+  validatePublishableWindow(requestedStatus, endTime);
 
-  const voterSource = data.voter_source
+  const voterSource = data.voter_source !== undefined
     ? validateVoterSource(data.voter_source)
     : existing.voter_source;
+
+  const rawVoterFilter =
+    data.voter_filter !== undefined
+      ? data.voter_filter
+      : (existing.voter_filter as { sede?: string; career?: string } | null);
+  const voterFilter =
+    voterSource === 'FILTERED'
+      ? {
+          sede: normalizeText(rawVoterFilter?.sede) ?? undefined,
+          career: normalizeText(rawVoterFilter?.career) ?? undefined,
+        }
+      : null;
+  const tagId =
+    voterSource === 'TAG'
+      ? data.tag_id !== undefined
+        ? data.tag_id
+        : existing.tag_id
+      : null;
+
+  const existingFilter =
+    existing.voter_source === 'FILTERED'
+      ? {
+          sede: normalizeText((existing.voter_filter as { sede?: string } | null)?.sede) ?? undefined,
+          career:
+            normalizeText((existing.voter_filter as { career?: string } | null)?.career) ?? undefined,
+        }
+      : null;
+
+  // Los formularios de edicion envian su estado completo. Solo repoblar la
+  // audiencia cuando el valor cambio de verdad evita rechazos y trabajo
+  // innecesario al guardar titulo, fechas u otros documentos.
+  const audienceChanged =
+    voterSource !== existing.voter_source ||
+    JSON.stringify(voterFilter) !== JSON.stringify(existingFilter) ||
+    tagId !== existing.tag_id ||
+    data.student_ids !== undefined;
+
+  if (audienceChanged) {
+    const applications = await repo.findApplicationsByForm(id);
+    if (applications.length > 0) {
+      throw conflict(
+        'APPLICATION_FORM_HAS_RESPONSES',
+        'No se puede cambiar la audiencia de un formulario que ya tiene postulaciones'
+      );
+    }
+  }
+
+  const resolvedStatus =
+    requestedStatus !== undefined
+      ? resolveFormStatus(requestedStatus, startTime, endTime)
+      : undefined;
 
   await withOptionalAudit(actor, async (client) => {
     await repo.updateForm(
@@ -296,23 +390,18 @@ export async function updateForm(
         end_time: data.end_time !== undefined ? (endTime ? endTime.toISOString() : null) : undefined,
         voter_source: data.voter_source !== undefined ? voterSource : undefined,
         voter_filter:
-          data.voter_filter !== undefined
-            ? voterSource === 'FILTERED'
-              ? {
-                  sede: normalizeText(data.voter_filter?.sede) ?? undefined,
-                  career: normalizeText(data.voter_filter?.career) ?? undefined,
-                }
-              : null
+          data.voter_filter !== undefined || data.voter_source !== undefined
+            ? voterFilter
             : undefined,
-        tag_id: data.tag_id !== undefined ? (voterSource === 'TAG' ? data.tag_id : null) : undefined,
+        tag_id:
+          data.tag_id !== undefined || data.voter_source !== undefined
+            ? tagId
+            : undefined,
         other_documents_label:
           data.other_documents_label !== undefined
             ? normalizeText(data.other_documents_label)
             : undefined,
-        status:
-          data.status !== undefined
-            ? resolveFormStatus(data.status, startTime, endTime)
-            : undefined,
+        status: resolvedStatus,
       },
       client
     );
@@ -323,12 +412,23 @@ export async function updateForm(
         id,
         {
           voter_source: voterSource,
-          voter_filter: data.voter_filter ?? (existing.voter_filter as { sede?: string; career?: string } | null),
-          tag_id: data.tag_id ?? existing.tag_id,
+          voter_filter: voterFilter,
+          tag_id: tagId,
           student_ids: data.student_ids,
         },
         client
       );
+    }
+
+    const resultingStatus = resolvedStatus ?? existing.status;
+    if (resultingStatus !== 'DRAFT') {
+      const eligible = await repo.countEligibility(id, client);
+      if (eligible === 0) {
+        throw badRequest(
+          'APPLICATION_FORM_NO_ELIGIBLE_STUDENTS',
+          'La audiencia seleccionada no incluye a ningún estudiante activo'
+        );
+      }
     }
   });
 

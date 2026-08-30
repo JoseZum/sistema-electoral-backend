@@ -218,6 +218,12 @@ beforeEach(() => {
   mockRepo.findAllForms.mockResolvedValue([]);
   mockRepo.findFormsForStudent.mockResolvedValue([]);
   mockRepo.findApplicationsByForm.mockResolvedValue([]);
+  mockRepo.countEligibility.mockResolvedValue(10);
+  mockRepo.updateForm.mockResolvedValue(openForm);
+  mockRepo.clearEligibility.mockResolvedValue(undefined);
+  mockRepo.populateEligibilityFromPadron.mockResolvedValue(10);
+  mockRepo.populateEligibilityFromTag.mockResolvedValue(10);
+  mockRepo.populateEligibilityManual.mockResolvedValue(10);
   mockRepo.updateApplicationData.mockResolvedValue(draftApplication);
 });
 
@@ -337,6 +343,76 @@ describe('/api/postulaciones (admin)', () => {
 
     expect(response.status).toBe(404);
     expect(body.code).toBe('APPLICATION_FORM_NOT_FOUND');
+  });
+
+  it('edita un borrador sin repoblar una audiencia que no cambio', async () => {
+    mockRepo.findFormRawById.mockResolvedValueOnce({ ...openForm, status: 'DRAFT' });
+    mockRepo.findFormById.mockResolvedValueOnce({
+      ...openForm,
+      title: 'Postulacion actualizada',
+      status: 'DRAFT',
+      eligible_count: 10,
+    });
+
+    const { response, body } = await request(
+      'PUT',
+      `/api/postulaciones/formularios/${FORM_ID}`,
+      {
+        token: 'admin-token',
+        body: {
+          title: 'Postulacion actualizada',
+          status: 'DRAFT',
+          voter_source: 'FULL_PADRON',
+          voter_filter: null,
+          tag_id: null,
+        },
+      }
+    );
+
+    expect(response.status).toBe(200);
+    expect(body.title).toBe('Postulacion actualizada');
+    expect(mockRepo.updateForm).toHaveBeenCalledWith(
+      FORM_ID,
+      expect.objectContaining({ title: 'Postulacion actualizada', status: 'DRAFT' }),
+      expect.anything()
+    );
+    expect(mockRepo.clearEligibility).not.toHaveBeenCalled();
+  });
+
+  it('rechaza editar una convocatoria que ya esta abierta', async () => {
+    const { response, body } = await request(
+      'PUT',
+      `/api/postulaciones/formularios/${FORM_ID}`,
+      { token: 'admin-token', body: { title: 'Cambio tardio' } }
+    );
+
+    expect(response.status).toBe(409);
+    expect(body.code).toBe('APPLICATION_FORM_NOT_EDITABLE');
+    expect(mockRepo.updateForm).not.toHaveBeenCalled();
+  });
+
+  it('rechaza publicar un borrador sin estudiantes elegibles', async () => {
+    mockRepo.findFormRawById.mockResolvedValueOnce({ ...openForm, status: 'DRAFT' });
+    mockRepo.countEligibility.mockResolvedValueOnce(0);
+
+    const { response, body } = await request(
+      'PUT',
+      `/api/postulaciones/formularios/${FORM_ID}`,
+      {
+        token: 'admin-token',
+        body: {
+          title: openForm.title,
+          status: 'OPEN',
+          voter_source: 'FULL_PADRON',
+          voter_filter: null,
+          tag_id: null,
+        },
+      }
+    );
+
+    expect(response.status).toBe(400);
+    expect(body.code).toBe('APPLICATION_FORM_NO_ELIGIBLE_STUDENTS');
+    expect(mockDatabase.client.query).toHaveBeenCalledWith('ROLLBACK');
   });
 });
 
