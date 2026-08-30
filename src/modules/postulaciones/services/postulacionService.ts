@@ -63,6 +63,89 @@ async function withOptionalAudit<T>(
   }
 }
 
+async function setAuditSessionValue(
+  client: PoolClient | undefined,
+  key: string,
+  value: string
+): Promise<void> {
+  if (!client) return;
+  await client.query('SELECT set_config($1, $2, true)', [key, value]);
+}
+
+/**
+ * Los puestos se insertan uno por uno, asi que sin esto una sola accion del
+ * administrador dejaba un evento por puesto en la bitacora. Se silencian
+ * durante la creacion y el evento del formulario los resume, igual que hace
+ * electionService con las opciones de una eleccion.
+ */
+async function enrichFormCreationAudit(
+  client: PoolClient | undefined,
+  formId: string,
+  summary: Record<string, unknown>
+): Promise<void> {
+  if (!client) return;
+
+  await client.query(
+    `WITH target AS (
+       SELECT id
+       FROM audit_logs
+       WHERE action = 'application_form.insert'
+         AND resource_type = 'application_form'
+         AND resource_id = $1
+       ORDER BY created_at DESC
+       LIMIT 1
+     )
+     UPDATE audit_logs al
+     SET details = jsonb_set(
+       COALESCE(al.details, '{}'::jsonb),
+       '{new}',
+       COALESCE(al.details -> 'new', '{}'::jsonb) || $2::jsonb
+     )
+     FROM target
+     WHERE al.id = target.id`,
+    [formId, JSON.stringify(summary)]
+  );
+}
+
+/** Mismos textos que usa electionService para describir la audiencia. */
+function describeAudience(params: {
+  voterSource: VoterSource;
+  voterFilter?: { sede?: string; career?: string } | null;
+  tagName?: string | null;
+  manualCount?: number;
+}): string {
+  const { voterSource, voterFilter, tagName, manualCount } = params;
+
+  switch (voterSource) {
+    case 'FULL_PADRON':
+      return 'Todo el padron activo';
+    case 'FILTERED': {
+      const parts = [
+        voterFilter?.sede ? `Sede: ${voterFilter.sede}` : null,
+        voterFilter?.career ? `Carrera: ${voterFilter.career}` : null,
+      ].filter(Boolean);
+      return parts.length > 0 ? parts.join(' | ') : 'Padron filtrado sin restricciones';
+    }
+    case 'MANUAL':
+      return `${manualCount ?? 0} persona(s) seleccionada(s) manualmente`;
+    case 'TAG':
+      return tagName ? `Tag: ${tagName}` : 'Tag seleccionada';
+    default:
+      return 'Sin definir';
+  }
+}
+
+async function findTagName(
+  client: PoolClient | undefined,
+  tagId?: string | null
+): Promise<string | null> {
+  if (!client || !tagId) return null;
+  const result = await client.query<{ name: string }>('SELECT name FROM tags WHERE id = $1', [
+    tagId,
+  ]);
+  return result.rows[0]?.name ?? null;
+}
+
 // ============================================
 // VALIDACION
 // ============================================
@@ -229,6 +312,8 @@ export async function createForm(
   const status = resolveFormStatus(requestedStatus, startTime, endTime);
 
   const created = await withOptionalAudit(actor, async (client) => {
+    await setAuditSessionValue(client, 'app.compound_application_mode', 'true');
+
     const form = await repo.insertForm(
       {
         ...data,
@@ -254,8 +339,11 @@ export async function createForm(
       client
     );
 
+    const positionNames: string[] = [];
     for (const rawName of data.positions ?? []) {
-      await repo.insertPosition(form.id, normalizePositionName(rawName), client);
+      const name = normalizePositionName(rawName);
+      await repo.insertPosition(form.id, name, client);
+      positionNames.push(name);
     }
 
     const eligible = await populateEligibility(
@@ -272,6 +360,26 @@ export async function createForm(
         'La audiencia seleccionada no incluye a ningún estudiante activo'
       );
     }
+
+    // Los puestos que acabamos de silenciar y la audiencia recien poblada
+    // solo existen para la bitacora si el evento del formulario los cuenta.
+    await enrichFormCreationAudit(client, form.id, {
+      position_count: positionNames.length,
+      positions_summary: positionNames.join(', '),
+      eligible_count: eligible,
+      voter_scope: describeAudience({
+        voterSource,
+        voterFilter:
+          voterSource === 'FILTERED'
+            ? {
+                sede: normalizeText(data.voter_filter?.sede) ?? undefined,
+                career: normalizeText(data.voter_filter?.career) ?? undefined,
+              }
+            : null,
+        tagName: voterSource === 'TAG' ? await findTagName(client, data.tag_id) : null,
+        manualCount: data.student_ids?.length ?? 0,
+      }),
+    });
 
     return form;
   });
@@ -442,6 +550,9 @@ export async function deleteForm(id: string, actor?: AuditActor): Promise<void> 
   }
 
   await withOptionalAudit(actor, async (client) => {
+    // Borrar el formulario arrastra sus puestos y sus postulaciones. Auditar
+    // cada baja en cascada solo ensucia la bitacora: este evento las cuenta.
+    await setAuditSessionValue(client, 'app.cascade_application_form_delete', 'true');
     await repo.deleteForm(id, client);
   });
 }
