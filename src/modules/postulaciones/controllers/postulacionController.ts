@@ -82,6 +82,54 @@ export async function deleteForm(req: Request, res: Response, next: NextFunction
 }
 
 // ============================================
+// PUESTOS
+// ============================================
+
+export async function getPositions(req: Request, res: Response, next: NextFunction) {
+  try {
+    res.json(await service.listPositions(req.params.id as string));
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function createPosition(req: Request, res: Response, next: NextFunction) {
+  try {
+    const position = await service.createPosition(
+      req.params.id as string,
+      req.body?.name,
+      getAuditActor(req)
+    );
+    res.status(201).json(position);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updatePosition(req: Request, res: Response, next: NextFunction) {
+  try {
+    res.json(
+      await service.updatePosition(
+        req.params.positionId as string,
+        req.body?.name,
+        getAuditActor(req)
+      )
+    );
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function deletePosition(req: Request, res: Response, next: NextFunction) {
+  try {
+    await service.deletePosition(req.params.positionId as string, getAuditActor(req));
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+}
+
+// ============================================
 // RESPUESTAS
 // ============================================
 
