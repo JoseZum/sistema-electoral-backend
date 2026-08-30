@@ -12,13 +12,19 @@
 -- ========================================================
 
 -- Helper: lee variables de sesion sin error si no existen.
+--
+-- STABLE y no IMMUTABLE a proposito: la funcion depende del estado de la
+-- sesion. Marcada IMMUTABLE, PostgreSQL pliega su resultado dentro del plan
+-- que cachea para el trigger y el resto de la sesion sigue viendo el primer
+-- valor leido; sobre un pool de conexiones eso dejaba los modos compuestos
+-- pegados y podia atribuir un evento al actor de la peticion anterior.
 CREATE OR REPLACE FUNCTION _audit_get(key TEXT) RETURNS TEXT AS $$
 BEGIN
   RETURN current_setting(key, true);
 EXCEPTION WHEN OTHERS THEN
   RETURN NULL;
 END;
-$$ LANGUAGE plpgsql IMMUTABLE;
+$$ LANGUAGE plpgsql STABLE;
 
 -- ============================================
 -- FUNCION GENERICA DE AUDITORIA
