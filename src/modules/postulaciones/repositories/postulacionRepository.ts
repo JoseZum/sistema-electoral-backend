@@ -7,6 +7,8 @@ import {
   ApplicationFileMeta,
   ApplicationForm,
   ApplicationFormWithStats,
+  ApplicationPosition,
+  ApplicationPositionWithUsage,
   ApplicationReview,
   ApplicationSummary,
   ApplicationStatus,
@@ -52,6 +54,7 @@ const FORM_STATS_SELECT = `
     t.name AS tag_name,
     t.color AS tag_color,
     e.title AS election_title,
+    COALESCE(pos.positions, '[]'::jsonb) AS positions,
     COALESCE(el.eligible_count, 0)::int AS eligible_count,
     COALESCE(ap.submitted_count, 0)::int AS submitted_count,
     COALESCE(ap.approved_count, 0)::int AS approved_count,
@@ -65,6 +68,10 @@ const FORM_STATS_SELECT = `
     SELECT form_id, count(*) AS eligible_count
     FROM application_form_eligibility GROUP BY form_id
   ) el ON el.form_id = f.id
+  LEFT JOIN (
+    SELECT form_id, jsonb_agg(p ORDER BY p.display_order, p.name) AS positions
+    FROM application_positions p GROUP BY form_id
+  ) pos ON pos.form_id = f.id
   LEFT JOIN (
     SELECT form_id,
       count(*) FILTER (WHERE status = 'SUBMITTED')   AS submitted_count,
@@ -184,6 +191,104 @@ export async function deleteForm(id: string, db: Queryable = pool): Promise<bool
 }
 
 // ============================================
+// PUESTOS
+//
+// Se pueden editar en cualquier momento, incluso con el formulario abierto
+// y con respuestas dentro.
+// ============================================
+
+export async function findPositionsByForm(
+  formId: string,
+  db: Queryable = pool
+): Promise<ApplicationPosition[]> {
+  const result = await db.query<ApplicationPosition>(
+    `SELECT * FROM application_positions
+     WHERE form_id = $1
+     ORDER BY display_order ASC, name ASC`,
+    [formId]
+  );
+  return result.rows;
+}
+
+/** Igual que el anterior, pero contando cuánta gente eligió cada puesto. */
+export async function findPositionsWithUsage(
+  formId: string,
+  db: Queryable = pool
+): Promise<ApplicationPositionWithUsage[]> {
+  const result = await db.query<ApplicationPositionWithUsage>(
+    `SELECT p.*, COALESCE(a.total, 0)::int AS application_count
+     FROM application_positions p
+     LEFT JOIN (
+       SELECT position_id, count(*) AS total
+       FROM applications WHERE position_id IS NOT NULL GROUP BY position_id
+     ) a ON a.position_id = p.id
+     WHERE p.form_id = $1
+     ORDER BY p.display_order ASC, p.name ASC`,
+    [formId]
+  );
+  return result.rows;
+}
+
+export async function findPositionById(
+  positionId: string,
+  db: Queryable = pool
+): Promise<ApplicationPosition | null> {
+  const result = await db.query<ApplicationPosition>(
+    'SELECT * FROM application_positions WHERE id = $1',
+    [positionId]
+  );
+  return result.rows[0] || null;
+}
+
+export async function insertPosition(
+  formId: string,
+  name: string,
+  db: Queryable = pool
+): Promise<ApplicationPosition> {
+  // El orden por defecto deja el puesto nuevo al final de la lista.
+  const result = await db.query<ApplicationPosition>(
+    `INSERT INTO application_positions (form_id, name, display_order)
+     VALUES ($1, $2, COALESCE(
+       (SELECT max(display_order) + 1 FROM application_positions WHERE form_id = $1), 0
+     ))
+     RETURNING *`,
+    [formId, name]
+  );
+  return result.rows[0];
+}
+
+export async function updatePositionName(
+  positionId: string,
+  name: string,
+  db: Queryable = pool
+): Promise<ApplicationPosition | null> {
+  const result = await db.query<ApplicationPosition>(
+    'UPDATE application_positions SET name = $1 WHERE id = $2 RETURNING *',
+    [name, positionId]
+  );
+  return result.rows[0] || null;
+}
+
+export async function deletePosition(
+  positionId: string,
+  db: Queryable = pool
+): Promise<boolean> {
+  const result = await db.query('DELETE FROM application_positions WHERE id = $1', [positionId]);
+  return (result.rowCount ?? 0) > 0;
+}
+
+export async function countApplicationsByPosition(
+  positionId: string,
+  db: Queryable = pool
+): Promise<number> {
+  const result = await db.query<{ total: string }>(
+    'SELECT count(*) AS total FROM applications WHERE position_id = $1',
+    [positionId]
+  );
+  return parseInt(result.rows[0]?.total ?? '0', 10);
+}
+
+// ============================================
 // ELEGIBILIDAD
 // ============================================
 
@@ -280,9 +385,11 @@ const APPLICATION_SUMMARY_SELECT = `
     s.full_name AS student_full_name,
     s.carnet    AS student_carnet,
     s.email     AS student_email,
+    p.name      AS position_name,
     COALESCE(fc.files_count, 0)::int AS files_count
   FROM applications a
   INNER JOIN students s ON s.id = a.student_id
+  LEFT JOIN application_positions p ON p.id = a.position_id
   LEFT JOIN (
     SELECT application_id, count(*) AS files_count
     FROM application_files GROUP BY application_id
@@ -380,6 +487,7 @@ export async function updateApplicationData(
     'phone',
     'sede',
     'career',
+    'position_id',
   ] as const;
 
   const fields: string[] = [];
