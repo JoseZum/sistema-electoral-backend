@@ -92,6 +92,9 @@ export const env = {
     enabled: parseBoolean(process.env.RATE_LIMIT_ENABLED) ?? true,
     windowMs: parsePositiveInteger(process.env.RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000),
     generalMax: parsePositiveInteger(process.env.RATE_LIMIT_GENERAL_MAX, 300),
-    authMax: parsePositiveInteger(process.env.RATE_LIMIT_AUTH_MAX, 20),
+    // Solo cuenta intentos de login FALLIDOS (ver skipSuccessfulRequests en index.ts). Aun asi
+    // la cubeta es por IP y un campus entero comparte una por NAT, asi que el tope debe
+    // absorber los fallos legitimos de un pico (sobre todo idTokens expirados).
+    authMax: parsePositiveInteger(process.env.RATE_LIMIT_AUTH_MAX, 100),
   },
 };

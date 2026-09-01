@@ -7,7 +7,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { corsOptions } from './config/cors';
 import { env } from './config/env';
-import { getGeneralRateLimitKey } from './config/rate-limit';
+import { createAuthLimiter, getGeneralRateLimitKey } from './config/rate-limit';
 import { pool } from './config/database';
 import { metricsMiddleware } from './middleware/metricsMiddleware';
 import { authRoutes } from './modules/auth';
@@ -49,15 +49,9 @@ if (env.rateLimit.enabled) {
   });
   app.use('/api', generalLimiter);
 
-  const authLimiter = rateLimit({
+  const authLimiter = createAuthLimiter({
     windowMs: env.rateLimit.windowMs,
     max: env.rateLimit.authMax,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: {
-      error: 'Demasiados intentos de autenticación, por favor intente más tarde',
-      code: 'AUTH_RATE_LIMIT_EXCEEDED',
-    },
   });
   app.use('/api/auth', authLimiter);
 }
