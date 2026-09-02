@@ -68,20 +68,25 @@ BEGIN
     END IF;
 
     -- Inserta el voto anonimo usando token_hash (sin student_id).
-    INSERT INTO votes(election_id, option_id, token_hash)
-    VALUES (p_election_id, p_option_id, p_token_hash);
+    -- created_at se trunca a la hora para que no pueda cruzarse contra los
+    -- registros externos de peticiones (logs del proveedor), que si llevan identidad.
+    INSERT INTO votes(election_id, option_id, token_hash, created_at)
+    VALUES (p_election_id, p_option_id, p_token_hash, date_trunc('hour', v_now));
 
     -- Marca el token como utilizado para impedir reutilizacion.
     UPDATE voting_tokens
+    -- Se trunca al dia: la hora exacta identificaria al votante al cruzarla
+    -- contra votes.created_at, que se escribe en esta misma transaccion.
     SET used = true,
-        used_at = v_now
+        used_at = date_trunc('day', v_now)
     WHERE election_id = p_election_id
       AND student_id = v_token_record.student_id;
 
     -- Marca al votante como participante en election_voters.
     UPDATE election_voters
+    -- Truncado al dia por la misma razon que voting_tokens.used_at.
     SET token_used = true,
-        token_used_at = v_now
+        token_used_at = date_trunc('day', v_now)
     WHERE election_id = p_election_id
       AND student_id = v_token_record.student_id;
 
@@ -263,19 +268,23 @@ BEGIN
             NULLIF(item->>'optionId', '')::uuid AS option_id
         FROM jsonb_array_elements(p_votes) item
     )
-    INSERT INTO votes(election_id, parent_option_id, option_id, token_hash)
-    SELECT p_election_id, parent_option_id, option_id, p_token_hash
+    -- created_at truncado a la hora: ver la nota de fn_cast_vote_anonymous.
+    INSERT INTO votes(election_id, parent_option_id, option_id, token_hash, created_at)
+    SELECT p_election_id, parent_option_id, option_id, p_token_hash, date_trunc('hour', v_now)
     FROM payload;
 
     UPDATE voting_tokens
+    -- Se trunca al dia: la hora exacta identificaria al votante al cruzarla
+    -- contra votes.created_at, que se escribe en esta misma transaccion.
     SET used = true,
-        used_at = v_now
+        used_at = date_trunc('day', v_now)
     WHERE election_id = p_election_id
       AND student_id = v_token_record.student_id;
 
     UPDATE election_voters
+    -- Truncado al dia por la misma razon que voting_tokens.used_at.
     SET token_used = true,
-        token_used_at = v_now
+        token_used_at = date_trunc('day', v_now)
     WHERE election_id = p_election_id
       AND student_id = v_token_record.student_id;
 
@@ -577,5 +586,66 @@ BEGIN
         'carnet_migrated', v_carnet_migrated,
         'email_swapped', v_email_swapped
     );
+END;
+$$;
+
+-- ------------------------------------------------------------
+-- 9) Barajar fisicamente la urna de una eleccion anonima
+-- ------------------------------------------------------------
+-- Motivo: aunque las marcas temporales esten truncadas, PostgreSQL escribe las
+-- filas en orden. Cada voto inserta en votes y actualiza voting_tokens (que por
+-- MVCC reescribe la fila al final de la tabla), asi que el ctid de ambas tablas
+-- sigue el orden de votacion. Correlacionando por ranking de ctid se reconstruye
+-- quien voto que, aunque ningun valor de columna los relacione.
+--
+-- Esta funcion reescribe las papeletas de la eleccion en orden fisico aleatorio,
+-- lo que rompe esa correspondencia de forma definitiva. Es el equivalente a
+-- agitar la urna antes del escrutinio. Se invoca desde un trigger al cerrar.
+--
+-- Conserva exactamente las mismas filas: mismos id y mismos valores. Solo cambia
+-- el orden fisico. Es atomica e idempotente.
+CREATE OR REPLACE FUNCTION fn_shuffle_election_votes(p_election_id UUID)
+RETURNS INT
+LANGUAGE plpgsql
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+    v_rows votes[];
+    v_count INT;
+BEGIN
+    SELECT array_agg(v ORDER BY random()) INTO v_rows
+    FROM votes v
+    WHERE v.election_id = p_election_id;
+
+    IF v_rows IS NULL THEN
+        RETURN 0;
+    END IF;
+
+    DELETE FROM votes WHERE election_id = p_election_id;
+
+    INSERT INTO votes
+    SELECT (unnest(v_rows)).*;
+
+    GET DIAGNOSTICS v_count = ROW_COUNT;
+    RETURN v_count;
+END;
+$$;
+
+-- Disparador del barajado: solo elecciones anonimas y solo en la transicion
+-- hacia CLOSED. Cubre por igual el cierre manual y el automatico por tiempo,
+-- porque actua sobre la tabla y no sobre una ruta concreta del backend.
+CREATE OR REPLACE FUNCTION fn_elections_shuffle_on_close()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = public, pg_temp
+AS $$
+BEGIN
+    IF NEW.is_anonymous
+       AND NEW.status = 'CLOSED'
+       AND OLD.status IS DISTINCT FROM 'CLOSED' THEN
+        PERFORM fn_shuffle_election_votes(NEW.id);
+    END IF;
+
+    RETURN NEW;
 END;
 $$;

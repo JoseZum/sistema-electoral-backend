@@ -591,3 +591,10 @@ CREATE TRIGGER trg_applications_updated_at
 CREATE TRIGGER trg_application_positions_updated_at
   BEFORE UPDATE ON application_positions
   FOR EACH ROW EXECUTE FUNCTION fn_set_updated_at();
+
+-- Baraja la urna de las elecciones anonimas al cerrarlas. Ver
+-- fn_shuffle_election_votes en 02-storedprocedures.sql.
+DROP TRIGGER IF EXISTS trg_elections_shuffle_votes ON elections;
+CREATE TRIGGER trg_elections_shuffle_votes
+  AFTER UPDATE ON elections
+  FOR EACH ROW EXECUTE FUNCTION fn_elections_shuffle_on_close();
