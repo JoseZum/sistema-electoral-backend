@@ -1,9 +1,12 @@
 # Artefactos generados y secretos SOLO de prueba — NO versionar
 .env.loadtest
+.env.staging
 voters.json
 meta.json
 ids.json
+resultados/
 
 # Re-incluir los scripts de k6 (el .gitignore raiz ignora *.js)
 !vote-load.js
 !double-vote.js
+!capacity.js

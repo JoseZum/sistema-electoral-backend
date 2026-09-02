@@ -1,0 +1,51 @@
+# Simula el fan-out serverless de Vercel contra el Supabase de STAGING.
+#
+# Idea: en Vercel cada instancia de funcion tiene su propio pool y acapara su conexion a
+# Postgres aunque este idle. Ese es el techo real del sistema — no las req/s. Aqui cada
+# replica de `backend-load` corre con DATABASE_POOL_MAX=1, asi que N replicas equivalen a N
+# lambdas warm ocupando N conexiones de las ~60 del plan free.
+#
+# Uso (desde sistema-electoral-backend/):
+#   npm run build                                    # una sola vez; las replicas montan dist/
+#   docker compose -f loadtest/docker-compose.serverless-sim.yml --env-file loadtest/.env.staging \
+#     up -d --scale backend-load=20
+#   k6 run loadtest/capacity.js                      # meta.json debe apuntar a http://localhost:8080
+#
+# Subir --scale hasta que aparezcan db_conn_errors: ese numero es tu techo de conexiones.
+#
+# SEGURIDAD: STAGING_DATABASE_URL debe apuntar al proyecto de staging. Los scripts de
+# siembra/limpieza tienen ademas la guarda de loadtest/guard.mjs, que bloquea produccion.
+
+services:
+  backend-load:
+    build: ..
+    # Corre el build compilado en vez de nodemon/ts-node: con 20+ replicas la diferencia de
+    # RAM y CPU es lo que decide si el cuello de botella es Supabase o tu laptop.
+    command: node dist/server.js
+    environment:
+      PORT: 3001
+      NODE_ENV: production
+      DATABASE_URL: ${STAGING_DATABASE_URL:?falta STAGING_DATABASE_URL}
+      # Una conexion por replica: exactamente lo que hace Vercel (defaultPoolMax=1 con VERCEL).
+      DATABASE_POOL_MAX: ${POOL_MAX:-1}
+      DATABASE_SSL: "true"
+      DATABASE_SSL_REJECT_UNAUTHORIZED: "false"
+      JWT_SECRET: ${JWT_SECRET:-loadtest_only_secret_not_for_prod}
+      VOTE_TOKEN_SECRET: ${VOTE_TOKEN_SECRET:-loadtest_only_vote_secret_not_for_prod}
+      # Sin rate limit: aqui se mide la capacidad de la BD, no el limitador.
+      RATE_LIMIT_ENABLED: "false"
+      CORS_ORIGIN: http://localhost:3000
+      AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-not-used-in-loadtest}
+      AZURE_TENANT_ID: ${AZURE_TENANT_ID:-common}
+    volumes:
+      - ../dist:/app/dist:ro
+    restart: "no"
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "${LOADTEST_PORT:-8090}:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend-load

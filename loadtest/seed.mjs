@@ -22,6 +22,7 @@ import crypto from 'node:crypto';
 import dotenv from 'dotenv';
 import pg from 'pg';
 import jwt from 'jsonwebtoken';
+import { assertSafeTarget } from './guard.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: join(__dirname, '.env.loadtest') });
@@ -32,19 +33,9 @@ const BASE_URL = process.env.BASE_URL || 'http://localhost:3001';
 const VOTERS = parseInt(process.env.VOTERS || '1000', 10);
 const MODE = (process.env.ELECTION_MODE || 'named').toLowerCase();
 
-// --- Guarda de seguridad: SOLO base de datos local ---
-const isLocal = /(@|\/\/)(localhost|127\.0\.0\.1|postgres)(:|\/)/i.test(DATABASE_URL);
-const looksRemote = /supabase\.(co|com)|pooler\.supabase|amazonaws|neon\.tech|render\.com|azure/i.test(
-  DATABASE_URL
-);
-if (!DATABASE_URL || !isLocal || looksRemote) {
-  console.error(
-    '\n[ABORTADO] DATABASE_URL no parece local. Las pruebas de carga jamas deben correr contra produccion.\n' +
-      `DATABASE_URL actual: ${DATABASE_URL.replace(/:[^:@/]+@/, ':***@')}\n` +
-      'Configura loadtest/.env.loadtest con un Postgres local (localhost:5432).\n'
-  );
-  process.exit(1);
-}
+// --- Guarda de seguridad: nunca produccion (ver loadtest/guard.mjs) ---
+const target = assertSafeTarget(DATABASE_URL);
+console.log(`[destino] ${target}`);
 if (!JWT_SECRET) {
   console.error('[ABORTADO] Falta JWT_SECRET (debe coincidir con el del backend bajo prueba).');
   process.exit(1);

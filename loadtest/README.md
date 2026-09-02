@@ -16,7 +16,57 @@ concurrencia alta. Corren contra un **Postgres local aislado** — nunca contra 
 |---|---|---|
 | `vote-load.js` | Votación realista: cada votante emite 1 voto | 0 errores, 0 rate-limit a votantes legítimos, p95 < 1.5 s |
 | `double-vote.js` | Ataque de doble voto: muchas peticiones con el MISMO token | **exactamente 1 voto aceptado**, 0 errores |
+| `capacity.js` | Punto de quiebre: sube la tasa por escalones y clasifica los fallos por causa | ninguno — el objetivo es *llegar* al fallo y verlo |
+| `conn-ceiling.mjs` | Cuántas conexiones simultáneas concede el servidor | el número, y si el rechazo es limpio o un cuelgue |
+| `monitor.mjs` | Qué pasa *dentro* de Postgres durante la corrida (CSV) | conexiones activas, esperas de lock, CPU del host |
 | `verify.mjs` | Integridad en la BD (fuente de verdad) | sin doble voto, conteos cuadran, secreto del voto |
+
+> **Por qué `capacity.js` y no solo `vote-load.js`:** `vote-load.js` usa VUs fijos, así que cuando
+> el sistema se pone lento la propia carga se frena y el límite real queda escondido.
+> `capacity.js` usa `ramping-arrival-rate`, que sostiene la tasa objetivo aunque suba la latencia.
+
+## Guarda de seguridad (`guard.mjs`)
+`seed.mjs`, `verify.mjs`, `cleanup.mjs` y `monitor.mjs` validan el destino antes de abrir el pool:
+
+1. Los refs de `LOADTEST_PROD_REFS` se bloquean **siempre**, sin excepción posible.
+2. Postgres local: permitido.
+3. Cualquier otro destino remoto: permitido **solo** si `LOADTEST_ALLOW_REMOTE` trae su ref exacto.
+
+Configura en `.env.loadtest` (ignorado por git, porque este repositorio es público):
+```
+LOADTEST_PROD_REFS=<ref-del-proyecto-de-produccion>
+```
+
+## Medir contra un Supabase de staging
+Para reproducir el comportamiento serverless de Vercel — cada instancia con **su propia**
+conexión — sin tocar producción:
+
+```powershell
+# 1. Credenciales del staging en loadtest/.env.staging (ignorado por git)
+#    STAGING_DATABASE_URL=postgresql://postgres.<ref>:<pwd>@aws-0-us-east-1.pooler.supabase.com:5432/postgres
+#    STAGING_DATABASE_URL_TX=...:6543/postgres      # transaction mode
+#    LOADTEST_ALLOW_REMOTE=<ref-de-staging>
+
+# 2. Techo de conexiones (el dato que de verdad limita a un backend serverless)
+node loadtest/conn-ceiling.mjs --url "$URL" --max 250 --label session
+
+# 3. N lambdas simuladas, cada una con DATABASE_POOL_MAX=1
+npm run build
+docker compose -f loadtest/docker-compose.serverless-sim.yml `
+  --env-file loadtest/.env.staging up -d --scale backend-load=30
+
+# 4. Carga + monitor en paralelo (meta.json debe apuntar a http://localhost:8090)
+node loadtest/seed-tokens.mjs
+node loadtest/monitor.mjs --out loadtest/resultados/monitor.csv --label tx-30rep
+k6 run loadtest/capacity.js -e PEAK=120 -e STAGE=20s
+```
+
+> ⚠️ **No apuntes k6 a un despliegue de Vercel.** Vercel solo permite pruebas de carga en plan
+> Enterprise y con aviso previo; hacerlo sin autorización puede provocar el bloqueo de las IP de
+> origen. Mide contra la base de datos, que es donde está el límite real.
+>
+> ℹ️ Los hosts directos (`db.<ref>.supabase.co`) resuelven **solo a IPv6**. Desde una red sin IPv6
+> hay que usar el pooler.
 
 ---
 

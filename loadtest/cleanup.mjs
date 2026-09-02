@@ -8,19 +8,13 @@ import { dirname, join } from 'node:path';
 import { readFileSync } from 'node:fs';
 import dotenv from 'dotenv';
 import pg from 'pg';
+import { assertSafeTarget } from './guard.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: join(__dirname, '.env.loadtest') });
 
 const DATABASE_URL = process.env.DATABASE_URL || '';
-const isLocal = /(@|\/\/)(localhost|127\.0\.0\.1|postgres)(:|\/)/i.test(DATABASE_URL);
-const looksRemote = /supabase\.(co|com)|pooler\.supabase|amazonaws|neon\.tech|render\.com|azure/i.test(
-  DATABASE_URL
-);
-if (!DATABASE_URL || !isLocal || looksRemote) {
-  console.error('[ABORTADO] DATABASE_URL no es local.');
-  process.exit(1);
-}
+assertSafeTarget(DATABASE_URL);
 
 const { electionId, studentIds } = JSON.parse(readFileSync(join(__dirname, 'ids.json'), 'utf8'));
 const { Pool } = pg;
