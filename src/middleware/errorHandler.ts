@@ -194,6 +194,9 @@ export function errorHandler(
     ...(normalized instanceof RequestValidationError && normalized.fields
       ? { fields: normalized.fields }
       : {}),
+    // `meta` lo declara explicitamente quien lanza el error como apto para el
+    // cliente; `details` es diagnostico interno y no sale de desarrollo.
+    ...(normalized.meta ? { meta: normalized.meta } : {}),
     ...(process.env.NODE_ENV === 'development' && normalized.details ? { details: normalized.details } : {}),
   });
 }

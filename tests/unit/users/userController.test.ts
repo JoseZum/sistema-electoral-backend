@@ -12,6 +12,7 @@ import {
   updateStudent,
   deleteStudent,
   importPadron,
+  analyzePadron,
   getAdmins,
   getAdminById,
   createAdmin,
@@ -290,8 +291,57 @@ describe('userController', () => {
       const res = makeRes();
       const req = makeReq({ file: { buffer: Buffer.from('') } as any });
       await importPadron(req, res, makeNext());
-      expect(userService.importPadron).toHaveBeenCalledWith(expect.any(Buffer), expect.any(Object));
+      expect(userService.importPadron).toHaveBeenCalledWith(
+        expect.any(Buffer),
+        {},
+        expect.any(Object)
+      );
       expect(res.json).toHaveBeenCalledWith(summary);
+    });
+
+    // Las opciones del mapeo viajan como campo de texto del multipart.
+    it('forwards the mapping options sent alongside the file', async () => {
+      const summary = { total: 1, new: 1, updated: 0, reactivated: 0, deactivated: 0 };
+      vi.mocked(userService.importPadron).mockResolvedValue(summary);
+      const req = makeReq({
+        file: { buffer: Buffer.from('') } as any,
+        body: {
+          options: JSON.stringify({
+            sheetIndex: 1,
+            headerRowIndex: 0,
+            mapping: { carnet: 2, full_name: 0, email: 1 },
+            confirmDeactivation: true,
+          }),
+        },
+      });
+
+      await importPadron(req, makeRes(), makeNext());
+
+      expect(userService.importPadron).toHaveBeenCalledWith(
+        expect.any(Buffer),
+        {
+          sheetIndex: 1,
+          headerRowIndex: 0,
+          mapping: { carnet: 2, full_name: 0, email: 1 },
+          confirmDeactivation: true,
+        },
+        expect.any(Object)
+      );
+    });
+
+    it('calls next when the options field is not valid JSON', async () => {
+      const next = makeNext();
+      const req = makeReq({
+        file: { buffer: Buffer.from('') } as any,
+        body: { options: '{no-json' },
+      });
+
+      await importPadron(req, makeRes(), next);
+
+      expect(next).toHaveBeenCalledWith(
+        expect.objectContaining({ code: 'PADRON_OPTIONS_INVALID' })
+      );
+      expect(userService.importPadron).not.toHaveBeenCalled();
     });
 
     it('responds 400 when no file is provided', async () => {
@@ -302,11 +352,50 @@ describe('userController', () => {
       expect(userService.importPadron).not.toHaveBeenCalled();
     });
 
+    it('rejects an out-of-range column index in the mapping', async () => {
+      const next = makeNext();
+      const req = makeReq({
+        file: { buffer: Buffer.from('') } as any,
+        body: { options: JSON.stringify({ mapping: { carnet: -1 } }) },
+      });
+
+      await importPadron(req, makeRes(), next);
+
+      expect(next).toHaveBeenCalledWith(expect.any(Error));
+      expect(userService.importPadron).not.toHaveBeenCalled();
+    });
+
     it('calls next with error when service throws', async () => {
       vi.mocked(userService.importPadron).mockRejectedValue(new Error('Archivo inválido'));
       const next = makeNext();
       await importPadron(makeReq({ file: { buffer: Buffer.from('') } as any }), makeRes(), next);
       expect(next).toHaveBeenCalledWith(expect.any(Error));
+    });
+  });
+
+  // ── analyzePadron ──────────────────────────────────────────────────────────
+
+  describe('analyzePadron', () => {
+    it('responds with the analysis when a file is provided', async () => {
+      const analysis = { mapping: { carnet: 0 }, validRows: 3, diff: null } as any;
+      vi.mocked(userService.analyzePadron).mockResolvedValue(analysis);
+      const res = makeRes();
+
+      await analyzePadron(makeReq({ file: { buffer: Buffer.from('') } as any }), res, makeNext());
+
+      expect(userService.analyzePadron).toHaveBeenCalledWith(
+        expect.any(Buffer),
+        {},
+        expect.any(Object)
+      );
+      expect(res.json).toHaveBeenCalledWith(analysis);
+    });
+
+    it('responds 400 when no file is provided', async () => {
+      const res = makeRes();
+      await analyzePadron(makeReq({ file: undefined }), res, makeNext());
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(userService.analyzePadron).not.toHaveBeenCalled();
     });
   });
 

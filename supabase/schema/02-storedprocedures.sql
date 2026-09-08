@@ -525,8 +525,8 @@ BEGIN
         NULLIF(trim(x->>'Carnet'), ''),
         NULLIF(trim(x->>'Nombre'), ''),
         NULLIF(trim(x->>'Correo'), ''),
-        NULLIF(trim(x->>'Sede'), ''),
-        NULLIF(trim(x->>'Carrera'), ''),
+        COALESCE(NULLIF(trim(x->>'Sede'), ''), 'NO_ESPECIFICADO'),
+        COALESCE(NULLIF(trim(x->>'Carrera'), ''), 'NO_ESPECIFICADO'),
         COALESCE(NULLIF(trim(x->>'Grado'), ''), 'NO_ESPECIFICADO'),
         true
     FROM jsonb_array_elements(p_data) x
@@ -537,9 +537,18 @@ BEGIN
     SET
         full_name = EXCLUDED.full_name,
         email = EXCLUDED.email,
-        sede = EXCLUDED.sede,
-        career = EXCLUDED.career,
-        degree_level = EXCLUDED.degree_level,
+        sede = CASE
+                   WHEN EXCLUDED.sede = 'NO_ESPECIFICADO' THEN students.sede
+                   ELSE EXCLUDED.sede
+               END,
+        career = CASE
+                     WHEN EXCLUDED.career = 'NO_ESPECIFICADO' THEN students.career
+                     ELSE EXCLUDED.career
+                 END,
+        degree_level = CASE
+                           WHEN EXCLUDED.degree_level = 'NO_ESPECIFICADO' THEN students.degree_level
+                           ELSE EXCLUDED.degree_level
+                       END,
         is_active = true,
         updated_at = NOW();
 

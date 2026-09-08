@@ -18,6 +18,16 @@ export interface AppErrorOptions {
   code: string;
   message: string;
   details?: unknown;
+  /**
+   * Datos que el cliente necesita para resolver el error y que son seguros de
+   * publicar. A diferencia de `details` (interno, solo visible en desarrollo),
+   * `meta` viaja siempre en la respuesta, asi que quien lo usa se hace
+   * responsable de no meter ahi nada sensible.
+   *
+   * Ejemplo: el resumen de bajas que acompaña a PADRON_IMPORT_NEEDS_CONFIRMATION,
+   * sin el cual la UI no puede explicar que se va a desactivar.
+   */
+  meta?: Record<string, unknown>;
   cause?: unknown;
 }
 
@@ -25,13 +35,15 @@ export class AppError extends Error {
   readonly status: number;
   readonly code: string;
   readonly details?: unknown;
+  readonly meta?: Record<string, unknown>;
 
-  constructor({ status, code, message, details, cause }: AppErrorOptions) {
+  constructor({ status, code, message, details, meta, cause }: AppErrorOptions) {
     super(message);
     this.name = 'AppError';
     this.status = status;
     this.code = code;
     this.details = details;
+    this.meta = meta;
 
     if (cause !== undefined) {
       (this as Error & { cause?: unknown }).cause = cause;

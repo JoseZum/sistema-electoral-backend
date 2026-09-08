@@ -1,6 +1,6 @@
 import { pool } from '../../../config/database';
 import { PoolClient } from 'pg';
-import { Student } from '../models/userModel';
+import { PadronImportRow, Student } from '../models/userModel';
 import { CreateStudentDto, UpdateStudentDto, StudentFiltersDto } from '../dtos/studentDtos';
 
 // Buscar estudiante por email
@@ -148,9 +148,18 @@ export async function deactivateStudent(id: string, client?: PoolClient): Promis
   return result.rows[0] || null;
 }
 
+// Cuenta el padrón activo. Sirve para dimensionar las bajas de una importación.
+export async function countActiveStudents(client?: PoolClient): Promise<number> {
+  const db = client || pool;
+  const result = await db.query<{ count: string }>(
+    'SELECT COUNT(*) FROM students WHERE is_active = true'
+  );
+  return parseInt(result.rows[0].count, 10);
+}
+
 // Importar padrón usando function (accepts a client for audit context)
 export async function importPadron(
-  data: Record<string, unknown>[],
+  data: PadronImportRow[],
   client?: PoolClient
 ): Promise<{
   total: number;
@@ -158,6 +167,8 @@ export async function importPadron(
   updated: number;
   reactivated: number;
   deactivated: number;
+  carnet_migrated?: number;
+  email_swapped?: number;
 }> {
   const db = client || pool;
   const result = await db.query(

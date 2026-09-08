@@ -40,6 +40,7 @@ const mockDb = vi.hoisted(() => {
 
   let studentSequence = 1;
   let students: Student[] = [];
+  let snapshot: Student[] | null = null;
   let admins: Admin[] = [];
   let lastClient: { query: ReturnType<typeof vi.fn>; release: ReturnType<typeof vi.fn> } | null = null;
   let lastImportRows: Record<string, unknown>[] = [];
@@ -69,6 +70,7 @@ const mockDb = vi.hoisted(() => {
     studentSequence = 1;
     lastClient = null;
     lastImportRows = [];
+    snapshot = null;
     students = [
       baseStudent({
         id: adminStudentId,
@@ -225,14 +227,32 @@ const mockDb = vi.hoisted(() => {
   async function runQuery(sqlInput: string, params: unknown[] = []) {
     const sql = sqlInput.replace(/\s+/g, ' ').trim();
 
-    if (
-      sql === 'BEGIN' ||
-      sql === 'COMMIT' ||
-      sql === 'ROLLBACK' ||
-      sql.startsWith('SET LOCAL') ||
-      sql.startsWith('SELECT set_config')
-    ) {
+    // Se simulan BEGIN/ROLLBACK de verdad: la vista previa del import corre
+    // dentro de una transaccion que se revierte, y sin esto el test no
+    // distinguiria un dry-run de una importacion aplicada.
+    if (sql === 'BEGIN') {
+      snapshot = students.map((student) => ({ ...student }));
       return { rows: [], rowCount: 0 };
+    }
+
+    if (sql === 'ROLLBACK') {
+      if (snapshot) students = snapshot;
+      snapshot = null;
+      return { rows: [], rowCount: 0 };
+    }
+
+    if (sql === 'COMMIT') {
+      snapshot = null;
+      return { rows: [], rowCount: 0 };
+    }
+
+    if (sql.startsWith('SET LOCAL') || sql.startsWith('SELECT set_config')) {
+      return { rows: [], rowCount: 0 };
+    }
+
+    if (sql.startsWith('SELECT COUNT(*) FROM students WHERE is_active = true')) {
+      const count = students.filter((student) => student.is_active).length;
+      return { rows: [{ count: String(count) }], rowCount: 1 };
     }
 
     if (sql.startsWith('SELECT * FROM admins WHERE students_id = $1')) {
@@ -351,6 +371,24 @@ const mockDb = vi.hoisted(() => {
     resetState,
     getLastClient: () => lastClient,
     getLastImportRows: () => lastImportRows,
+    countActive: () => students.filter((student) => student.is_active).length,
+    findByCarnet: (carnet: string) => students.find((student) => student.carnet === carnet),
+    // El umbral de bajas es relativo al padron activo, asi que hace falta un
+    // padron grande para ejercitar la confirmacion.
+    seedActiveStudents(count: number) {
+      for (let index = 0; index < count; index += 1) {
+        students.push(
+          baseStudent({
+            id: nextStudentId(),
+            carnet: `9${String(index).padStart(9, '0')}`,
+            full_name: `Estudiante Masivo ${index}`,
+            email: `masivo${index}@estudiantec.cr`,
+            sede: 'Central',
+            career: 'Administracion',
+          })
+        );
+      }
+    },
   };
 });
 
@@ -374,16 +412,27 @@ type RequestOptions = {
   body?: unknown;
 };
 
-async function makePadronWorkbook(rows: unknown[][]): Promise<Buffer> {
+const DEFAULT_HEADERS = ['Carnet', 'Nombre completo', 'Correo', 'Sede', 'Carrera', 'Grado'];
+
+/**
+ * Arma un libro de prueba. Por defecto reproduce el formato institucional
+ * (encabezados en la fila 4), pero `leadingRows` y `headers` permiten simular
+ * los archivos que el importador anterior rechazaba.
+ */
+async function makePadronWorkbook(
+  rows: unknown[][],
+  options: { headers?: unknown[] | null; leadingRows?: unknown[][] } = {}
+): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet('Padron');
-  worksheet.addRows([
+  const leadingRows = options.leadingRows ?? [
     ['Padron electoral'],
     ['Tribunal Electoral Estudiantil'],
     [],
-    ['Carnet', 'Nombre completo', 'Correo', 'Sede', 'Carrera', 'Grado'],
-    ...rows,
-  ]);
+  ];
+  const headers = options.headers === undefined ? DEFAULT_HEADERS : options.headers;
+
+  worksheet.addRows([...leadingRows, ...(headers ? [headers] : []), ...rows]);
   const buffer = await workbook.xlsx.writeBuffer();
   return Buffer.from(buffer as ArrayBuffer);
 }
@@ -463,7 +512,12 @@ describe('padron integration', () => {
     return { response, body };
   }
 
-  async function uploadPadron(buffer: Buffer, token: string | null = 'admin-token') {
+  async function postPadron(
+    path: string,
+    buffer: Buffer,
+    options: { token?: string | null; options?: unknown } = {}
+  ) {
+    const token = options.token === undefined ? 'admin-token' : options.token;
     const formData = new FormData();
     formData.append(
       'file',
@@ -472,19 +526,39 @@ describe('padron integration', () => {
       }),
       'padron.xlsx'
     );
+    if (options.options !== undefined) {
+      formData.append('options', JSON.stringify(options.options));
+    }
 
     const headers: Record<string, string> = { Accept: 'application/json' };
     if (token) {
       headers.Authorization = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${baseUrl}/api/users/students/import`, {
+    const response = await fetch(`${baseUrl}${path}`, {
       method: 'POST',
       headers,
       body: formData,
     });
     const body = await response.json();
     return { response, body };
+  }
+
+  async function uploadPadron(
+    buffer: Buffer,
+    token: string | null = 'admin-token',
+    importOptions?: unknown
+  ) {
+    return postPadron('/api/users/students/import', buffer, {
+      token,
+      options: importOptions,
+    });
+  }
+
+  async function analyzePadron(buffer: Buffer, analyzeOptions?: unknown) {
+    return postPadron('/api/users/students/import/analyze', buffer, {
+      options: analyzeOptions,
+    });
   }
 
   it('rejects requests without a bearer token', async () => {
@@ -518,6 +592,21 @@ describe('padron integration', () => {
         is_active: true,
       }),
     ]);
+  });
+
+  // La exportacion del padron pide una sola pagina con todo el resultado, asi
+  // que el limite del esquema no puede quedar por debajo de ese tamano.
+  it('accepts the page size used by the padron export', async () => {
+    const { response } = await request('GET', '/api/users/students?page=1&limit=100000');
+
+    expect(response.status).toBe(200);
+  });
+
+  it('rejects a page size that is not a positive integer', async () => {
+    const { response, body } = await request('GET', '/api/users/students?limit=abc');
+
+    expect(response.status).toBe(400);
+    expect(body.code).toBe('VALIDATION_ERROR');
   });
 
   it('can list inactive students when requested explicitly', async () => {
@@ -749,7 +838,7 @@ describe('padron integration', () => {
     expect(body).toEqual({ error: 'Se requiere un archivo XLSX' });
   });
 
-  it('returns 400 when the XLSX contains no valid padron rows', async () => {
+  it('returns 400 explaining why every row was discarded', async () => {
     const workbook = await makePadronWorkbook([
       ['', 'Sin carnet', 'sin-carnet@estudiantec.cr', 'Central', 'Administracion', 'Bachillerato'],
     ]);
@@ -760,8 +849,146 @@ describe('padron integration', () => {
     expect(body).toEqual(
       expect.objectContaining({
         code: 'PADRON_FILE_NO_VALID_DATA',
-        error: expect.stringContaining('El archivo no contiene datos'),
+        error: expect.stringContaining('sin carnet'),
       })
     );
+    // El detalle apunta a la fila exacta, que es lo que el admin necesita.
+    expect(body.meta.issues).toEqual([{ row: 5, reason: 'sin carnet' }]);
+  });
+
+  // ── Archivos que el importador anterior rechazaba ──
+
+  it('imports a file with the header on the first row', async () => {
+    const workbook = await makePadronWorkbook(
+      [['2023000001', 'Estudiante Nuevo', 'nuevo@estudiantec.cr', 'Limon', 'Ingenieria Ambiental', '']],
+      { leadingRows: [] }
+    );
+
+    const { response, body } = await uploadPadron(workbook);
+
+    expect(response.status).toBe(200);
+    expect(body.total).toBe(1);
+    expect(body.new).toBe(1);
+  });
+
+  it('imports a file whose columns have unfamiliar names', async () => {
+    const workbook = await makePadronWorkbook(
+      [['2023000001', 'Estudiante Nuevo', 'nuevo@estudiantec.cr', 'Limon', 'Ingenieria Ambiental']],
+      {
+        leadingRows: [],
+        headers: ['Identificacion', 'Estudiante', 'Correo institucional', 'Recinto', 'Escuela'],
+      }
+    );
+
+    const { response, body } = await uploadPadron(workbook);
+
+    expect(response.status).toBe(200);
+    expect(body.total).toBe(1);
+    expect(mockDb.findByCarnet('2023000001')).toMatchObject({
+      full_name: 'Estudiante Nuevo',
+      email: 'nuevo@estudiantec.cr',
+    });
+  });
+
+  it('imports a file with no header row at all', async () => {
+    const workbook = await makePadronWorkbook(
+      [
+        ['2023000001', 'Estudiante Nuevo', 'nuevo@estudiantec.cr', 'Central', 'Ingenieria en Computacion'],
+        ['2023000002', 'Otra Persona', 'otra@estudiantec.cr', 'Central', 'Ingenieria en Computacion'],
+      ],
+      { leadingRows: [], headers: null }
+    );
+
+    const { response, body } = await uploadPadron(workbook);
+
+    expect(response.status).toBe(200);
+    expect(body.total).toBe(2);
+  });
+
+  // ── Vista previa ──
+
+  describe('import analyze', () => {
+    it('returns the detected structure and mapping without touching the padron', async () => {
+      const workbook = await makePadronWorkbook([
+        ['2023000001', 'Estudiante Nuevo', 'nuevo@estudiantec.cr', 'Limon', 'Ingenieria Ambiental', ''],
+      ]);
+      const activeBefore = mockDb.countActive();
+
+      const { response, body } = await analyzePadron(workbook);
+
+      expect(response.status).toBe(200);
+      expect(body.headerRowIndex).toBe(3);
+      expect(body.mapping).toMatchObject({ carnet: 0, full_name: 1, email: 2 });
+      expect(body.validRows).toBe(1);
+      expect(body.diff).toMatchObject({ total: 1, new: 1 });
+      expect(body.preview[0]).toMatchObject({ Carnet: '2023000001' });
+      // La simulación se revierte: el padrón queda intacto.
+      expect(mockDb.countActive()).toBe(activeBefore);
+      expect(mockDb.findByCarnet('2023000001')).toBeUndefined();
+    });
+
+    it('reports the missing required columns instead of failing', async () => {
+      const workbook = await makePadronWorkbook([['Central', 'Bachillerato']], {
+        leadingRows: [],
+        headers: ['Sede', 'Grado'],
+      });
+
+      const { response, body } = await analyzePadron(workbook);
+
+      expect(response.status).toBe(200);
+      expect(body.diff).toBeNull();
+      expect(body.missingRequired).toEqual(
+        expect.arrayContaining(['carnet', 'full_name', 'email'])
+      );
+    });
+
+    it('honours the mapping the admin chooses', async () => {
+      const workbook = await makePadronWorkbook(
+        [['2023000001', 'Estudiante Nuevo', 'viejo@estudiantec.cr', 'nuevo@estudiantec.cr']],
+        { leadingRows: [], headers: ['Carnet', 'Nombre', 'Correo', 'Correo alterno'] }
+      );
+
+      const { body } = await analyzePadron(workbook, {
+        mapping: { carnet: 0, full_name: 1, email: 3 },
+      });
+
+      expect(body.preview[0].Correo).toBe('nuevo@estudiantec.cr');
+    });
+  });
+
+  // ── Guardia contra la desactivacion masiva ──
+
+  describe('mass deactivation guard', () => {
+    it('refuses a partial file that would deactivate most of the padron', async () => {
+      mockDb.seedActiveStudents(200);
+      const activeBefore = mockDb.countActive();
+      const workbook = await makePadronWorkbook([
+        ['2023000001', 'Unico Estudiante', 'unico@estudiantec.cr', 'Central', 'Administracion', ''],
+      ]);
+
+      const { response, body } = await uploadPadron(workbook);
+
+      expect(response.status).toBe(409);
+      expect(body.code).toBe('PADRON_IMPORT_NEEDS_CONFIRMATION');
+      expect(body.meta.deactivated).toBeGreaterThan(200);
+      // Lo importante: no se aplicó nada.
+      expect(mockDb.countActive()).toBe(activeBefore);
+      expect(mockDb.findByCarnet('2023000001')).toBeUndefined();
+    });
+
+    it('applies the same file once the admin confirms', async () => {
+      mockDb.seedActiveStudents(200);
+      const workbook = await makePadronWorkbook([
+        ['2023000001', 'Unico Estudiante', 'unico@estudiantec.cr', 'Central', 'Administracion', ''],
+      ]);
+
+      const { response, body } = await uploadPadron(workbook, 'admin-token', {
+        confirmDeactivation: true,
+      });
+
+      expect(response.status).toBe(200);
+      expect(body.total).toBe(1);
+      expect(mockDb.countActive()).toBe(1);
+    });
   });
 });

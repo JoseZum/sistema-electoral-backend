@@ -7,6 +7,7 @@ vi.mock('../../../src/config/database', () => ({
 }));
 vi.mock('../../../src/config/audit-context', () => ({
   withAuditContext: vi.fn(),
+  withAuditContextDryRun: vi.fn(),
 }));
 vi.mock('read-excel-file/node', () => ({
   default: vi.fn(),
@@ -14,7 +15,7 @@ vi.mock('read-excel-file/node', () => ({
 
 import * as studentRepo from '../../../src/modules/users/repositories/studentRepository';
 import * as adminRepo from '../../../src/modules/users/repositories/adminRepository';
-import { withAuditContext } from '../../../src/config/audit-context';
+import { withAuditContext, withAuditContextDryRun } from '../../../src/config/audit-context';
 import { pool } from '../../../src/config/database';
 import readXlsxFile from 'read-excel-file/node';
 import {
@@ -25,6 +26,8 @@ import {
   updateStudent,
   deactivateStudent,
   importPadron,
+  analyzePadron,
+  requiresDeactivationConfirmation,
   getAllAdmins,
   getAdminById,
   createAdmin,
@@ -68,6 +71,7 @@ describe('userService', () => {
       release: vi.fn(),
     };
     vi.mocked(withAuditContext).mockImplementation(async (_actor, fn) => fn(mockClient as any));
+    vi.mocked(withAuditContextDryRun).mockImplementation(async (_actor, fn) => fn(mockClient as any));
     vi.mocked(pool.connect).mockResolvedValue(mockClient as any);
   });
 
@@ -258,16 +262,18 @@ describe('userService', () => {
         },
       ] as any);
       vi.mocked(studentRepo.importPadron).mockResolvedValue(summary);
+      vi.mocked(studentRepo.countActiveStudents).mockResolvedValue(10_000);
+      vi.mocked(studentRepo.findStudentCatalog).mockResolvedValue({ sedes: [], careers: [] });
     });
 
     it('returns import summary on success', async () => {
-      const result = await importPadron(Buffer.from(''), actor);
+      const result = await importPadron(Buffer.from(''), {}, actor);
       expect(result).toEqual(summary);
       expect(studentRepo.importPadron).toHaveBeenCalledWith(expect.any(Array), mockClient);
     });
 
     it('passes normalized rows to studentRepo.importPadron', async () => {
-      await importPadron(Buffer.from(''), actor);
+      await importPadron(Buffer.from(''), {}, actor);
       const rows = vi.mocked(studentRepo.importPadron).mock.calls[0][0] as any[];
       expect(rows[0]).toMatchObject({
         Carnet: '2021001234',
@@ -276,42 +282,186 @@ describe('userService', () => {
       });
     });
 
-    it('throws when all rows are missing required fields', async () => {
+    it('throws when required columns cannot be mapped', async () => {
       vi.mocked(readXlsxFile).mockResolvedValue([
         { sheet: 'Hoja1', data: [[], [], [], ['grado'], ['Bachillerato']] },
       ] as any);
-      await expect(importPadron(Buffer.from(''), actor)).rejects.toThrow(
-        'El archivo no contiene datos válidos'
+      await expect(importPadron(Buffer.from(''), {}, actor)).rejects.toThrow(
+        'Faltan columnas obligatorias'
       );
     });
 
-    it('throws when sheet returns no rows', async () => {
+    it('throws when the sheet has no data rows under the header', async () => {
       vi.mocked(readXlsxFile).mockResolvedValue([
-        { sheet: 'Hoja1', data: [[], [], [], ['carnet', 'correo']] },
+        { sheet: 'Hoja1', data: [[], [], [], ['carnet', 'nombre', 'correo']] },
       ] as any);
-      await expect(importPadron(Buffer.from(''), actor)).rejects.toThrow(
-        'El archivo no contiene datos válidos'
+      await expect(importPadron(Buffer.from(''), {}, actor)).rejects.toThrow(
+        'no tiene filas de datos'
       );
     });
 
-    it('filters out rows missing Carnet', async () => {
+    // El mensaje ahora dice cuántas filas se descartaron y por qué, en vez del
+    // «no contiene datos válidos» que no le decía nada al admin.
+    it('explains why every row was discarded', async () => {
       vi.mocked(readXlsxFile).mockResolvedValue([
         {
           sheet: 'Hoja1',
-          data: [[], [], [], ['nombre completo', 'correo'], ['Ana García', 'ana@tec.cr']],
+          data: [
+            [],
+            [],
+            [],
+            ['carnet', 'nombre completo', 'correo'],
+            ['', 'Ana García', 'ana@tec.cr'],
+          ],
         },
       ] as any);
-      await expect(importPadron(Buffer.from(''), actor)).rejects.toThrow(
-        'El archivo no contiene datos válidos'
+      await expect(importPadron(Buffer.from(''), {}, actor)).rejects.toThrow(
+        /Ninguna de las 1 filas es válida.*sin carnet/
       );
     });
 
     it('calls withAuditContext with actor data', async () => {
-      await importPadron(Buffer.from(''), actor);
+      await importPadron(Buffer.from(''), {}, actor);
       expect(withAuditContext).toHaveBeenCalledWith(
         { id: actor.id, carnet: actor.carnet, ip: actor.ip },
         expect.any(Function)
       );
+    });
+
+    // Guardia contra el archivo parcial que desactiva el padrón entero.
+    it('rejects with 409 when the import would deactivate too many students', async () => {
+      vi.mocked(studentRepo.importPadron).mockResolvedValue({
+        ...summary,
+        deactivated: 9_999,
+      });
+
+      await expect(importPadron(Buffer.from(''), {}, actor)).rejects.toMatchObject({
+        status: 409,
+        code: 'PADRON_IMPORT_NEEDS_CONFIRMATION',
+        meta: expect.objectContaining({ deactivated: 9_999, activeStudents: 10_000 }),
+      });
+    });
+
+    it('applies the import when the admin confirms the mass deactivation', async () => {
+      const massive = { ...summary, deactivated: 9_999 };
+      vi.mocked(studentRepo.importPadron).mockResolvedValue(massive);
+
+      const result = await importPadron(
+        Buffer.from(''),
+        { confirmDeactivation: true },
+        actor
+      );
+      expect(result).toEqual(massive);
+    });
+
+    // Un cierre de semestre normal no debe pedir confirmación.
+    it('applies the import when deactivations stay under the threshold', async () => {
+      vi.mocked(studentRepo.importPadron).mockResolvedValue({ ...summary, deactivated: 300 });
+
+      await expect(importPadron(Buffer.from(''), {}, actor)).resolves.toMatchObject({
+        deactivated: 300,
+      });
+    });
+
+    it('uses the mapping confirmed by the admin', async () => {
+      vi.mocked(readXlsxFile).mockResolvedValue([
+        {
+          sheet: 'Hoja1',
+          data: [
+            ['col1', 'col2', 'col3', 'col4'],
+            ['2021001234', 'Ana García', 'viejo@tec.cr', 'nuevo@tec.cr'],
+          ],
+        },
+      ] as any);
+
+      await importPadron(
+        Buffer.from(''),
+        { mapping: { carnet: 0, full_name: 1, email: 3 } },
+        actor
+      );
+
+      const rows = vi.mocked(studentRepo.importPadron).mock.calls[0][0] as any[];
+      expect(rows[0].Correo).toBe('nuevo@tec.cr');
+    });
+  });
+
+  // ── Umbral de bajas ────────────────────────────────────────────────────────
+
+  describe('requiresDeactivationConfirmation', () => {
+    it('no molesta con las bajas normales de un cierre de semestre', () => {
+      expect(requiresDeactivationConfirmation(300, 10_282)).toBe(false);
+    });
+
+    it('exige confirmación cuando el archivo vacía el padrón', () => {
+      expect(requiresDeactivationConfirmation(10_282, 10_282)).toBe(true);
+    });
+
+    // Un tope absoluto alto nunca se alcanzaria aqui y dejaria pasar un borrado
+    // del 96% del padron sin avisar.
+    it('protege también a un padrón pequeño', () => {
+      expect(requiresDeactivationConfirmation(43, 45)).toBe(true);
+    });
+
+    it('ignora las bajas de unos pocos registros', () => {
+      expect(requiresDeactivationConfirmation(3, 45)).toBe(false);
+      expect(requiresDeactivationConfirmation(0, 10_282)).toBe(false);
+    });
+  });
+
+  // ── analyzePadron ──────────────────────────────────────────────────────────
+
+  describe('analyzePadron', () => {
+    const summary = { total: 1, new: 1, updated: 0, reactivated: 0, deactivated: 9_999 };
+
+    beforeEach(() => {
+      vi.mocked(readXlsxFile).mockResolvedValue([
+        {
+          sheet: 'Hoja1',
+          data: [
+            [],
+            [],
+            [],
+            ['carne', 'nombre', 'correo', 'sede', 'carrera', 'grado'],
+            ['2024302905', 'Brenes Molina Marcela', 'm.brenes.4@estudiantec.cr', 'Cartago', 'Mantenimiento', '119410055'],
+          ],
+        },
+      ] as any);
+      vi.mocked(studentRepo.importPadron).mockResolvedValue(summary);
+      vi.mocked(studentRepo.countActiveStudents).mockResolvedValue(10_282);
+      vi.mocked(studentRepo.findStudentCatalog).mockResolvedValue({ sedes: [], careers: [] });
+    });
+
+    it('returns the detected mapping and the diff without applying it', async () => {
+      const result = await analyzePadron(Buffer.from(''), {}, actor);
+
+      expect(result.headerRowIndex).toBe(3);
+      expect(result.mapping).toMatchObject({ carnet: 0, full_name: 1, email: 2 });
+      expect(result.validRows).toBe(1);
+      expect(result.diff).toEqual(summary);
+      expect(result.requiresConfirmation).toBe(true);
+      // El diff se calcula en una transacción que se revierte.
+      expect(withAuditContextDryRun).toHaveBeenCalled();
+      expect(withAuditContext).not.toHaveBeenCalled();
+    });
+
+    it('skips the dry run when required columns are missing', async () => {
+      vi.mocked(readXlsxFile).mockResolvedValue([
+        { sheet: 'Hoja1', data: [['grado'], ['Bachillerato']] },
+      ] as any);
+
+      const result = await analyzePadron(Buffer.from(''), {}, actor);
+
+      expect(result.diff).toBeNull();
+      expect(result.missingRequired).toEqual(expect.arrayContaining(['carnet', 'email']));
+      expect(withAuditContextDryRun).not.toHaveBeenCalled();
+    });
+
+    it('rejects a file that cannot be read as xlsx', async () => {
+      vi.mocked(readXlsxFile).mockRejectedValue(new Error('not a zip'));
+
+      await expect(analyzePadron(Buffer.from(''), {}, actor)).rejects.toMatchObject({
+        code: 'PADRON_FILE_UNREADABLE',
+      });
     });
   });
 
