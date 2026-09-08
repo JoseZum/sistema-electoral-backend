@@ -566,11 +566,17 @@ export function applyMapping(
       return;
     }
 
-    if (byCarnet.has(parsed.Carnet)) {
+    const replaced = byCarnet.get(parsed.Carnet);
+    if (replaced) {
       issues.push({
         row: excelRow,
         reason: `carnet ${parsed.Carnet} repetido (fila ${carnetFirstSeenAt.get(parsed.Carnet)}); se usa esta`,
       });
+      // La fila reemplazada ya no va en el lote, asi que su correo vuelve a
+      // estar libre. Sin esto, el siguiente estudiante que lo use se descarta
+      // por un conflicto que ya no existe y, como el import reemplaza el padron
+      // completo, esa persona terminaria inactiva.
+      emailOwner.delete(replaced.Correo.toLowerCase());
     } else {
       carnetFirstSeenAt.set(parsed.Carnet, excelRow);
     }

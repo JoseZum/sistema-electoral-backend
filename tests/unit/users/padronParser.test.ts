@@ -288,6 +288,47 @@ describe('padronParser · normalización de filas', () => {
     expect(issues[0].reason).toContain('repetido');
   });
 
+  // Al deduplicar, la fila reemplazada deja de existir en el lote y su correo
+  // vuelve a estar libre. Si no se suelta, el siguiente estudiante que lo use se
+  // descarta por un conflicto que ya no existe y, como el import reemplaza el
+  // padron completo, esa persona termina inactiva.
+  it('libera el correo de la fila que reemplaza a un carnet repetido', () => {
+    const primera: Row = [
+      2021001234,
+      'GARCIA MORA ANA LUCIA',
+      'a.garcia@estudiantec.cr',
+      'CAMPUS TECNOLOGICO CENTRAL CARTAGO',
+      'INGENIERÍA EN COMPUTACIÓN',
+      '',
+    ];
+    const corregida: Row = [
+      2021001234,
+      'GARCIA MORA ANA LUCIA',
+      'a.garcia.nuevo@estudiantec.cr',
+      'CAMPUS TECNOLOGICO CENTRAL CARTAGO',
+      'INGENIERÍA EN COMPUTACIÓN',
+      '',
+    ];
+    // Hereda el correo que la fila anterior dejo libre.
+    const heredero: Row = [
+      2022005678,
+      'MORA SOLIS BRUNO',
+      'a.garcia@estudiantec.cr',
+      'CENTRO ACADEMICO DE ALAJUELA',
+      'ADMINISTRACIÓN DE EMPRESAS',
+      '',
+    ];
+
+    const { rows, issues } = applyMapping([HEADERS, primera, corregida, heredero], 0, mapping);
+
+    expect(rows).toHaveLength(2);
+    expect(rows.map((row) => row.Carnet).sort()).toEqual(['2021001234', '2022005678']);
+    expect(rows.find((row) => row.Carnet === '2022005678')?.Correo).toBe(
+      'a.garcia@estudiantec.cr'
+    );
+    expect(issues.some((issue) => issue.reason.includes('ya lo usa el carnet'))).toBe(false);
+  });
+
   it('descarta la segunda fila que reusa un correo de otro carnet', () => {
     const otra: Row = [
       2022009999,

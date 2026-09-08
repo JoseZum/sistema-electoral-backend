@@ -287,8 +287,28 @@ describe('userService', () => {
         { sheet: 'Hoja1', data: [[], [], [], ['grado'], ['Bachillerato']] },
       ] as any);
       await expect(importPadron(Buffer.from(''), {}, actor)).rejects.toThrow(
-        'Faltan columnas obligatorias'
+        'Falta indicar qué columna trae: el carnet, el nombre y el correo.'
       );
+    });
+
+    // El mensaje nombra solo lo que falta: enumerar siempre los tres manda al
+    // admin a revisar columnas que ya estaban bien.
+    it('names only the column that is actually missing', async () => {
+      vi.mocked(readXlsxFile).mockResolvedValue([
+        {
+          sheet: 'Hoja1',
+          data: [
+            ['carnet', 'nombre completo', 'sede'],
+            ['2021001234', 'Ana García', 'Central'],
+          ],
+        },
+      ] as any);
+
+      await expect(importPadron(Buffer.from(''), {}, actor)).rejects.toMatchObject({
+        code: 'PADRON_MAPPING_INCOMPLETE',
+        message: 'Falta indicar qué columna trae: el correo.',
+        meta: { missingRequired: ['email'] },
+      });
     });
 
     it('throws when the sheet has no data rows under the header', async () => {

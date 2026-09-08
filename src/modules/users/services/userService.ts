@@ -15,6 +15,7 @@ import {
   applyMapping,
   type AnalyzeResult,
   type ColumnMapping,
+  type PadronField,
   type RowIssue,
 } from './padronParser';
 
@@ -162,6 +163,22 @@ async function readWorkbook(fileBuffer: Buffer): Promise<Sheet[]> {
   }
 }
 
+const FIELD_LABELS: Record<PadronField, string> = {
+  carnet: 'el carnet',
+  full_name: 'el nombre',
+  email: 'el correo',
+  sede: 'la sede',
+  career: 'la carrera',
+  degree_level: 'el grado',
+};
+
+/** Nombra solo los campos que faltan, no la lista completa de obligatorios. */
+function describeFields(fields: PadronField[]): string {
+  const labels = fields.map((field) => FIELD_LABELS[field]);
+  if (labels.length <= 1) return labels.join('');
+  return `${labels.slice(0, -1).join(', ')} y ${labels[labels.length - 1]}`;
+}
+
 /** Convierte las filas descartadas en un mensaje corto para el admin. */
 function summarizeIssues(issues: RowIssue[]): string {
   return issues
@@ -249,7 +266,7 @@ export async function importPadron(
     throw withMeta(
       400,
       'PADRON_MAPPING_INCOMPLETE',
-      'Faltan columnas obligatorias en el mapeo: carnet, nombre y correo.',
+      `Falta indicar qué columna trae: ${describeFields(analysis.missingRequired)}.`,
       { missingRequired: analysis.missingRequired }
     );
   }
