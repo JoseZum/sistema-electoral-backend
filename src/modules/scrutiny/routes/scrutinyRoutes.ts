@@ -3,7 +3,12 @@ import { authenticate } from '../../../middleware/authenticate';
 import {requireAdmin} from '../../../middleware/requireAdmin';
 import * as scrutinyController from '../controllers/scrutinyController';
 import { validateBody, validateUuidParam } from '../../../middleware/validateRequest';
-import { assignMembersSchema, submitKeySchema } from '../schemas/scrutinySchemas';
+import {
+  assignMembersSchema,
+  assignMembersErrors,
+  submitKeySchema,
+  submitKeyErrors,
+} from '../schemas/scrutinySchemas';
 
 const router = Router();
 
@@ -15,8 +20,8 @@ router.param('electionId', validateUuidParam);
 router.get('/:electionId', scrutinyController.operativeStatusElection);
 router.get('/:electionId/results', scrutinyController.resultsScrutiny);
 
-router.post('/:electionId/submit-key', validateBody(submitKeySchema), scrutinyController.submitKey);
-router.post('/:electionId/assign-members', validateBody(assignMembersSchema), scrutinyController.assingMembersElection);
+router.post('/:electionId/submit-key', validateBody(submitKeySchema, submitKeyErrors), scrutinyController.submitKey);
+router.post('/:electionId/assign-members', validateBody(assignMembersSchema, assignMembersErrors), scrutinyController.assingMembersElection);
 router.post('/:electionId/finalize', scrutinyController.finalizedElection);
 
 export default router;
