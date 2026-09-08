@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import * as userService from '../services/userService';
+import { parseInput } from '../../../validation/parseInput';
+import { studentFiltersSchema } from '../schemas/userSchemas';
 
 // Controladores para la gestión de usuarios (estudiantes y admins)
 
@@ -26,14 +28,7 @@ function getAuditActor(req: Request) {
 
 export async function getStudents(req: Request, res: Response, next: NextFunction) {
   try {
-    const filters = {
-      sede: req.query.sede as string | undefined,
-      career: req.query.career as string | undefined,
-      is_active: req.query.is_active !== undefined ? req.query.is_active === 'true' : true,
-      search: req.query.search as string | undefined,
-      page: req.query.page ? parseInt(req.query.page as string, 10) : undefined,
-      limit: req.query.limit ? parseInt(req.query.limit as string, 10) : undefined,
-    };
+    const filters = parseInput(studentFiltersSchema, req.query, 'query');
     const result = await userService.getAllStudents(filters);
     res.json(result);
   } catch (error) {
@@ -92,11 +87,7 @@ export async function importPadron(req: Request, res: Response, next: NextFuncti
       res.status(400).json({ error: 'Se requiere un archivo XLSX' });
       return;
     }
-    const result = await userService.importPadron(req.file.buffer, {
-      id: req.user?.studentId,
-      carnet: req.user?.carnet,
-      ip: getRequestIp(req),
-    });
+    const result = await userService.importPadron(req.file.buffer, getAuditActor(req));
     res.json(result);
   } catch (error) {
     next(error);
