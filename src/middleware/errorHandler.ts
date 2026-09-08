@@ -20,6 +20,7 @@ import jwt from 'jsonwebtoken';
 import { AppError, isAppError } from '../errors/appError';
 import { logger, sanitizeUrlPath } from '../observability/logger';
 import { recordAppError } from '../observability/metrics';
+import { RequestValidationError } from '../validation/parseInput';
 
 type DatabaseError = Error & {
   code?: string;
@@ -190,6 +191,12 @@ export function errorHandler(
   res.status(normalized.status).json({
     error: normalized.message,
     code: normalized.code,
+    ...(normalized instanceof RequestValidationError && normalized.fields
+      ? { fields: normalized.fields }
+      : {}),
+    // `meta` lo declara explicitamente quien lanza el error como apto para el
+    // cliente; `details` es diagnostico interno y no sale de desarrollo.
+    ...(normalized.meta ? { meta: normalized.meta } : {}),
     ...(process.env.NODE_ENV === 'development' && normalized.details ? { details: normalized.details } : {}),
   });
 }

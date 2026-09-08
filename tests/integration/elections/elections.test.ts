@@ -1049,10 +1049,12 @@ describe('elections integration', () => {
     });
 
     expect(created.response.status).toBe(201);
+    // El esquema recorta el titulo igual que las etiquetas de las opciones, asi
+    // que '   ' deja de ser un titulo valido.
     expect(created.body).toEqual(
       expect.objectContaining({
         id: '00000000-0000-4000-8000-000000000001',
-        title: '  Consulta   Computacion  ',
+        title: 'Consulta   Computacion',
         description: 'Eleccion integrada',
         status: 'OPEN',
         voter_source: 'FILTERED',

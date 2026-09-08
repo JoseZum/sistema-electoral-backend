@@ -4,6 +4,19 @@ export function badRequest(code: string, message: string, details?: unknown): Ap
   return new AppError({ status: 400, code, message, details });
 }
 
+/**
+ * Error cuyos datos acompañantes son parte del contrato con el cliente y viajan
+ * siempre en la respuesta (a diferencia de `details`). Ver `AppError.meta`.
+ */
+export function withMeta(
+  status: number,
+  code: string,
+  message: string,
+  meta: Record<string, unknown>
+): AppError {
+  return new AppError({ status, code, message, meta });
+}
+
 export function forbidden(code: string, message: string, details?: unknown): AppError {
   return new AppError({ status: 403, code, message, details });
 }

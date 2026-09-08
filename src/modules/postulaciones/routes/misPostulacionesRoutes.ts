@@ -5,6 +5,8 @@ import { requireStudent } from '../../../middleware/resolveStudent';
 import { badRequest } from '../../../errors/httpErrors';
 import { ALLOWED_MIME_TYPES, MAX_FILE_BYTES } from '../constants/applicationFields';
 import * as controller from '../controllers/misPostulacionesController';
+import { validateBody, validateUuidParam } from '../../../middleware/validateRequest';
+import { saveApplicationSchema } from '../schemas/postulacionSchemas';
 
 const router = Router();
 
@@ -67,12 +69,14 @@ function uploadSingleFile(req: Request, res: Response, next: NextFunction): void
 
 router.use(authenticate);
 router.use(requireStudent);
+router.param('formId', validateUuidParam);
+router.param('fileId', validateUuidParam);
 
 router.get('/', controller.getMyForms);
 router.get('/archivos/:fileId', controller.getMyFile);
 
 router.get('/:formId', controller.getMyApplication);
-router.put('/:formId', controller.saveMyApplication);
+router.put('/:formId', validateBody(saveApplicationSchema), controller.saveMyApplication);
 router.post('/:formId/enviar', controller.submitMyApplication);
 
 router.post('/:formId/archivos/:fieldKey', uploadSingleFile, controller.uploadMyFile);

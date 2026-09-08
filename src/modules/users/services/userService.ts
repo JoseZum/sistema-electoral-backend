@@ -1,49 +1,23 @@
 import readXlsxFile from 'read-excel-file/node';
+import type { Sheet } from 'read-excel-file/node';
 import * as studentRepo from '../repositories/studentRepository';
 import * as adminRepo from '../repositories/adminRepository';
 import { CreateStudentDto, UpdateStudentDto, StudentFiltersDto } from '../dtos/studentDtos';
 import { CreateAdminDto, UpdateAdminDto } from '../dtos/adminDtos';
-import { AuditActor, withAuditContext } from '../../../config/audit-context';
-import { badRequest, conflict, notFound } from '../../../errors/httpErrors';
-
-function normalizeKey(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '') // quita tildes
-    .trim()
-    .toLowerCase();
-}
-
-function getValueFromRow(row: Record<string, unknown>, possibleKeys: string[]) {
-  const normalizedRow: Record<string, unknown> = {};
-
-  for (const key of Object.keys(row)) {
-    normalizedRow[normalizeKey(key)] = row[key];
-  }
-
-  for (const key of possibleKeys) {
-    const value = normalizedRow[normalizeKey(key)];
-    if (value !== undefined && value !== null && value !== '') {
-      return value;
-    }
-  }
-
-  return null;
-}
-
-function rowArrayToObject(headers: unknown[], values: unknown[]): Record<string, unknown> {
-  const row: Record<string, unknown> = {};
-
-  headers.forEach((header, index) => {
-    if (header === undefined || header === null || String(header).trim() === '') {
-      return;
-    }
-
-    row[String(header)] = values[index] ?? null;
-  });
-
-  return row;
-}
+import {
+  AuditActor,
+  withAuditContext,
+  withAuditContextDryRun,
+} from '../../../config/audit-context';
+import { badRequest, conflict, notFound, withMeta } from '../../../errors/httpErrors';
+import {
+  analyzeWorkbook,
+  applyMapping,
+  type AnalyzeResult,
+  type ColumnMapping,
+  type PadronField,
+  type RowIssue,
+} from './padronParser';
 
 function normalizeCatalogEntry(value: string) {
   return value.trim();
@@ -127,40 +101,215 @@ export async function deactivateStudent(id: string, actor?: AuditActor) {
   return student;
 }
 
-// Importar padrón desde archivo XLSX
-export async function importPadron(
+// ── Importación del padrón ──
+
+/**
+ * A partir de cuántas bajas se le exige al admin una confirmación explícita.
+ *
+ * El import reemplaza el padrón completo: todo estudiante que no venga en el
+ * archivo queda inactivo. Un cierre de semestre da de baja a unos cientos de
+ * egresados y pasa sin fricción; un archivo parcial daría de baja a casi todos
+ * y ahí es donde hay que frenar y preguntar.
+ *
+ * La regla es proporcional, no absoluta: un tope fijo alto nunca se alcanzaría
+ * en un padrón chico (una prueba con 45 estudiantes borraría 43 sin avisar) y
+ * uno bajo pediría confirmación en cada importación de un padrón grande.
+ * `DEACTIVATION_MIN_ABSOLUTE` solo evita el ruido de las bajas pequeñas.
+ */
+export const DEACTIVATION_MIN_ABSOLUTE = 10;
+export const DEACTIVATION_RATIO = 0.05;
+
+export function requiresDeactivationConfirmation(
+  deactivated: number,
+  activeStudents: number
+): boolean {
+  if (deactivated < DEACTIVATION_MIN_ABSOLUTE) return false;
+  if (activeStudents <= 0) return false;
+  return deactivated / activeStudents > DEACTIVATION_RATIO;
+}
+
+export interface PadronImportOptions {
+  sheetIndex?: number;
+  headerRowIndex?: number;
+  mapping?: ColumnMapping;
+  confirmDeactivation?: boolean;
+}
+
+export interface PadronImportSummary {
+  total: number;
+  new: number;
+  updated: number;
+  reactivated: number;
+  deactivated: number;
+  carnet_migrated?: number;
+  email_swapped?: number;
+}
+
+export interface PadronAnalysis extends AnalyzeResult {
+  /** Qué pasaría si se aplicara este mapeo. `null` si el mapeo aún no sirve. */
+  diff: PadronImportSummary | null;
+  requiresConfirmation: boolean;
+  activeStudents: number;
+}
+
+async function readWorkbook(fileBuffer: Buffer): Promise<Sheet[]> {
+  try {
+    return await readXlsxFile(fileBuffer);
+  } catch {
+    throw badRequest(
+      'PADRON_FILE_UNREADABLE',
+      'No se pudo leer el archivo. Verifique que sea un Excel .xlsx válido y no esté protegido con contraseña.'
+    );
+  }
+}
+
+const FIELD_LABELS: Record<PadronField, string> = {
+  carnet: 'el carnet',
+  full_name: 'el nombre',
+  email: 'el correo',
+  sede: 'la sede',
+  career: 'la carrera',
+  degree_level: 'el grado',
+};
+
+/** Nombra solo los campos que faltan, no la lista completa de obligatorios. */
+function describeFields(fields: PadronField[]): string {
+  const labels = fields.map((field) => FIELD_LABELS[field]);
+  if (labels.length <= 1) return labels.join('');
+  return `${labels.slice(0, -1).join(', ')} y ${labels[labels.length - 1]}`;
+}
+
+/** Convierte las filas descartadas en un mensaje corto para el admin. */
+function summarizeIssues(issues: RowIssue[]): string {
+  return issues
+    .slice(0, 3)
+    .map((issue) => `fila ${issue.row}: ${issue.reason}`)
+    .join('; ');
+}
+
+/**
+ * Analiza el archivo sin aplicar nada: detecta la estructura, propone el mapeo y
+ * calcula el diff real corriendo la importación dentro de una transacción que se
+ * revierte. Es lo que alimenta la pantalla de confirmación.
+ */
+export async function analyzePadron(
   fileBuffer: Buffer,
+  options: PadronImportOptions = {},
   actor?: AuditActor
-) {
-  const sheets = await readXlsxFile(fileBuffer);
+): Promise<PadronAnalysis> {
+  const sheets = await readWorkbook(fileBuffer);
+  const catalog = await studentRepo.findStudentCatalog();
 
-  const data: Record<string, unknown>[] = [];
-  for (const sheet of sheets) {
-    const rows = sheet.data;
-    const headers = rows[3] || [];
-    const rawRows = rows.slice(4).map((row) => rowArrayToObject(headers, row));
+  const analysis = analyzeWorkbook(sheets, {
+    catalog,
+    sheetIndex: options.sheetIndex,
+    headerRowIndex: options.headerRowIndex,
+    mapping: options.mapping,
+  });
 
-    const normalizedRows = rawRows.map(row => ({
-      Carnet: String(getValueFromRow(row, ['carné', 'carnet', 'carne']) || '').trim(),
-      Nombre: getValueFromRow(row, ['nombre completo', 'nombre', 'full name']),
-      Correo: getValueFromRow(row, ['correo', 'email', 'correo electronico']),
-      Sede: getValueFromRow(row, ['sede', 'campus']),
-      Carrera: getValueFromRow(row, ['carrera', 'career', 'programa']),
-      Grado: getValueFromRow(row, ['grado', 'nivel', 'degree']) ?? 'NO_ESPECIFICADO'
-    }));
-
-    data.push(...normalizedRows.filter(r => r.Carnet && r.Nombre && r.Correo));
+  // Sin los campos obligatorios o sin filas válidas no hay nada que simular:
+  // la UI le pide al admin que complete el mapeo.
+  if (analysis.missingRequired.length > 0 || analysis.validRows === 0) {
+    return {
+      ...analysis,
+      diff: null,
+      requiresConfirmation: false,
+      activeStudents: await studentRepo.countActiveStudents(),
+    };
   }
 
-  if (data.length === 0) throw badRequest('PADRON_FILE_NO_VALID_DATA', 'El archivo no contiene datos válidos');
+  const rows = applyMapping(
+    sheets[analysis.sheetIndex]?.data ?? [],
+    analysis.headerRowIndex,
+    analysis.mapping
+  ).rows;
 
-  // Run inside audit context so triggers capture WHO did this
-  const summary = await withAuditContext(
+  const { diff, activeStudents } = await withAuditContextDryRun(
     { id: actor?.id, carnet: actor?.carnet, ip: actor?.ip },
-    (client) => studentRepo.importPadron(data, client)
+    async (client) => ({
+      activeStudents: await studentRepo.countActiveStudents(client),
+      diff: await studentRepo.importPadron(rows, client),
+    })
   );
 
-  return summary;
+  return {
+    ...analysis,
+    diff,
+    requiresConfirmation: requiresDeactivationConfirmation(diff.deactivated, activeStudents),
+    activeStudents,
+  };
+}
+
+/**
+ * Aplica el padrón con el mapeo que el admin confirmó.
+ *
+ * El umbral de bajas se vuelve a validar acá, contra el diff real y dentro de la
+ * transacción: si hace falta confirmación y no vino, se lanza un 409 y el
+ * ROLLBACK deja la base como estaba. La UI no puede saltarse este control.
+ */
+export async function importPadron(
+  fileBuffer: Buffer,
+  options: PadronImportOptions = {},
+  actor?: AuditActor
+): Promise<PadronImportSummary> {
+  const sheets = await readWorkbook(fileBuffer);
+  const catalog = await studentRepo.findStudentCatalog();
+
+  const analysis = analyzeWorkbook(sheets, {
+    catalog,
+    sheetIndex: options.sheetIndex,
+    headerRowIndex: options.headerRowIndex,
+    mapping: options.mapping,
+  });
+
+  if (analysis.missingRequired.length > 0) {
+    throw withMeta(
+      400,
+      'PADRON_MAPPING_INCOMPLETE',
+      `Falta indicar qué columna trae: ${describeFields(analysis.missingRequired)}.`,
+      { missingRequired: analysis.missingRequired }
+    );
+  }
+
+  const parsed = applyMapping(
+    sheets[analysis.sheetIndex]?.data ?? [],
+    analysis.headerRowIndex,
+    analysis.mapping
+  );
+
+  if (parsed.rows.length === 0) {
+    throw withMeta(
+      400,
+      'PADRON_FILE_NO_VALID_DATA',
+      parsed.totalRows === 0
+        ? 'La hoja seleccionada no tiene filas de datos debajo del encabezado.'
+        : `Ninguna de las ${parsed.totalRows} filas es válida (${summarizeIssues(parsed.issues)}).`,
+      { totalRows: parsed.totalRows, issues: parsed.issues.slice(0, 25) }
+    );
+  }
+
+  return withAuditContext(
+    { id: actor?.id, carnet: actor?.carnet, ip: actor?.ip },
+    async (client) => {
+      const activeStudents = await studentRepo.countActiveStudents(client);
+      const summary = await studentRepo.importPadron(parsed.rows, client);
+
+      if (
+        !options.confirmDeactivation &&
+        requiresDeactivationConfirmation(summary.deactivated, activeStudents)
+      ) {
+        // El throw revierte la transacción: no se aplica ni una fila.
+        throw withMeta(
+          409,
+          'PADRON_IMPORT_NEEDS_CONFIRMATION',
+          `Este archivo desactivaría a ${summary.deactivated} de ${activeStudents} estudiantes activos. Confirme para continuar.`,
+          { ...summary, activeStudents }
+        );
+      }
+
+      return summary;
+    }
+  );
 }
 
 // ── Admins ──

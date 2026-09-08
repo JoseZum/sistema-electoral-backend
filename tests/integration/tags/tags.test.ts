@@ -577,6 +577,39 @@ describe('tags integration', () => {
     }));
   });
 
+  // Estas dos validaciones las hace Zod antes de llegar al servicio. Sin el
+  // mapeo de `tagErrors` responderian un VALIDATION_ERROR generico y el cliente
+  // perderia el mensaje que muestra al usuario.
+  it('returns 400 with the tag code when the name is blank', async () => {
+    const { response, body } = await request('POST', '/api/tags', {
+      body: {
+        name: '   ',
+        student_ids: [mockDb.ids.studentOneId],
+      },
+    });
+
+    expect(response.status).toBe(400);
+    expect(body).toEqual(expect.objectContaining({
+      code: 'TAG_NAME_REQUIRED',
+      error: 'Se necesita un nombre para la tag',
+    }));
+  });
+
+  it('returns 400 with the tag code when there are no members', async () => {
+    const { response, body } = await request('POST', '/api/tags', {
+      body: {
+        name: 'Sin miembros',
+        student_ids: [],
+      },
+    });
+
+    expect(response.status).toBe(400);
+    expect(body).toEqual(expect.objectContaining({
+      code: 'TAG_STUDENTS_REQUIRED',
+      error: 'Se necesita al menos un estudiante para crear la tag',
+    }));
+  });
+
   it('returns 404 when a requested member is not active in the padron', async () => {
     const { response, body } = await request('POST', '/api/tags', {
       body: {

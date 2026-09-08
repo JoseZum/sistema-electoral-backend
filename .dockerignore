@@ -1,2 +1,13 @@
 node_modules
 dist
+.git
+.env
+.env.*
+!.env.example
+.vercel
+test-results
+playwright-report
+tests/e2e/artifacts
+tests/security/reports
+tests/security/.zap
+*.log

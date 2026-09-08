@@ -1,4 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
+import { parseInput } from '../../../validation/parseInput';
+import { applicationFiltersSchema } from '../schemas/postulacionSchemas';
 import * as service from '../services/postulacionService';
 import { ApplicationFileContent } from '../models/postulacionModel';
 
@@ -135,7 +137,7 @@ export async function deletePosition(req: Request, res: Response, next: NextFunc
 
 export async function getApplications(req: Request, res: Response, next: NextFunction) {
   try {
-    const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+    const { status } = parseInput(applicationFiltersSchema, req.query, 'query');
     res.json(await service.listApplications(req.params.id as string, status));
   } catch (error) {
     next(error);
