@@ -18,7 +18,8 @@
     "test:dashboard:smoke": "ts-node src/scripts/dashboardSmokeTest.ts"
   },
   "overrides": {
-    "path-to-regexp": "0.1.13"
+    "path-to-regexp": "0.1.13",
+    "qs": "6.16.0"
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.1",
@@ -36,7 +37,7 @@
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.2",
     "jwks-rsa": "^3.1.0",
-    "multer": "^2.2.0",
+    "multer": "^2.3.0",
     "pg": "^8.13.1",
     "read-excel-file": "^9.0.9",
     "zod": "^4.5.4"
