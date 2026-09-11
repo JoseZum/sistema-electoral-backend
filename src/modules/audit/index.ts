@@ -187,10 +187,6 @@ function sanitizeAuditValue(value: unknown): unknown {
   );
 }
 
-function sanitizeAuditRecord(row: Record<string, unknown>): Record<string, unknown> {
-  return sanitizeAuditValue(row) as Record<string, unknown>;
-}
-
 function buildActivityMessage(row: Record<string, unknown>): string {
   const actionLabel = formatActionLabel((row.action as string | null) ?? null);
   const resourceLabel = formatResourceLabel((row.resource_type as string | null) ?? null);
@@ -365,13 +361,13 @@ function withDisplayFields(row: Record<string, unknown>): Record<string, unknown
     }
   }
 
-  return sanitizeAuditRecord({
+  return sanitizeAuditValue({
     ...row,
     details: Object.keys(enrichedDetails).length > 0 ? enrichedDetails : row.details ?? null,
     actionLabel: formatActionLabel(action),
     resourceLabel: formatResourceLabel(resourceType),
     activityMessage: buildActivityMessage(row),
-  });
+  }) as Record<string, unknown>;
 }
 
 // ─── Construcción común de filtros ─────────────────────────────────────────

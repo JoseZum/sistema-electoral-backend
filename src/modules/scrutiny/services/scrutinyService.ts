@@ -5,7 +5,7 @@ import { PoolClient } from 'pg';
 import { syncAutomaticStatuses, findElectionById, getElectionResults } from '../../elections/repositories/electionRepository';
 import {randomInt, randomBytes, createHash } from 'crypto';
 import { badRequest, conflict, forbidden, internalError, notFound } from '../../../errors/httpErrors';
-import { isAppError } from '../../../errors/appError';
+import { AppError } from '../../../errors/appError';
 
 
 function validateStudentID(listMembers: AssingMembersDTO){
@@ -26,7 +26,7 @@ function hashkey(key: string){
 }
 
 function isAlreadyFinalizedError(error: unknown): boolean {
-    return isAppError(error) && error.code === 'SCRUTINY_ELECTION_ALREADY_FINALIZED';
+    return error instanceof AppError && error.code === 'SCRUTINY_ELECTION_ALREADY_FINALIZED';
 }
 
 function generateNums(): string {

@@ -17,7 +17,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { AppError, isAppError } from '../errors/appError';
+import { AppError } from '../errors/appError';
 import { logger, sanitizeUrlPath } from '../observability/logger';
 import { recordAppError } from '../observability/metrics';
 import { RequestValidationError } from '../validation/parseInput';
@@ -45,7 +45,7 @@ function getDatabaseErrorDetails(error: DatabaseError) {
 }
 
 function normalizeError(error: unknown): AppError {
-  if (isAppError(error)) {
+  if (error instanceof AppError) {
     return error;
   }
 
