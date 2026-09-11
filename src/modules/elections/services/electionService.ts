@@ -39,6 +39,28 @@ const STATUS_TRANSITIONS: Record<string, Election['status'][]> = {
   ARCHIVED: ['CLOSED', 'SCRUTINIZED'],
 };
 
+/**
+ * Carga una eleccion que todavia se puede modificar: sincroniza los estados
+ * automaticos, comprueba que exista y que siga en borrador o programada.
+ *
+ * El codigo y el mensaje del conflicto los pone quien llama porque el cliente
+ * los muestra al usuario y cambian segun la operacion (agregar una opcion no
+ * dice lo mismo que limpiar votantes).
+ */
+async function loadPreOpenElection(id: string, conflictCode: string, conflictMessage: string) {
+  await electionRepo.syncAutomaticStatuses();
+
+  const election = await electionRepo.findElectionById(id);
+  if (!election) {
+    throw notFound('ELECTION_NOT_FOUND', 'Elección no encontrada');
+  }
+  if (!isPreOpenStatus(election.status)) {
+    throw conflict(conflictCode, conflictMessage);
+  }
+
+  return election;
+}
+
 function canArchiveWithoutScrutiny(election: Election, targetStatus: Election['status']) {
   return election.status === 'CLOSED' && targetStatus === 'ARCHIVED' && !election.requires_keys;
 }
@@ -641,18 +663,11 @@ export async function createElection(data: CreateElectionRequestDto, actor?: Aud
 }
 
 export async function updateElection(id: string, data: UpdateElectionDto, actor?: AuditActor) {
-  await electionRepo.syncAutomaticStatuses();
-
-  const election = await electionRepo.findElectionById(id);
-  if (!election) {
-    throw notFound('ELECTION_NOT_FOUND', 'Elección no encontrada');
-  }
-  if (!isPreOpenStatus(election.status)) {
-    throw conflict(
-      'ELECTION_NOT_EDITABLE',
-      'Solo se pueden editar elecciones en borrador o programadas'
-    );
-  }
+  const election = await loadPreOpenElection(
+    id,
+    'ELECTION_NOT_EDITABLE',
+    'Solo se pueden editar elecciones en borrador o programadas'
+  );
 
   const { startTime, endTime } = getMergedSchedule(election, data);
   validateImmediateConfig(data.starts_immediately, data.immediate_minutes);
@@ -811,17 +826,11 @@ export async function changeStatus(id: string, newStatus: Election['status'] | '
 }
 
 export async function addOption(electionId: string, data: CreateOptionDto) {
-  await electionRepo.syncAutomaticStatuses();
-  const election = await electionRepo.findElectionById(electionId);
-  if (!election) {
-    throw notFound('ELECTION_NOT_FOUND', 'Elección no encontrada');
-  }
-  if (!isPreOpenStatus(election.status)) {
-    throw conflict(
-      'ELECTION_OPTION_ADD_FORBIDDEN',
-      'Solo se pueden agregar opciones a elecciones en borrador o programadas'
-    );
-  }
+  const election = await loadPreOpenElection(
+    electionId,
+    'ELECTION_OPTION_ADD_FORBIDDEN',
+    'Solo se pueden agregar opciones a elecciones en borrador o programadas'
+  );
   const [option] = normalizeCreateOptions([data]);
   validateCreateOptions([option], election.allow_suboptions);
   if (!election.allow_suboptions && (option.suboptions || []).length > 0) {
@@ -877,17 +886,11 @@ export async function updateOption(electionId: string, optionId: string, data: U
 }
 
 export async function deleteOption(electionId: string, optionId: string) {
-  await electionRepo.syncAutomaticStatuses();
-  const election = await electionRepo.findElectionById(electionId);
-  if (!election) {
-    throw notFound('ELECTION_NOT_FOUND', 'Elección no encontrada');
-  }
-  if (!isPreOpenStatus(election.status)) {
-    throw conflict(
-      'ELECTION_OPTION_DELETE_FORBIDDEN',
-      'Solo se pueden eliminar opciones de elecciones en borrador o programadas'
-    );
-  }
+  await loadPreOpenElection(
+    electionId,
+    'ELECTION_OPTION_DELETE_FORBIDDEN',
+    'Solo se pueden eliminar opciones de elecciones en borrador o programadas'
+  );
   const deleted = await electionRepo.deleteOption(electionId, optionId);
   if (!deleted) {
     throw notFound('ELECTION_OPTION_NOT_FOUND', 'Opción no encontrada');
@@ -896,17 +899,11 @@ export async function deleteOption(electionId: string, optionId: string) {
 }
 
 export async function populateVoters(electionId: string, data: { sede?: string; career?: string; student_ids?: string[]; tag_id?: string }) {
-  await electionRepo.syncAutomaticStatuses();
-  const election = await electionRepo.findElectionById(electionId);
-  if (!election) {
-    throw notFound('ELECTION_NOT_FOUND', 'Elección no encontrada');
-  }
-  if (!isPreOpenStatus(election.status)) {
-    throw conflict(
-      'ELECTION_VOTERS_POPULATE_FORBIDDEN',
-      'Solo se pueden poblar votantes en elecciones en borrador o programadas'
-    );
-  }
+  const election = await loadPreOpenElection(
+    electionId,
+    'ELECTION_VOTERS_POPULATE_FORBIDDEN',
+    'Solo se pueden poblar votantes en elecciones en borrador o programadas'
+  );
 
   let count = 0;
   if (data.tag_id || election.voter_source === 'TAG') {
@@ -927,17 +924,11 @@ export async function populateVoters(electionId: string, data: { sede?: string; 
 }
 
 export async function clearVoters(electionId: string) {
-  await electionRepo.syncAutomaticStatuses();
-  const election = await electionRepo.findElectionById(electionId);
-  if (!election) {
-    throw notFound('ELECTION_NOT_FOUND', 'Elección no encontrada');
-  }
-  if (!isPreOpenStatus(election.status)) {
-    throw conflict(
-      'ELECTION_VOTERS_CLEAR_FORBIDDEN',
-      'Solo se pueden limpiar votantes en elecciones en borrador o programadas'
-    );
-  }
+  await loadPreOpenElection(
+    electionId,
+    'ELECTION_VOTERS_CLEAR_FORBIDDEN',
+    'Solo se pueden limpiar votantes en elecciones en borrador o programadas'
+  );
   await electionRepo.clearVoters(electionId);
   return { success: true };
 }
