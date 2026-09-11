@@ -55,13 +55,13 @@ function normalizeOrigin(origin: string): string {
   return origin.trim().replace(/\/+$/, '');
 }
 
-function normalizeCorsOrigins(rawOrigins: string): string | string[] {
+function normalizeCorsOrigins(rawOrigins: string): string[] {
   const origins = rawOrigins
     .split(',')
     .map((origin) => normalizeOrigin(origin))
     .filter(Boolean);
 
-  return origins.length <= 1 ? (origins[0] || 'http://localhost:3000') : origins;
+  return origins.length > 0 ? origins : ['http://localhost:3000'];
 }
 
 const isSupabaseConnection = /supabase\.co|pooler\.supabase\.com/i.test(rawDatabaseUrl);
