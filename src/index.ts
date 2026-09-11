@@ -12,14 +12,15 @@ import { pool } from './config/database';
 import { metricsMiddleware } from './middleware/metricsMiddleware';
 import { authRoutes } from './modules/auth';
 import { userRoutes } from './modules/users';
-import { electionRoutes } from './modules/elections';
-import { tagRoutes } from './modules/tags';
-import { votingRoutes } from './modules/voting';
 import { auditRoutes } from './modules/audit';
-import { scrutinyRoutes } from './modules/scrutiny';
-import { misPostulacionesRoutes, postulacionRoutes } from './modules/postulaciones';
+import electionRoutes from './modules/elections/routes/electionRoutes';
+import tagRoutes from './modules/tags/routes/tagRoutes';
+import votingRoutes from './modules/voting/routes/votingRoutes';
+import scrutinyRoutes from './modules/scrutiny/routes/scrutinyRoutes';
+import postulacionRoutes from './modules/postulaciones/routes/postulacionRoutes';
+import misPostulacionesRoutes from './modules/postulaciones/routes/misPostulacionesRoutes';
+import dashboardRoutes from './modules/dashboard/routes/dashboardRoutes';
 import { errorHandler } from './middleware/errorHandler';
-import { dashboardRoutes } from './modules/dashboard';
 
 const app = express();
 
