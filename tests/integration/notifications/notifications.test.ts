@@ -6,13 +6,14 @@ const mocks = vi.hoisted(() => ({
   verifySessionJWT: vi.fn(),
   findAdminByStudentId: vi.fn(),
   findElectionById: vi.fn(),
+  syncAutomaticStatuses: vi.fn(),
   getVoterEmailsByElection: vi.fn(),
   sendMail: vi.fn(),
   createTransport: vi.fn(),
 }));
 vi.mock('../../../src/modules/auth/services/jwtUtils', () => ({ verifySessionJWT: mocks.verifySessionJWT }));
 vi.mock('../../../src/modules/users/repositories/adminRepository', () => ({ findAdminByStudentId: mocks.findAdminByStudentId }));
-vi.mock('../../../src/modules/elections/repositories/electionRepository', () => ({ findElectionById: mocks.findElectionById }));
+vi.mock('../../../src/modules/elections/repositories/electionRepository', () => ({ findElectionById: mocks.findElectionById, syncAutomaticStatuses: mocks.syncAutomaticStatuses }));
 vi.mock('../../../src/modules/notifications/repositories/notificationRepository', () => ({ notificationRepository: { getVoterEmailsByElection: mocks.getVoterEmailsByElection } }));
 vi.mock('nodemailer', () => ({ default: { createTransport: mocks.createTransport } }));
 
@@ -52,6 +53,7 @@ describe('notifications integration', () => {
     vi.stubEnv('SMTP_PASS', '');
     mocks.verifySessionJWT.mockReturnValue({ studentId: 'admin-1' });
     mocks.findAdminByStudentId.mockResolvedValue({ id: 'admin-1' });
+    mocks.syncAutomaticStatuses.mockReset().mockResolvedValue(undefined);
     mocks.findElectionById.mockResolvedValue({ title: 'Elección estudiantil', status: 'OPEN', end_time: new Date('2026-09-20T18:00:00Z') });
     mocks.getVoterEmailsByElection.mockResolvedValue([{ email: 'first@example.test' }, { email: 'second@example.test' }]);
     mocks.sendMail.mockReset().mockResolvedValue({ accepted: ['recipient'] });
@@ -105,6 +107,15 @@ describe('notifications integration', () => {
     expect(mocks.sendMail).not.toHaveBeenCalled();
   });
 
+  it('refreshes scheduled election status before deciding whether to send', async () => {
+    mocks.findElectionById.mockResolvedValue({ status: 'OPEN', title: 'Elección estudiantil' });
+    mocks.syncAutomaticStatuses.mockImplementationOnce(async () => {
+      mocks.findElectionById.mockResolvedValue({ status: 'CLOSED' });
+    });
+    expect((await send()).status).toBe(409);
+    expect(mocks.sendMail).not.toHaveBeenCalled();
+  });
+
   it('sends separate messages with the election template and no shared recipients', async () => {
     expect(await send()).toMatchObject({ status: 200, body: { total: 2 } });
     expect(mocks.createTransport).toHaveBeenCalledWith(expect.objectContaining({ host: 'smtp.example.test', requireTLS: true }));
@@ -114,10 +125,12 @@ describe('notifications integration', () => {
   });
 
   it('sends custom text and reports a partial failure without claiming full success', async () => {
+    mocks.getVoterEmailsByElection.mockResolvedValue([{ email: 'first@example.test' }, { email: 'second@example.test' }, { email: 'third@example.test' }]);
     mocks.sendMail.mockResolvedValueOnce({}).mockRejectedValueOnce(new Error('SMTP unavailable'));
     expect(await send({ ...payload, emailType: 'custom', message: 'Aviso del TEE' })).toMatchObject({
-      status: 502, body: { code: 'SMTP_SEND_FAILED', meta: { sent: 1, total: 2 } },
+      status: 502, body: { code: 'SMTP_SEND_FAILED', meta: { sent: 2, failed: 1, total: 3 } },
     });
     expect(mocks.sendMail).toHaveBeenNthCalledWith(1, expect.objectContaining({ text: 'Aviso del TEE' }));
+    expect(mocks.sendMail).toHaveBeenNthCalledWith(3, expect.objectContaining({ to: 'third@example.test' }));
   });
 });

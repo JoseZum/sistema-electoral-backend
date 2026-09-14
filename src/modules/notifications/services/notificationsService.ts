@@ -1,12 +1,13 @@
 import nodemailer from 'nodemailer';
 import { notificationRepository } from '../repositories/notificationRepository';
 import { SendNotificationDTO } from '../models/notificationModel';
-import { findElectionById } from '../../elections/repositories/electionRepository';
+import { findElectionById, syncAutomaticStatuses } from '../../elections/repositories/electionRepository';
 import { AppError } from '../../../errors/appError';
 import { badRequest, conflict, notFound, withMeta } from '../../../errors/httpErrors';
 
 export const notificationsService = {
     async sendNotifications({ electionId, emailType, message }: SendNotificationDTO) {
+        await syncAutomaticStatuses();
         const election = await findElectionById(electionId);
         if (!election) throw notFound('ELECTION_NOT_FOUND', 'Elección no encontrada');
         if (emailType !== 'custom' && election.status !== 'OPEN') {
@@ -49,14 +50,18 @@ export const notificationsService = {
         ].filter(Boolean).join('\n\n');
 
         let sent = 0;
+        let failed = 0;
         // ponytail: envío secuencial; usar una cola si el volumen supera el tiempo de la petición.
-        try {
-            for (const voter of voters) {
+        for (const voter of voters) {
+            try {
                 await transporter.sendMail({ from, to: voter.email, subject: subjectMap[emailType], text });
                 sent++;
+            } catch {
+                failed++;
             }
-        } catch {
-            throw withMeta(502, 'SMTP_SEND_FAILED', `No se completó el envío. Se enviaron ${sent} de ${voters.length} correos.`, { sent, total: voters.length });
+        }
+        if (failed > 0) {
+            throw withMeta(502, 'SMTP_SEND_FAILED', `Se enviaron ${sent} de ${voters.length} correos; ${failed} fallaron. Reenviar repetirá los correos entregados.`, { sent, failed, total: voters.length });
         }
 
         return { message: 'Correos enviados', total: sent };
