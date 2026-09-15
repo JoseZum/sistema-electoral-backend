@@ -31,6 +31,7 @@ import {
   getElectionById,
   getSuboptionPresets,
   getMonitoringData,
+  getVotersBySede,
   getResults,
   populateVoters,
   updateElection,
@@ -197,6 +198,9 @@ describe('electionService', () => {
     vi.mocked(electionRepo.getElectionResults).mockResolvedValue(mockResults);
     vi.mocked(electionRepo.getVotesByHour).mockResolvedValue([
       { hour: '2026-05-01T10:00:00.000Z', count: 5 },
+    ]);
+    vi.mocked(electionRepo.getVotersBySede).mockResolvedValue([
+      { sede: 'Central', total_voters: 10, votes_cast: 5 },
     ]);
     vi.mocked(electionRepo.findSuboptionPresetsByCreator).mockResolvedValue([savedSuboptionPreset]);
     vi.mocked(electionRepo.findSuboptionPresetByCreatorAndName).mockResolvedValue(null);
@@ -889,8 +893,21 @@ describe('electionService', () => {
 
       expect(result).toEqual({
         votesByHour: [{ hour: '2026-05-01T10:00:00.000Z', count: 5 }],
+        votersBySede: [{ sede: 'Central', total_voters: 10, votes_cast: 5 }],
       });
       expect(electionRepo.getVotesByHour).toHaveBeenCalledWith('election-1');
+    });
+
+    it('applies monitoring restrictions to the campus endpoint', async () => {
+      vi.mocked(electionRepo.findElectionById).mockResolvedValue(draftElection);
+      await expect(getVotersBySede('election-1')).rejects.toMatchObject({ status: 409 });
+      expect(electionRepo.getVotersBySede).not.toHaveBeenCalled();
+
+      vi.mocked(electionRepo.findElectionById).mockResolvedValue(openElection);
+      await expect(getVotersBySede('election-1')).resolves.toEqual({
+        election_id: 'election-1',
+        data: [{ sede: 'Central', total_voters: 10, votes_cast: 5 }],
+      });
     });
   });
 });

@@ -513,6 +513,7 @@ describe('electionController', () => {
     it('responds with monitoring data from the service', async () => {
       vi.mocked(electionService.getMonitoringData).mockResolvedValue({
         votesByHour: [{ hour: '2026-05-01T10:00:00.000Z', count: 5 }],
+        votersBySede: [],
       });
       const res = makeRes();
 
@@ -521,6 +522,7 @@ describe('electionController', () => {
       expect(electionService.getMonitoringData).toHaveBeenCalledWith('election-1');
       expect(res.json).toHaveBeenCalledWith({
         votesByHour: [{ hour: '2026-05-01T10:00:00.000Z', count: 5 }],
+        votersBySede: [],
       });
     });
 

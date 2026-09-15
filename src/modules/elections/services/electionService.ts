@@ -11,6 +11,7 @@ import {
   CreateSuboptionPresetDto,
   PopulateVotersDto,
   VotesByHour,       // Necesario para procesar la estadística de monitoreo
+  VotersBySedeResponse,
   MonitoringData     // El "wrapper" que devuelve el servicio al controlador
 } from '../models/electionModel';
 import { withAuditContext } from '../../../config/audit-context';
@@ -980,8 +981,20 @@ export async function getMonitoringData(electionId: string): Promise<MonitoringD
 
   // 4. Obtener datos
   const votesByHour = await electionRepo.getVotesByHour(electionId);
+  const votersBySede = await electionRepo.getVotersBySede(electionId);
 
   return {
-    votesByHour
+    votesByHour,
+    votersBySede,
+  };
+}
+
+// ── VOTANTES POR SEDE ──
+export async function getVotersBySede(electionId: string): Promise<VotersBySedeResponse> {
+  const { votersBySede: data } = await getMonitoringData(electionId);
+
+  return {
+    election_id: electionId,
+    data
   };
 }

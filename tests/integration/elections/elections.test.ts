@@ -734,6 +734,19 @@ const mockDb = vi.hoisted(() => {
       return { rows, rowCount: rows.length };
     }
 
+    if (sql.startsWith('SELECT s.sede') && sql.includes('GROUP BY s.sede')) {
+      const counts = new Map<string, { sede: string; total_voters: number; votes_cast: number }>();
+      for (const voter of electionVoters.filter((row) => row.election_id === params[0])) {
+        const student = students.find((row) => row.id === voter.student_id)!;
+        const count = counts.get(student.sede) || { sede: student.sede, total_voters: 0, votes_cast: 0 };
+        count.total_voters++;
+        count.votes_cast += Number(voter.token_used);
+        counts.set(student.sede, count);
+      }
+      const rows = [...counts.values()].sort((a, b) => a.sede.localeCompare(b.sede));
+      return { rows, rowCount: rows.length };
+    }
+
     if (sql.startsWith('SELECT date_trunc')) {
       const counts = new Map<string, number>();
       votes
@@ -1283,6 +1296,22 @@ describe('elections integration', () => {
     expect(response.status).toBe(200);
     expect(body).toEqual({
       votesByHour: [{ hour: '2026-05-04T11:00:00.000Z', count: 1 }],
+      votersBySede: [
+        { sede: 'Central', total_voters: 1, votes_cast: 0 },
+        { sede: 'San Carlos', total_voters: 1, votes_cast: 1 },
+      ],
+    });
+  });
+
+  it('returns only aggregate campus participation for administrators', async () => {
+    const { response, body } = await request('GET', `/api/elections/${mockDb.ids.openElectionId}/voters-by-sede`);
+    expect(response.status).toBe(200);
+    expect(body).toEqual({
+      election_id: mockDb.ids.openElectionId,
+      data: [
+        { sede: 'Central', total_voters: 1, votes_cast: 0 },
+        { sede: 'San Carlos', total_voters: 1, votes_cast: 1 },
+      ],
     });
   });
 });
