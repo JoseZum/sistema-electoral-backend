@@ -102,9 +102,11 @@ test.describe('auth e2e', () => {
   test('login page exposes the Microsoft institutional entry point', async ({ page }) => {
     await page.goto(FRONTEND_URL);
 
-    await expect(page.getByRole('heading', { name: /Portal de votaci.n/i })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: /Tu voto decide qui.n representa al TEC/i })
+    ).toBeVisible();
     await expect(page.getByRole('button', { name: /Continuar con Microsoft/i })).toBeVisible();
-    await expect(page.getByText(/Ingresa con tu cuenta institucional/i)).toBeVisible();
+    await expect(page.getByText(/Se ingresa con la cuenta institucional del TEC/i)).toBeVisible();
   });
 
   test('anonymous users are redirected away from the admin area', async ({ page }) => {
