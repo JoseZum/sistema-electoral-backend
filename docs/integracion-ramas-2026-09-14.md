@@ -5,16 +5,16 @@ Las ramas de padrón, postulaciones, dashboard y Aaron ya eran ancestros de `dev
 | Rama | Revisión | Resolución |
 | --- | --- | --- |
 | `feature/monitoreo` | `3caf9f6` | Se incorpora la participación agregada por sede; el endpoint reutiliza las restricciones actuales de monitoreo y la validación de UUID. Se conserva el seed actual. |
-| `feature/emailsending` | `7ae85a7` | Se incorpora el módulo de correos con validación, permisos administrativos y configuración SMTP externa. Se integra su contenido sin importar el historial que contiene una credencial de prueba. |
+| `feature/emailsending` | `7ae85a7` | Se incorporó el módulo de correos. **Revertido el 19 de septiembre de 2026:** ver abajo. |
 | `plan-de-pruebas` | `8f5ee03` | Sus casos de autenticación, dashboard, elecciones y votación ya están cubiertos por las suites actuales bajo `tests/unit` y `tests/integration`; el healthcheck está en `tests/e2e/auth/auth.spec.ts`. No se reincorporan reportes generados ni pruebas del flujo de códigos de acceso que fue sustituido por el diseño actual de voto anónimo. |
 
 La integración conserva las ramas originales como referencia. Los commits históricos de una integración por contenido no pasan a ser ancestros de `dev`; esto no indica que falte su funcionalidad.
 
-## Correos
+## Correos: revertido
 
-Configurar `SMTP_HOST`, `SMTP_PORT` (587 por defecto), `SMTP_FROM` y, si el servidor requiere autenticación, `SMTP_USER` y `SMTP_PASS`. El puerto 465 usa TLS desde la conexión; los demás requieren STARTTLS. Sin configuración el endpoint responde 503. Los tests simulan el transporte y no envían correos reales.
+El módulo de notificaciones se elimina el 19 de septiembre de 2026. `POST /api/notifications/send` enviaba correo real, uno por uno, a cada votante activo de una elección: miles de personas del padrón institucional a partir de una sola petición. Nunca fue solicitado ni aprobado por el TEE; entró porque la rama estaba pendiente de integrar, y estar pendiente no es estar aprobado.
 
-`POST /api/notifications/send` admite `reminder`, `open` y `custom`. Los dos primeros requieren una elección abierta; el mensaje personalizado debe tener entre 1 y 5000 caracteres. Se envía a cada votante activo por separado, sin compartir direcciones. Si falla un envío se informa cuántos se completaron, para evitar confundir un envío parcial con éxito total. No se distribuyen tokens de voto por correo.
+Se eliminan el módulo, su ruta, sus pruebas, las variables `SMTP_*` del ejemplo de entorno y la dependencia `nodemailer`. Si alguna vez hace falta avisar al padrón, tiene que diseñarse con aprobación escrita del TEE, control de quién dispara el envío y registro en auditoría — ninguna de las tres cosas existía aquí.
 
 ## Publicación
 

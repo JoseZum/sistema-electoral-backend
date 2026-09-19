@@ -48,10 +48,6 @@
     {
       "name": "MyApplications",
       "description": "Postulacion propia del estudiante autenticado"
-    },
-    {
-      "name": "Notifications",
-      "description": "Avisos por correo (solo administradores)"
     }
   ],
   "paths": {
@@ -2833,78 +2829,6 @@
             "$ref": "#/components/responses/Error"
           },
           "409": {
-            "$ref": "#/components/responses/Error"
-          }
-        }
-      }
-    },
-    "/api/notifications/send": {
-      "post": {
-        "tags": [
-          "Notifications"
-        ],
-        "operationId": "sendElectionNotifications",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "electionId",
-                  "emailType"
-                ],
-                "properties": {
-                  "electionId": {
-                    "type": "string",
-                    "format": "uuid"
-                  },
-                  "emailType": {
-                    "type": "string",
-                    "enum": [
-                      "reminder",
-                      "open",
-                      "custom"
-                    ]
-                  },
-                  "message": {
-                    "type": "string",
-                    "maxLength": 5000,
-                    "description": "Obligatorio y no vacio para mensajes personalizados."
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/JsonObject"
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "502": {
-            "$ref": "#/components/responses/Error"
-          },
-          "503": {
             "$ref": "#/components/responses/Error"
           }
         }

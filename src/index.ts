@@ -20,7 +20,6 @@ import scrutinyRoutes from './modules/scrutiny/routes/scrutinyRoutes';
 import postulacionRoutes from './modules/postulaciones/routes/postulacionRoutes';
 import misPostulacionesRoutes from './modules/postulaciones/routes/misPostulacionesRoutes';
 import dashboardRoutes from './modules/dashboard/routes/dashboardRoutes';
-import notificationRoutes from './modules/notifications/routes/notificationsRoutes';
 import { errorHandler } from './middleware/errorHandler';
 
 const app = express();
@@ -73,7 +72,6 @@ app.use('/api/voting', votingRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/scrutiny', scrutinyRoutes);
 app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/notifications', notificationRoutes);
 // Postulaciones: el router de admin gestiona formularios y revisiones; el de
 // votante solo expone la postulación propia de quien está autenticado.
 app.use('/api/postulaciones', postulacionRoutes);
