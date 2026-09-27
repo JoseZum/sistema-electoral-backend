@@ -331,14 +331,28 @@ test.describe('dashboard e2e', () => {
     await expect(page).toHaveURL(/\/dashboard$/);
     await expect(page.getByText(/Dashboard/i).first()).toBeVisible();
     await expect(page.getByRole('heading', { name: /Buenos d.as|Buenas tardes|Buenas noches/i })).toBeVisible();
-    await expect(page.getByText(/Elecciones activas/i)).toBeVisible();
-    await expect(page.getByText(/Total de elecciones/i)).toBeVisible();
-    await expect(page.getByText(/Votos emitidos/i)).toBeVisible();
-    await expect(page.getByText(/Estudiantes activos/i)).toBeVisible();
     await expect(page.getByRole('heading', { name: /Elecciones en curso/i })).toBeVisible();
     await expect(page.getByRole('heading', { name: /Actividad reciente/i })).toBeVisible();
-    await expect(page.getByText(String(stats.openElections)).first()).toBeVisible();
-    await expect(page.getByText(`${stats.participation.toFixed(1)}%`).first()).toBeVisible();
+
+    // Mientras el frontend pasa al dashboard "Esencial", esta suite corre contra las dos
+    // versiones: el CI del backend usa el frontend de dev y el del frontend usa esta suite
+    // desde main. Cuando el dashboard nuevo este en main, se puede borrar la rama vieja.
+    const hero = page.getByRole('region', { name: 'Participación de la jornada' });
+    if (await hero.isVisible()) {
+      // El porcentaje sale de votos / habilitaciones de las elecciones, no de stats.
+      await expect(hero.locator('.ess-number')).toHaveText(/^(\d+,\d%|Sin datos)$/);
+      await expect(page.getByRole('link', { name: /Crear elección/ })).toHaveAttribute(
+        'href',
+        '/elecciones/crear'
+      );
+    } else {
+      await expect(page.getByText(/Elecciones activas/i)).toBeVisible();
+      await expect(page.getByText(/Total de elecciones/i)).toBeVisible();
+      await expect(page.getByText(/Votos emitidos/i)).toBeVisible();
+      await expect(page.getByText(/Estudiantes activos/i)).toBeVisible();
+      await expect(page.getByText(String(stats.openElections)).first()).toBeVisible();
+      await expect(page.getByText(`${stats.participation.toFixed(1)}%`).first()).toBeVisible();
+    }
   });
 
   test('voter and anonymous users are redirected away from dashboard UI', async ({ page }) => {
