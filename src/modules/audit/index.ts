@@ -15,11 +15,16 @@ import { requireAdmin } from '../../middleware/requireAdmin';
 *   GET    /audit/         → consulta paginada con filtros
 *   GET    /audit/stats    → conteo agregado por resource_type
 *   GET    /audit/export   → descarga CSV o JSON con filtros (rango de fechas + tipos)
-*   DELETE /audit/         → purga registros que coinciden con los filtros (admin)
+*   DELETE /audit/         → purga registros que coinciden con los filtros
+*
+* Todas las rutas exigen sesión de administrador: la bitácora expone nombres y
+* carnés de estudiantes.
 *
 */
 
 const router = Router();
+
+router.use(authenticate, requireAdmin);
 
 const actionLabels: Record<string, string> = {
   'student.insert': 'Estudiante agregado',
