@@ -307,7 +307,8 @@ test.describe('audit e2e', () => {
 
   test('admin API lists, filters, enriches and hides private audit resources', async ({ request }) => {
     const listed = await request.get(
-      `${BACKEND_URL}/api/audit?search=${auditMarker}&resource_types=student,tag,vote&limit=10`
+      `${BACKEND_URL}/api/audit?search=${auditMarker}&resource_types=student,tag,vote&limit=10`,
+      { headers: authHeaders(adminToken) }
     );
     const listedBody = (await listed.json()) as AuditResponse;
 
@@ -339,9 +340,13 @@ test.describe('audit e2e', () => {
       );
     }
 
-    const stats = await request.get(`${BACKEND_URL}/api/audit/stats`);
+    const stats = await request.get(`${BACKEND_URL}/api/audit/stats`, {
+      headers: authHeaders(adminToken),
+    });
     const statsBody = (await stats.json()) as AuditStatRow[];
-    const activeDays = await request.get(`${BACKEND_URL}/api/audit/active-days`);
+    const activeDays = await request.get(`${BACKEND_URL}/api/audit/active-days`, {
+      headers: authHeaders(adminToken),
+    });
     const activeDaysBody = (await activeDays.json()) as ActiveDay[];
 
     expect(stats.status()).toBe(200);
