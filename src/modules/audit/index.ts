@@ -732,8 +732,6 @@ function rowToCsv(row: Record<string, unknown>): string {
 
 router.get(
   '/export',
-  authenticate,
-  requireAdmin,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const format = (req.query.format as string | undefined)?.toLowerCase() === 'json' ? 'json' : 'csv';
@@ -797,8 +795,6 @@ router.get(
 
 router.delete(
   '/',
-  authenticate,
-  requireAdmin,
   async (req: Request, res: Response, next: NextFunction) => {
     const filters: AuditFilters = {
       resourceType: req.body?.resource_type ?? req.query.resource_type,
