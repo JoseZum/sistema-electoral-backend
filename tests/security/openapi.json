@@ -1313,6 +1313,11 @@
           "Audit"
         ],
         "operationId": "listAuditLogs",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "parameters": [
           {
             "$ref": "#/components/parameters/Page"
@@ -1422,6 +1427,11 @@
           "Audit"
         ],
         "operationId": "getAuditActiveDays",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "responses": {
           "200": {
             "$ref": "#/components/responses/JsonArray"
@@ -1438,6 +1448,11 @@
           "Audit"
         ],
         "operationId": "getAuditStats",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "responses": {
           "200": {
             "$ref": "#/components/responses/JsonArray"
