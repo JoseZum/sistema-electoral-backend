@@ -305,6 +305,18 @@ test.describe('audit e2e', () => {
     expect(voterPurgeBody).toEqual(expect.objectContaining({ error: expect.any(String) }));
   });
 
+  test('backend hides the audit log from anonymous and non-admin readers', async ({ request }) => {
+    for (const path of ['/api/audit', '/api/audit/stats', '/api/audit/active-days']) {
+      const anonymous = await request.get(`${BACKEND_URL}${path}`);
+      expect(anonymous.status(), `anónimo en ${path}`).toBe(401);
+
+      const voter = await request.get(`${BACKEND_URL}${path}`, {
+        headers: authHeaders(voterToken),
+      });
+      expect(voter.status(), `votante en ${path}`).toBe(403);
+    }
+  });
+
   test('admin API lists, filters, enriches and hides private audit resources', async ({ request }) => {
     const listed = await request.get(
       `${BACKEND_URL}/api/audit?search=${auditMarker}&resource_types=student,tag,vote&limit=10`,
